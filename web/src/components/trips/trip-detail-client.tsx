@@ -46,6 +46,7 @@ type Settlement = { from_name: string; to_name: string; amount: number; from_id:
 
 const fmtTHB  = (n: number) => "฿" + Number(n).toLocaleString("th-TH", { maximumFractionDigits: 0 })
 const fmtDate = (d: string) => new Date(d).toLocaleDateString("th-TH", { day: "numeric", month: "short" })
+const EXPENSE_CATEGORY_OPTIONS = ["food", "transport", "accommodation", "activity", "other"] as const
 const MONEY_CATEGORY = expenseCategory()
 const MoneyIcon = MONEY_CATEGORY.icon
 /** Formats an amount in an arbitrary currency (not just THB) — used for a
@@ -356,7 +357,7 @@ function AddExpenseModal({ tripId, baseCurrency, participants, onClose, onAdd }:
               <label className="text-[11.5px] font-medium text-muted-foreground block mb-1">หมวด</label>
               <select value={category} onChange={e => setCategory(e.target.value)}
                 className="w-full h-9 rounded-[8px] border bg-background px-2 text-sm outline-none focus:border-brand-500">
-                {Object.entries(CAT_EMOJI).map(([k]) => <option key={k} value={k}>{k}</option>)}
+                {EXPENSE_CATEGORY_OPTIONS.map(category => <option key={category} value={category}>{category}</option>)}
               </select>
             </div>
           </div>
