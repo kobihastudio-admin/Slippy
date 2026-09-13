@@ -2,21 +2,36 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "web",
+      "name": "slippy-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev:web"
+      ],
       "port": 3000
-    }
-  ,{
-      "name": "prototype",
+    },
+    {
+      "name": "slippy-prototype",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["serve", "-p", "4321", "."],
+      "runtimeArgs": [
+        "serve",
+        "-p",
+        "4321",
+        "prototypes"
+      ],
       "port": 4321
-    }
-  ,{
-      "name": "worktree-web",
+    },
+    {
+      "name": "slippy-worktree-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev:http", "--workspace=web", "--", "-p", "3002"],
+      "runtimeArgs": [
+        "run",
+        "dev:http",
+        "--workspace=web",
+        "--",
+        "-p",
+        "3002"
+      ],
       "port": 3002
     }
   ]

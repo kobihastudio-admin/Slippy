@@ -1,0 +1,13 @@
+# Optional override for migration of an existing stack. Required variables
+# must be the exact volume names inspected on the target NAS.
+# docker compose -f docker-compose.yml -f compose.existing-storage.yml config --quiet
+volumes:
+  caddy_data:
+    external: true
+    name: ${SLIPPY_EXISTING_CADDY_DATA_VOLUME:?Set the existing Caddy data volume name}
+  caddy_config:
+    external: true
+    name: ${SLIPPY_EXISTING_CADDY_CONFIG_VOLUME:?Set the existing Caddy config volume name}
+  redis_data:
+    external: true
+    name: ${SLIPPY_EXISTING_REDIS_DATA_VOLUME:?Set the existing Redis data volume name}

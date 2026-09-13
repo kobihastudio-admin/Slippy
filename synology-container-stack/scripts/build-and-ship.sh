@@ -13,18 +13,18 @@ set -eu
 # doesn't hang waiting for a password over non-interactive SSH.
 #
 # Usage:
-#   NAS_SSH=chainimit@192.168.1.200 NAS_PATH=/volume1/docker/solutionx sh scripts/build-and-ship.sh
+#   NAS_SSH=chainimit@192.168.1.200 NAS_PATH=/volume1/docker/slippy sh scripts/build-and-ship.sh
 #   # add "web" or "api" as an extra arg to build/ship just one:
-#   NAS_SSH=chainimit@192.168.1.200 NAS_PATH=/volume1/docker/solutionx sh scripts/build-and-ship.sh web
+#   NAS_SSH=chainimit@192.168.1.200 NAS_PATH=/volume1/docker/slippy sh scripts/build-and-ship.sh web
 
 NAS_SSH="${NAS_SSH:-}"
-NAS_PATH="${NAS_PATH:-/volume1/docker/solutionx}"
+NAS_PATH="${NAS_PATH:-/volume1/docker/slippy}"
 STACK_DIR="$NAS_PATH/synology-container-stack"
 TARGET="${1:-all}"
 
 if [ -z "$NAS_SSH" ]; then
   echo "Set NAS_SSH first, for example:"
-  echo "  NAS_SSH=chainimit@192.168.1.200 NAS_PATH=/volume1/docker/solutionx sh scripts/build-and-ship.sh"
+  echo "  NAS_SSH=chainimit@192.168.1.200 NAS_PATH=/volume1/docker/slippy sh scripts/build-and-ship.sh"
   exit 1
 fi
 
@@ -62,7 +62,7 @@ build_web() {
     --build-arg NEXT_PUBLIC_STRIPE_PRICE_PACK_100="${NEXT_PUBLIC_STRIPE_PRICE_PACK_100:-}" \
     --build-arg NEXT_PUBLIC_STRIPE_PRICE_PACK_300="${NEXT_PUBLIC_STRIPE_PRICE_PACK_300:-}" \
     --build-arg NEXT_PUBLIC_STRIPE_PRICE_PACK_500="${NEXT_PUBLIC_STRIPE_PRICE_PACK_500:-}" \
-    -t solutionx-web:latest \
+    -t slippy-web:latest \
     --load \
     "$REPO_ROOT"
 }
@@ -72,16 +72,16 @@ build_api() {
   docker buildx build \
     --platform linux/amd64 \
     -f "$STACK_ROOT/apps/api/Dockerfile" \
-    -t solutionx-api:latest \
+    -t slippy-api:latest \
     --load \
     "$REPO_ROOT"
 }
 
 IMAGES=""
 case "$TARGET" in
-  web)  build_web; IMAGES="solutionx-web:latest" ;;
-  api)  build_api; IMAGES="solutionx-api:latest" ;;
-  all)  build_web; build_api; IMAGES="solutionx-web:latest solutionx-api:latest" ;;
+  web)  build_web; IMAGES="slippy-web:latest" ;;
+  api)  build_api; IMAGES="slippy-api:latest" ;;
+  all)  build_web; build_api; IMAGES="slippy-web:latest slippy-api:latest" ;;
   *)    echo "Unknown target: $TARGET (expected web, api, or all)" >&2; exit 1 ;;
 esac
 

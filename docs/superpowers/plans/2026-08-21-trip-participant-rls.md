@@ -32,7 +32,7 @@
 - [ ] **Step 1: Confirm the next migration number is still 094**
 
 ```bash
-cd /Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub
+cd /Users/chainimitsakhorn/Documents/Project/Slippy
 ls supabase/migrations/ | sort | tail -5
 ```
 
@@ -185,7 +185,7 @@ END $$;
 - [ ] **Step 3: Start the local Supabase stack**
 
 ```bash
-cd /Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub
+cd /Users/chainimitsakhorn/Documents/Project/Slippy
 supabase start
 ```
 
@@ -229,7 +229,7 @@ Expected: `life_journeys_member` on `life_journeys`, `trip_settlements_org_membe
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub
+cd /Users/chainimitsakhorn/Documents/Project/Slippy
 git add supabase/migrations/094_trip_participant_scoped_rls.sql
 git commit -m "feat(db): participant-scoped RLS on trip child tables
 
@@ -439,7 +439,7 @@ COMMIT;
 - [ ] **Step 2: Run the test script**
 
 ```bash
-cd /Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub
+cd /Users/chainimitsakhorn/Documents/Project/Slippy
 psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/094_trip_participant_scoped_rls.test.sql
 ```
 
@@ -452,7 +452,7 @@ A `FAIL` here means the policy logic in `094_trip_participant_scoped_rls.sql` do
 - [ ] **Step 4: Regression — confirm no application code was affected**
 
 ```bash
-cd /Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub/web
+cd /Users/chainimitsakhorn/Documents/Project/Slippy/web
 npm run typecheck
 npm run test:trips
 ```
@@ -462,7 +462,7 @@ Expected: typecheck passes with zero errors; `test:trips` shows `# tests 17`, `#
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub
+cd /Users/chainimitsakhorn/Documents/Project/Slippy
 git add supabase/tests/094_trip_participant_scoped_rls.test.sql
 git commit -m "test(db): verify participant-scoped RLS on trip tables
 

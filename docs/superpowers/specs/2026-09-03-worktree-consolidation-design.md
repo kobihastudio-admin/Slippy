@@ -5,7 +5,7 @@ Origin: brainstorming session 2026-09-03, in response to 6 parallel git worktree
 
 ## Problem
 
-`doc-hub` (Slippy) had 6 active `git worktree`s doing real, wanted feature work in parallel, several editing the same files (`HealthView.swift`, `HealthViewModel.swift`, `medications-client.tsx`, `web/tsconfig.tsbuildinfo`) with no coordination. `main` itself carried 58 unpushed commits plus its own small uncommitted diff. Risk: work loss, silent conflicts, divergent schema decisions (see below) landing inconsistently.
+`slippy` had 6 active `git worktree`s doing real, wanted feature work in parallel, several editing the same files (`HealthView.swift`, `HealthViewModel.swift`, `medications-client.tsx`, `web/tsconfig.tsbuildinfo`) with no coordination. `main` itself carried 58 unpushed commits plus its own small uncommitted diff. Risk: work loss, silent conflicts, divergent schema decisions (see below) landing inconsistently.
 
 ## Schema decision (input constraint, not itself part of this plan's execution)
 

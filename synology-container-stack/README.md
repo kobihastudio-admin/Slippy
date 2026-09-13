@@ -1,6 +1,8 @@
-# SolutionX Synology Container Stack
+# Slippy Synology Container Stack
 
 Development and staging environment for web, mobile, API, workers, and Supabase self-hosted testing on Synology NAS.
+
+Before migrating an existing stack, read [the Slippy rename runbook](../docs/operations/SLIPPY_RENAME.md). Existing volumes and NAS paths need an explicit migration before redeployment.
 
 ## What This Contains
 

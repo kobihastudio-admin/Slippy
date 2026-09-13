@@ -1,0 +1,137 @@
+path,reference_status,references
+api/src/assets/richmenu-slippy-universe-mockup.png,no-literal-match,
+api/src/assets/richmenu-slippy-universe-v2-mockup.png,no-literal-match,
+api/src/assets/richmenu-slippy-universe-v3-mockup.png,text-match-needs-review,api/src/scripts/setup-rich-menu.ts:8; api/src/scripts/setup-rich-menu.ts:32
+ios/Slippy/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png,text-match-needs-review,ios/Slippy/Assets.xcassets/AppIcon.appiconset/Contents.json:4; ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/Contents.json:4
+ios/Slippy/Assets.xcassets/KyushuDrJoey.imageset/KyushuDrJoey.png,text-match-needs-review,ios/Slippy/Assets.xcassets/KyushuDrJoey.imageset/Contents.json:2; ios/Slippy/Views/Trips/JourneyPrototypeView.swift:759
+ios/Slippy/Assets.xcassets/KyushuDrTom.imageset/KyushuDrTom.png,text-match-needs-review,ios/Slippy/Assets.xcassets/KyushuDrTom.imageset/Contents.json:2; ios/Slippy/Views/Trips/JourneyPrototypeView.swift:758
+ios/Slippy/Assets.xcassets/KyushuFukuoka.imageset/KyushuFukuoka.png,text-match-needs-review,ios/Slippy/Assets.xcassets/KyushuFukuoka.imageset/Contents.json:3; ios/Slippy/Views/Trips/JourneyPrototypeView.swift:738
+ios/Slippy/Assets.xcassets/KyushuKumamoto.imageset/KyushuKumamoto.png,text-match-needs-review,ios/Slippy/Assets.xcassets/KyushuKumamoto.imageset/Contents.json:3; ios/Slippy/Views/Trips/JourneyPrototypeView.swift:739
+ios/Slippy/Assets.xcassets/KyushuMascotJoey.imageset/KyushuMascotJoey.png,text-match-needs-review,ios/Slippy/Assets.xcassets/KyushuMascotJoey.imageset/Contents.json:3; ios/Slippy/Views/Trips/JourneyPrototypeView.swift:792
+ios/Slippy/Assets.xcassets/KyushuMascotNancy.imageset/KyushuMascotNancy.png,text-match-needs-review,ios/Slippy/Assets.xcassets/KyushuMascotNancy.imageset/Contents.json:3; ios/Slippy/Views/Trips/JourneyPrototypeView.swift:793
+ios/Slippy/Assets.xcassets/KyushuMascotTom.imageset/KyushuMascotTom.png,text-match-needs-review,ios/Slippy/Assets.xcassets/KyushuMascotTom.imageset/Contents.json:3; ios/Slippy/Views/Trips/JourneyPrototypeView.swift:791
+ios/Slippy/Assets.xcassets/KyushuMascotVivi.imageset/KyushuMascotVivi.png,text-match-needs-review,ios/Slippy/Assets.xcassets/KyushuMascotVivi.imageset/Contents.json:3; ios/Slippy/Views/Trips/JourneyPrototypeView.swift:794
+ios/Slippy/Assets.xcassets/KyushuNancy.imageset/KyushuNancy.png,text-match-needs-review,ios/Slippy/Assets.xcassets/KyushuNancy.imageset/Contents.json:2; ios/Slippy/Views/Trips/JourneyPrototypeView.swift:760
+ios/Slippy/Assets.xcassets/KyushuShrine.imageset/KyushuShrine.png,text-match-needs-review,ios/Slippy/Assets.xcassets/KyushuShrine.imageset/Contents.json:3; ios/Slippy/Views/Trips/JourneyPrototypeView.swift:741; ios/Slippy/Views/Trips/JourneyPrototypeView.swift:808
+ios/Slippy/Assets.xcassets/KyushuTagJoey.imageset/KyushuTagJoey.png,text-match-needs-review,ios/Slippy/Assets.xcassets/KyushuTagJoey.imageset/Contents.json:2
+ios/Slippy/Assets.xcassets/KyushuTagNancy.imageset/KyushuTagNancy.png,text-match-needs-review,ios/Slippy/Assets.xcassets/KyushuTagNancy.imageset/Contents.json:2
+ios/Slippy/Assets.xcassets/KyushuTagTom.imageset/KyushuTagTom.png,text-match-needs-review,ios/Slippy/Assets.xcassets/KyushuTagTom.imageset/Contents.json:2
+ios/Slippy/Assets.xcassets/KyushuTagVivi.imageset/KyushuTagVivi.png,text-match-needs-review,ios/Slippy/Assets.xcassets/KyushuTagVivi.imageset/Contents.json:2
+ios/Slippy/Assets.xcassets/KyushuTripCover.imageset/KyushuTripCover.png,text-match-needs-review,ios/Slippy/Assets.xcassets/KyushuTripCover.imageset/Contents.json:2; ios/Slippy/Views/Trips/JourneyPrototypeView.swift:691
+ios/Slippy/Assets.xcassets/KyushuVivi.imageset/KyushuVivi.png,text-match-needs-review,ios/Slippy/Assets.xcassets/KyushuVivi.imageset/Contents.json:2; ios/Slippy/Views/Trips/JourneyPrototypeView.swift:761
+ios/Slippy/Assets.xcassets/KyushuYufuin.imageset/KyushuYufuin.png,text-match-needs-review,ios/Slippy/Assets.xcassets/KyushuYufuin.imageset/Contents.json:3; ios/Slippy/Views/Trips/JourneyPrototypeView.swift:740
+ios/Slippy/Assets.xcassets/SlippyLogo.imageset/SlippyLogo@1x.png,text-match-needs-review,ios/Slippy/Assets.xcassets/SlippyLogo.imageset/Contents.json:4; ios/Slippy/Assets.xcassets/SlippyLogo.imageset/Contents.json:9; ios/Slippy/Assets.xcassets/SlippyLogo.imageset/Contents.json:14; ios/Slippy/Views/Auth/LoginView.swift:90; ios/Slippy/Views/Auth/SignUpView.swift:93; ios/Slippy/Views/Dashboard/DashboardView.swift:114; ios/Slippy/Views/RootView.swift:147; ios/Slippy/Views/Shared/BrandIcons.swift:100; ios/Slippy/Views/Shared/SlippyLoadingView.swift:40; ios/Slippy/Views/Shared/SlippyLoadingView.swift:88; ios/Slippy/Views/Shared/SlippyLogoMark.swift:5; ios/Slippy/Views/Shared/SlippyLogoMark.swift:23; ios/Slippy/Views/Shared/SlippyLogoMark.swift:34; ios/Slippy/Views/Shared/SlippyLogoMark.swift:36; ios/Slippy/Views/Shared/SlippyLogoMark.swift:45; ios/Slippy/Views/Shared/SlippyLogoMark.swift:48; ios/Slippy/Views/Shared/SlippyLogoMark.swift:49; ios/Slippy/Views/Shared/SlippyLogoMark.swift:50; ios/Slippy/Views/Split/SplitView.swift:136; ios/Slippy/Views/Split/SplitView.swift:359
+ios/Slippy/Assets.xcassets/SlippyLogo.imageset/SlippyLogo@2x.png,text-match-needs-review,ios/Slippy/Assets.xcassets/SlippyLogo.imageset/Contents.json:4; ios/Slippy/Assets.xcassets/SlippyLogo.imageset/Contents.json:9; ios/Slippy/Assets.xcassets/SlippyLogo.imageset/Contents.json:14; ios/Slippy/Views/Auth/LoginView.swift:90; ios/Slippy/Views/Auth/SignUpView.swift:93; ios/Slippy/Views/Dashboard/DashboardView.swift:114; ios/Slippy/Views/RootView.swift:147; ios/Slippy/Views/Shared/BrandIcons.swift:100; ios/Slippy/Views/Shared/SlippyLoadingView.swift:40; ios/Slippy/Views/Shared/SlippyLoadingView.swift:88; ios/Slippy/Views/Shared/SlippyLogoMark.swift:5; ios/Slippy/Views/Shared/SlippyLogoMark.swift:23; ios/Slippy/Views/Shared/SlippyLogoMark.swift:34; ios/Slippy/Views/Shared/SlippyLogoMark.swift:36; ios/Slippy/Views/Shared/SlippyLogoMark.swift:45; ios/Slippy/Views/Shared/SlippyLogoMark.swift:48; ios/Slippy/Views/Shared/SlippyLogoMark.swift:49; ios/Slippy/Views/Shared/SlippyLogoMark.swift:50; ios/Slippy/Views/Split/SplitView.swift:136; ios/Slippy/Views/Split/SplitView.swift:359
+ios/Slippy/Assets.xcassets/SlippyLogo.imageset/SlippyLogo@3x.png,text-match-needs-review,ios/Slippy/Assets.xcassets/SlippyLogo.imageset/Contents.json:4; ios/Slippy/Assets.xcassets/SlippyLogo.imageset/Contents.json:9; ios/Slippy/Assets.xcassets/SlippyLogo.imageset/Contents.json:14; ios/Slippy/Views/Auth/LoginView.swift:90; ios/Slippy/Views/Auth/SignUpView.swift:93; ios/Slippy/Views/Dashboard/DashboardView.swift:114; ios/Slippy/Views/RootView.swift:147; ios/Slippy/Views/Shared/BrandIcons.swift:100; ios/Slippy/Views/Shared/SlippyLoadingView.swift:40; ios/Slippy/Views/Shared/SlippyLoadingView.swift:88; ios/Slippy/Views/Shared/SlippyLogoMark.swift:5; ios/Slippy/Views/Shared/SlippyLogoMark.swift:23; ios/Slippy/Views/Shared/SlippyLogoMark.swift:34; ios/Slippy/Views/Shared/SlippyLogoMark.swift:36; ios/Slippy/Views/Shared/SlippyLogoMark.swift:45; ios/Slippy/Views/Shared/SlippyLogoMark.swift:48; ios/Slippy/Views/Shared/SlippyLogoMark.swift:49; ios/Slippy/Views/Shared/SlippyLogoMark.swift:50; ios/Slippy/Views/Split/SplitView.swift:136; ios/Slippy/Views/Split/SplitView.swift:359
+ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/AppIcon-100@2x.png,text-match-needs-review,ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/Contents.json:72
+ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/AppIcon-1024-marketing.png,text-match-needs-review,ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/Contents.json:136
+ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png,text-match-needs-review,ios/Slippy/Assets.xcassets/AppIcon.appiconset/Contents.json:4; ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/Contents.json:4
+ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/AppIcon-102@2x.png,text-match-needs-review,ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/Contents.json:80
+ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/AppIcon-108@2x.png,text-match-needs-review,ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/Contents.json:88
+ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/AppIcon-108ql@2x.png,text-match-needs-review,ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/Contents.json:112
+ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/AppIcon-117@2x.png,text-match-needs-review,ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/Contents.json:120
+ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/AppIcon-129@2x.png,text-match-needs-review,ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/Contents.json:128
+ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/AppIcon-24@2x.png,text-match-needs-review,ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/Contents.json:10
+ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/AppIcon-27.5@2x.png,text-match-needs-review,ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/Contents.json:18
+ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/AppIcon-29@2x.png,text-match-needs-review,ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/Contents.json:26
+ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/AppIcon-33@2x.png,text-match-needs-review,ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/Contents.json:40
+ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/AppIcon-46@2x.png,text-match-needs-review,ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/Contents.json:64
+ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/AppIcon-80@2x.png,text-match-needs-review,ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/Contents.json:48
+ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/AppIcon-86@2x.png,text-match-needs-review,ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/Contents.json:96
+ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/AppIcon-87@2x.png,text-match-needs-review,ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/Contents.json:33
+ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/AppIcon-88@2x.png,text-match-needs-review,ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/Contents.json:56
+ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/AppIcon-98@2x.png,text-match-needs-review,ios/SlippyWatch/Assets.xcassets/AppIcon.appiconset/Contents.json:104
+mobile/assets/adaptive-icon.png,text-match-needs-review,mobile/app.json:28
+mobile/assets/favicon.png,text-match-needs-review,mobile/app.json:43
+mobile/assets/icon.png,text-match-needs-review,mobile/app.json:7; mobile/app.json:28; mobile/app.json:43; mobile/app.json:49; web/src/components/vendors/vendor-map.tsx:21
+mobile/assets/splash.png,text-match-needs-review,mobile/app.json:11
+mobile/ios/Slippy/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png,text-match-needs-review,mobile/ios/Slippy/Images.xcassets/AppIcon.appiconset/Contents.json:4
+mobile/ios/Slippy/Images.xcassets/SplashScreen.imageset/image.png,text-match-needs-review,mobile/ios/Slippy/Images.xcassets/SplashScreen.imageset/Contents.json:5; mobile/ios/Slippy/Images.xcassets/SplashScreenBackground.imageset/Contents.json:5; web/public/manifest.json:28; web/scripts/generate-icons.mjs:136; web/scripts/generate-icons.mjs:137; web/src/app/layout.tsx:69; web/src/app/layout.tsx:80
+mobile/ios/Slippy/Images.xcassets/SplashScreenBackground.imageset/image.png,text-match-needs-review,mobile/ios/Slippy/Images.xcassets/SplashScreen.imageset/Contents.json:5; mobile/ios/Slippy/Images.xcassets/SplashScreenBackground.imageset/Contents.json:5; web/public/manifest.json:28; web/scripts/generate-icons.mjs:136; web/scripts/generate-icons.mjs:137; web/src/app/layout.tsx:69; web/src/app/layout.tsx:80
+web/public/app-icon-1024.svg,text-match-needs-review,web/scripts/generate-icons.mjs:35
+web/public/design/kyushu-anime-trip-cover.png,text-match-needs-review,web/src/components/trips/trip-journey-client.tsx:732
+web/public/design/kyushu-avatar-joey.png,text-match-needs-review,web/src/components/trips/trip-journey-client.tsx:52
+web/public/design/kyushu-avatar-nancy.png,text-match-needs-review,web/src/components/trips/trip-journey-client.tsx:53
+web/public/design/kyushu-avatar-tom.png,text-match-needs-review,web/src/components/trips/trip-journey-client.tsx:51
+web/public/design/kyushu-avatar-vivi.png,text-match-needs-review,web/src/components/trips/trip-journey-client.tsx:54
+web/public/design/kyushu-mascot-owl.png,text-match-needs-review,web/src/components/trips/trip-journey-client.tsx:52
+web/public/design/kyushu-mascot-rabbit.png,text-match-needs-review,web/src/components/trips/trip-journey-client.tsx:54
+web/public/design/kyushu-mascot-red-panda.png,text-match-needs-review,web/src/components/trips/trip-journey-client.tsx:53
+web/public/design/kyushu-mascot-shiba.png,text-match-needs-review,web/src/components/trips/trip-journey-client.tsx:51
+web/public/design/slippy-journey-ios-showcase.png,no-literal-match,
+web/public/design/slippy-journey-web-workspace.png,no-literal-match,
+web/public/favicon-16x16.png,text-match-needs-review,web/scripts/generate-icons.mjs:127; web/src/app/layout.tsx:48
+web/public/favicon-32x32.png,text-match-needs-review,web/scripts/generate-icons.mjs:126; web/src/app/layout.tsx:47; web/src/app/layout.tsx:57
+web/public/icon-192.png,text-match-needs-review,api/src/index.ts:136; api/src/index.ts:140; api/src/services/line-flex.ts:217; web/public/manifest.json:14; web/public/manifest.json:21; web/scripts/generate-icons.mjs:128
+web/public/icon-512.png,text-match-needs-review,web/public/manifest.json:15; web/public/manifest.json:24; web/scripts/generate-icons.mjs:129; web/src/app/liff/join/[token]/page.tsx:380
+web/public/icons/android/ic_launcher_hdpi_72.png,text-match-needs-review,web/scripts/generate-icons.mjs:90
+web/public/icons/android/ic_launcher_mdpi_48.png,text-match-needs-review,web/scripts/generate-icons.mjs:91
+web/public/icons/android/ic_launcher_xhdpi_96.png,text-match-needs-review,web/scripts/generate-icons.mjs:89
+web/public/icons/android/ic_launcher_xxhdpi_144.png,text-match-needs-review,web/scripts/generate-icons.mjs:88
+web/public/icons/android/ic_launcher_xxxhdpi_192.png,text-match-needs-review,web/scripts/generate-icons.mjs:87
+web/public/icons/android/play-store-512.png,text-match-needs-review,web/scripts/generate-icons.mjs:85
+web/public/icons/favicon/favicon-16.png,no-literal-match,
+web/public/icons/favicon/favicon-32.png,no-literal-match,
+web/public/icons/favicon/favicon-48.png,no-literal-match,
+web/public/icons/favicon/favicon-96.png,no-literal-match,
+web/public/icons/ios/app-store-1024.png,text-match-needs-review,web/scripts/generate-icons.mjs:56
+web/public/icons/ios/icon-20@1x.png,text-match-needs-review,web/scripts/generate-icons.mjs:75
+web/public/icons/ios/icon-20@2x.png,text-match-needs-review,web/scripts/generate-icons.mjs:74
+web/public/icons/ios/icon-20@3x.png,text-match-needs-review,web/scripts/generate-icons.mjs:73
+web/public/icons/ios/icon-29@1x.png,text-match-needs-review,web/scripts/generate-icons.mjs:71
+web/public/icons/ios/icon-29@2x.png,text-match-needs-review,web/scripts/generate-icons.mjs:70
+web/public/icons/ios/icon-29@3x.png,text-match-needs-review,web/scripts/generate-icons.mjs:69
+web/public/icons/ios/icon-40@1x.png,text-match-needs-review,web/scripts/generate-icons.mjs:67
+web/public/icons/ios/icon-40@2x.png,text-match-needs-review,web/scripts/generate-icons.mjs:66
+web/public/icons/ios/icon-40@3x.png,text-match-needs-review,web/scripts/generate-icons.mjs:65
+web/public/icons/ios/icon-60@2x.png,text-match-needs-review,web/scripts/generate-icons.mjs:59
+web/public/icons/ios/icon-60@3x.png,text-match-needs-review,web/scripts/generate-icons.mjs:58; web/src/app/layout.tsx:51
+web/public/icons/ios/icon-76@1x.png,text-match-needs-review,web/scripts/generate-icons.mjs:63
+web/public/icons/ios/icon-76@2x.png,text-match-needs-review,web/scripts/generate-icons.mjs:61; web/src/app/layout.tsx:52
+web/public/icons/ios/icon-83.5@2x.png,text-match-needs-review,web/scripts/generate-icons.mjs:62; web/src/app/layout.tsx:53
+web/public/icons/line/line-login-512.png,text-match-needs-review,web/scripts/generate-icons.mjs:107
+web/public/icons/line/line-msg-channel-1024.png,text-match-needs-review,web/scripts/generate-icons.mjs:105
+web/public/icons/line/line-oa-1024.png,text-match-needs-review,web/scripts/generate-icons.mjs:101
+web/public/icons/line/line-oa-200.png,text-match-needs-review,web/scripts/generate-icons.mjs:103
+web/public/icons/line/line-oa-640.png,text-match-needs-review,web/scripts/generate-icons.mjs:102
+web/public/icons/pwa/icon-128.png,text-match-needs-review,web/public/manifest.json:19
+web/public/icons/pwa/icon-144.png,text-match-needs-review,web/public/manifest.json:20
+web/public/icons/pwa/icon-192.png,text-match-needs-review,api/src/index.ts:136; api/src/index.ts:140; api/src/services/line-flex.ts:217; web/public/manifest.json:14; web/public/manifest.json:21; web/scripts/generate-icons.mjs:128
+web/public/icons/pwa/icon-256.png,text-match-needs-review,web/public/manifest.json:22
+web/public/icons/pwa/icon-384.png,text-match-needs-review,web/public/manifest.json:23
+web/public/icons/pwa/icon-48.png,text-match-needs-review,web/public/manifest.json:16
+web/public/icons/pwa/icon-512.png,text-match-needs-review,web/public/manifest.json:15; web/public/manifest.json:24; web/scripts/generate-icons.mjs:129; web/src/app/liff/join/[token]/page.tsx:380
+web/public/icons/pwa/icon-72.png,text-match-needs-review,web/public/manifest.json:17
+web/public/icons/pwa/icon-96.png,text-match-needs-review,web/public/manifest.json:18; web/public/manifest.json:40; web/public/manifest.json:45
+web/public/icons/social/facebook-cover-820.png,text-match-needs-review,web/scripts/generate-icons.mjs:182
+web/public/icons/social/facebook-profile-1080.png,text-match-needs-review,web/scripts/generate-icons.mjs:153
+web/public/icons/social/instagram-post-1080.png,text-match-needs-review,web/scripts/generate-icons.mjs:171
+web/public/icons/social/instagram-story-1080.png,text-match-needs-review,web/scripts/generate-icons.mjs:173
+web/public/icons/social/linkedin-banner-1128.png,text-match-needs-review,web/scripts/generate-icons.mjs:188
+web/public/icons/social/linkedin-logo-300.png,text-match-needs-review,web/scripts/generate-icons.mjs:161
+web/public/icons/social/linkedin-logo-600.png,text-match-needs-review,web/scripts/generate-icons.mjs:162
+web/public/icons/social/profile-1080.png,text-match-needs-review,web/scripts/generate-icons.mjs:152; web/scripts/generate-icons.mjs:153
+web/public/icons/social/tiktok-profile-200.png,text-match-needs-review,web/scripts/generate-icons.mjs:156
+web/public/icons/social/tiktok-profile-400.png,text-match-needs-review,web/scripts/generate-icons.mjs:157
+web/public/icons/social/twitter-header-1500.png,text-match-needs-review,web/scripts/generate-icons.mjs:184
+web/public/icons/social/whatsapp-profile-640.png,text-match-needs-review,web/scripts/generate-icons.mjs:159
+web/public/icons/social/youtube-banner-2560.png,text-match-needs-review,web/scripts/generate-icons.mjs:186
+web/public/icons/social/youtube-profile-800.png,text-match-needs-review,web/scripts/generate-icons.mjs:154
+web/public/images/slippy-assistant.png,text-match-needs-review,web/src/components/ui/support-chat.tsx:122; web/src/components/ui/support-chat.tsx:143; web/src/components/ui/support-chat.tsx:204
+web/public/line-oa-icon.svg,text-match-needs-review,web/scripts/generate-icons.mjs:36
+web/public/og-image.png,text-match-needs-review,web/public/manifest.json:28; web/scripts/generate-icons.mjs:136; web/scripts/generate-icons.mjs:137; web/src/app/layout.tsx:69; web/src/app/layout.tsx:80
+web/public/og-image.svg,text-match-needs-review,web/scripts/generate-icons.mjs:37
+web/public/social-profile.png,text-match-needs-review,web/scripts/generate-icons.mjs:195
+web/public/social/facebook-cover.svg,text-match-needs-review,web/scripts/generate-icons.mjs:182
+web/public/social/instagram-post.svg,text-match-needs-review,web/scripts/generate-icons.mjs:171
+web/public/social/instagram-story.svg,text-match-needs-review,web/scripts/generate-icons.mjs:173
+web/public/social/linkedin-banner.svg,text-match-needs-review,web/scripts/generate-icons.mjs:188
+web/public/social/linkedin-logo.svg,text-match-needs-review,web/scripts/generate-icons.mjs:161; web/scripts/generate-icons.mjs:162
+web/public/social/profile-square.svg,text-match-needs-review,web/scripts/generate-icons.mjs:152; web/scripts/generate-icons.mjs:153; web/scripts/generate-icons.mjs:154; web/scripts/generate-icons.mjs:195
+web/public/social/tiktok-profile.svg,text-match-needs-review,web/scripts/generate-icons.mjs:156; web/scripts/generate-icons.mjs:157
+web/public/social/twitter-header.svg,text-match-needs-review,web/scripts/generate-icons.mjs:184
+web/public/social/whatsapp-profile.svg,text-match-needs-review,web/scripts/generate-icons.mjs:159
+web/public/social/youtube-banner.svg,text-match-needs-review,web/scripts/generate-icons.mjs:186
+web/public/twitter-card.png,text-match-needs-review,web/scripts/generate-icons.mjs:143; web/scripts/generate-icons.mjs:144
+web/src/app/apple-icon.svg,no-literal-match,
+web/src/app/icon.svg,text-match-needs-review,web/public/manifest.json:13; web/scripts/generate-icons.mjs:36; web/src/app/layout.tsx:46; web/src/app/layout.tsx:56

@@ -1,9 +1,9 @@
-name: ${COMPOSE_PROJECT_NAME:-solutionx-dev}
+name: ${COMPOSE_PROJECT_NAME:-slippy-dev}
 
 services:
   caddy:
     image: caddy:2.8-alpine
-    container_name: solutionx-caddy
+    container_name: slippy-caddy
     restart: unless-stopped
     ports:
       - "${CADDY_HTTP_PORT:-8080}:80"
@@ -18,11 +18,11 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     networks:
-      - solutionx
+      - slippy
 
   redis:
     image: redis:7.4-alpine
-    container_name: solutionx-redis
+    container_name: slippy-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
@@ -30,23 +30,23 @@ services:
     volumes:
       - redis_data:/data
     networks:
-      - solutionx
+      - slippy
 
   mailpit:
     image: axllent/mailpit:v1.20
-    container_name: solutionx-mailpit
+    container_name: slippy-mailpit
     restart: unless-stopped
     ports:
       - "${MAILPIT_WEB_PORT:-8025}:8025"
     networks:
-      - solutionx
+      - slippy
 
   # ── web (Next.js) — replaces the old apps/hello-web placeholder ────────────
   # Build context is the repo root (`..`), not ./apps/web — this is an npm
   # workspaces monorepo, so `npm ci` needs the root lockfile + every
   # workspace's package.json to resolve correctly. See apps/web/Dockerfile.
   web:
-    image: solutionx-web:latest
+    image: slippy-web:latest
     build:
       context: ..
       dockerfile: synology-container-stack/apps/web/Dockerfile
@@ -63,7 +63,7 @@ services:
         NEXT_PUBLIC_STRIPE_PRICE_PACK_100: ${NEXT_PUBLIC_STRIPE_PRICE_PACK_100}
         NEXT_PUBLIC_STRIPE_PRICE_PACK_300: ${NEXT_PUBLIC_STRIPE_PRICE_PACK_300}
         NEXT_PUBLIC_STRIPE_PRICE_PACK_500: ${NEXT_PUBLIC_STRIPE_PRICE_PACK_500}
-    container_name: solutionx-web
+    container_name: slippy-web
     restart: unless-stopped
     env_file:
       - ./web.env
@@ -77,15 +77,15 @@ services:
       - redis
       - mailpit
     networks:
-      - solutionx
+      - slippy
 
   # ── api (Fastify) — replaces the old apps/hello-api placeholder ────────────
   api:
-    image: solutionx-api:latest
+    image: slippy-api:latest
     build:
       context: ..
       dockerfile: synology-container-stack/apps/api/Dockerfile
-    container_name: solutionx-api
+    container_name: slippy-api
     restart: unless-stopped
     env_file:
       - ./api.env
@@ -108,7 +108,7 @@ services:
       - redis
       - mailpit
     networks:
-      - solutionx
+      - slippy
 
   # ── cloudflared — replaces ngrok for public HTTPS access ───────────────────
   # No bandwidth cap, no random URL on every restart. Create the tunnel once
@@ -121,7 +121,7 @@ services:
   # See docs/SYNOLOGY_DEPLOY.md for the full walkthrough.
   cloudflared:
     image: cloudflare/cloudflared:latest
-    container_name: solutionx-cloudflared
+    container_name: slippy-cloudflared
     restart: unless-stopped
     # protocol http2 (TCP) instead of the default quic (UDP) — quic was
     # dropping/timing out ("no recent network activity") on this NAS's
@@ -131,11 +131,11 @@ services:
       - web
       - api
     networks:
-      - solutionx
+      - slippy
 
 networks:
-  solutionx:
-    name: solutionx
+  slippy:
+    name: slippy
 
 volumes:
   caddy_data:

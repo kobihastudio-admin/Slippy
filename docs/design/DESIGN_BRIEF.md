@@ -1,13 +1,13 @@
-# Slipify — Design Brief & Prototype Spec
+# Slippy — Design Brief & Prototype Spec
 
-> ไฟล์นี้ใช้สำหรับออกแบบ UI/UX prototype ของแอป **Slipify**  
+> ไฟล์นี้ใช้สำหรับออกแบบ UI/UX prototype ของแอป **Slippy**
 > ระบบจัดการเอกสารทางบัญชีอัตโนมัติด้วย AI สำหรับธุรกิจและผู้ใช้ส่วนตัว
 
 ---
 
 ## 1. Product Overview
 
-**Slipify** คือแพลตฟอร์มจัดการเอกสารทางบัญชีที่:
+**Slippy** คือแพลตฟอร์มจัดการเอกสารทางบัญชีที่:
 - รับสลิปและใบเสร็จผ่าน **Web upload**, **LINE Bot**, หรือ **Email**
 - ใช้ **OCR + AI (Claude)** ดึงข้อมูลอัตโนมัติ (ผู้ขาย, วันที่, ยอดเงิน, VAT)
 - ส่งข้อมูลเข้าซอฟต์แวร์บัญชี **FlowAccount** อัตโนมัติ
@@ -147,7 +147,7 @@ Primary brand color: **Indigo**
 - Link to `/register`
 - Logo + brand name centered
 
-### 4.2 Auth — `/register`  
+### 4.2 Auth — `/register`
 - Full name, email, password fields
 - Terms checkbox
 - Auto-redirect to onboarding after signup

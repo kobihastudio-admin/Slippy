@@ -13,7 +13,7 @@ set -u   # not -e — we want every check to run even if earlier ones fail
 
 NAS_HOST="${NAS_HOST:-192.168.1.200}"
 NAS_SSH="${NAS_SSH:-}"
-NAS_PATH="${NAS_PATH:-/volume1/docker/solutionx}"
+NAS_PATH="${NAS_PATH:-/volume1/docker/slippy}"
 WEB_PORT="${WEB_PORT:-3000}"
 API_PORT="${API_PORT:-4000}"
 MAILPIT_PORT="${MAILPIT_PORT:-8025}"
@@ -98,15 +98,15 @@ else
   # outright on Compose v2.20.1), so just grep the default table output.
   PS_OUT="$(ssh "$NAS_SSH" "export PATH=\$PATH:/usr/local/bin && cd '$NAS_PATH/synology-container-stack' && sudo -n docker compose ps" 2>&1)"
   echo "$PS_OUT" | sed 's/^/    /'
-  # solutionx-cloudflared restart-looping is EXPECTED until
+  # slippy-cloudflared restart-looping is EXPECTED until
   # CLOUDFLARE_TUNNEL_TOKEN is set in .env (see docs/SYNOLOGY_DEPLOY.md
   # section 5) — exclude it so this check only flags real problems.
-  if echo "$PS_OUT" | grep -v "solutionx-cloudflared" | grep -qi "restarting"; then
+  if echo "$PS_OUT" | grep -v "slippy-cloudflared" | grep -qi "restarting"; then
     bad "one or more containers are restart-looping — see output above"
   else
     ok "no containers reported as restarting (besides cloudflared, if it's not configured yet — see below)"
   fi
-  if echo "$PS_OUT" | grep "solutionx-cloudflared" | grep -qi "restarting"; then
+  if echo "$PS_OUT" | grep "slippy-cloudflared" | grep -qi "restarting"; then
     echo "    ℹ cloudflared is restart-looping — expected if CLOUDFLARE_TUNNEL_TOKEN is still blank in .env"
   fi
 fi

@@ -9,11 +9,11 @@ set -eu
 # Defaults match the NAS at 192.168.1.200 — override any of these via env
 # vars if your NAS uses a different IP/path/user:
 #   NAS_SSH=chainimit@192.168.1.200
-#   NAS_PATH=/volume1/docker/solutionx
+#   NAS_PATH=/volume1/docker/slippy
 #   NAS_HOST=192.168.1.200   (used only for the post-deploy health check)
 
 NAS_SSH="${NAS_SSH:-chainimit@192.168.1.200}"
-NAS_PATH="${NAS_PATH:-/volume1/docker/solutionx}"
+NAS_PATH="${NAS_PATH:-/volume1/docker/slippy}"
 NAS_HOST="${NAS_HOST:-192.168.1.200}"
 WEB_PORT="${WEB_PORT:-3000}"
 API_PORT="${API_PORT:-4000}"

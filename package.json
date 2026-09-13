@@ -1,7 +1,11 @@
 {
-  "name": "slipify",
+  "name": "slippy",
   "private": true,
-  "workspaces": ["web", "api", "packages/*"],
+  "workspaces": [
+    "web",
+    "api",
+    "packages/*"
+  ],
   "scripts": {
     "dev:web": "npm run dev --workspace=web",
     "dev:api": "npm run dev --workspace=api",
@@ -10,7 +14,8 @@
     "db:migrate": "supabase db push",
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --local > packages/types/database.ts",
-    "stripe:listen": "stripe listen --forward-to localhost:3000/api/webhooks/stripe"
+    "stripe:listen": "stripe listen --forward-to localhost:3000/api/webhooks/stripe",
+    "dev:prototype": "npx serve prototypes -p 4321"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

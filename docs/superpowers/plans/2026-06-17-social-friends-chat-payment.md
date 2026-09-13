@@ -55,7 +55,7 @@ CREATE INDEX idx_invite_token ON friend_invite_links(token);
 - [ ] **Step 2: Apply migration**
 
 ```bash
-cd /Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub
+cd /Users/chainimitsakhorn/Documents/Project/Slippy
 npx supabase db push --local 2>/dev/null || npx supabase migration up
 ```
 
@@ -1237,7 +1237,7 @@ export default function PayPage() {
 - [ ] **Step 2: Install qrcode in web/**
 
 ```bash
-cd /Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub/web
+cd /Users/chainimitsakhorn/Documents/Project/Slippy/web
 npm install qrcode @types/qrcode
 ```
 
@@ -2176,7 +2176,7 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
 - [ ] **Step 1: Check web**
 
 ```bash
-cd /Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub/web
+cd /Users/chainimitsakhorn/Documents/Project/Slippy/web
 npx tsc --noEmit 2>&1 | head -40
 ```
 
@@ -2185,7 +2185,7 @@ Expected: 0 errors.
 - [ ] **Step 2: Check mobile**
 
 ```bash
-cd /Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub/mobile
+cd /Users/chainimitsakhorn/Documents/Project/Slippy/mobile
 npx tsc --noEmit 2>&1 | head -40
 ```
 
@@ -2194,7 +2194,7 @@ Expected: 0 errors.
 - [ ] **Step 3: Verify all migrations applied**
 
 ```bash
-cd /Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub
+cd /Users/chainimitsakhorn/Documents/Project/Slippy
 npx supabase migration list 2>/dev/null | tail -5
 ```
 

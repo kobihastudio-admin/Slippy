@@ -1,4 +1,4 @@
-# Incident Response Runbook — Slippy / Doc-Hub
+# Incident Response Runbook — Slippy
 
 > **ระดับความลับ:** ภายในองค์กร (Internal)  
 > **เจ้าของ:** ทีม Security / DevOps  

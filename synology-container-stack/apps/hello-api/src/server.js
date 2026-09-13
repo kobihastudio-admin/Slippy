@@ -6,17 +6,17 @@ const port = Number(process.env.PORT || 3001);
 app.get("/health", (_req, res) => {
   res.json({
     ok: true,
-    service: "solutionx-hello-api",
+    service: "slippy-hello-api",
     env: process.env.APP_ENV || "development",
     supabaseUrl: process.env.SUPABASE_PUBLIC_URL || null,
   });
 });
 
 app.get("/", (_req, res) => {
-  res.json({ name: "SolutionX API", status: "running" });
+  res.json({ name: "Slippy API", status: "running" });
 });
 
 app.listen(port, "0.0.0.0", () => {
-  console.log(`SolutionX API listening on ${port}`);
+  console.log(`Slippy API listening on ${port}`);
 });
 

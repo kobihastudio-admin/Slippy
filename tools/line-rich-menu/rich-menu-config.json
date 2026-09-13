@@ -1,0 +1,89 @@
+{
+  "size": {
+    "width": 2500,
+    "height": 1686
+  },
+  "selected": false,
+  "name": "Slippy Rich Menu",
+  "chatBarText": "เมนู",
+  "areas": [
+    {
+      "bounds": {
+        "x": 20,
+        "y": 390,
+        "width": 790,
+        "height": 530
+      },
+      "action": {
+        "type": "message",
+        "label": "ส่งสลิป",
+        "text": "ส่งสลิป"
+      }
+    },
+    {
+      "bounds": {
+        "x": 855,
+        "y": 390,
+        "width": 790,
+        "height": 530
+      },
+      "action": {
+        "type": "message",
+        "label": "สรุปรายจ่าย",
+        "text": "สรุปรายจ่าย"
+      }
+    },
+    {
+      "bounds": {
+        "x": 1690,
+        "y": 390,
+        "width": 790,
+        "height": 530
+      },
+      "action": {
+        "type": "message",
+        "label": "เอกสาร",
+        "text": "เอกสาร"
+      }
+    },
+    {
+      "bounds": {
+        "x": 20,
+        "y": 960,
+        "width": 790,
+        "height": 530
+      },
+      "action": {
+        "type": "message",
+        "label": "หารบิล",
+        "text": "หารบิล"
+      }
+    },
+    {
+      "bounds": {
+        "x": 855,
+        "y": 960,
+        "width": 790,
+        "height": 530
+      },
+      "action": {
+        "type": "message",
+        "label": "ตั้งค่า",
+        "text": "ตั้งค่า"
+      }
+    },
+    {
+      "bounds": {
+        "x": 1690,
+        "y": 960,
+        "width": 790,
+        "height": 530
+      },
+      "action": {
+        "type": "uri",
+        "label": "เปิดแอพ Slippy",
+        "uri": "https://line.me/R/ti/p/@slippy"
+      }
+    }
+  ]
+}

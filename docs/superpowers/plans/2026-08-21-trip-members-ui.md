@@ -157,7 +157,7 @@ export function TripMembersPanel({ tripId }: { tripId: string }) {
 - [ ] **Step 2: Typecheck (will fail — `./invite-friend-modal` does not exist yet)**
 
 ```bash
-cd /Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub/web
+cd /Users/chainimitsakhorn/Documents/Project/Slippy/web
 npm run typecheck
 ```
 
@@ -313,7 +313,7 @@ export function InviteFriendModal({
 - [ ] **Step 2: Typecheck both new components**
 
 ```bash
-cd /Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub/web
+cd /Users/chainimitsakhorn/Documents/Project/Slippy/web
 npm run typecheck
 ```
 
@@ -322,7 +322,7 @@ Expected: PASS — no errors from `trip-members-panel.tsx` or `invite-friend-mod
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub
+cd /Users/chainimitsakhorn/Documents/Project/Slippy
 git add web/src/components/trips/trip-members-panel.tsx web/src/components/trips/invite-friend-modal.tsx
 git commit -m "feat(trips): add members panel and friend-invite modal (not yet wired)"
 ```
@@ -394,7 +394,7 @@ to:
 - [ ] **Step 5: Typecheck**
 
 ```bash
-cd /Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub/web
+cd /Users/chainimitsakhorn/Documents/Project/Slippy/web
 npm run typecheck
 ```
 
@@ -403,7 +403,7 @@ Expected: PASS, zero errors.
 - [ ] **Step 6: Regression — existing trip backend tests must still be green**
 
 ```bash
-cd /Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub/web
+cd /Users/chainimitsakhorn/Documents/Project/Slippy/web
 npm run test:trips
 ```
 
@@ -412,7 +412,7 @@ Expected: `# tests 17`, `# pass 17`, `# fail 0` — unchanged, since this task t
 - [ ] **Step 7: Start the dev server and open a real trip as the owner**
 
 ```bash
-cd /Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub/web
+cd /Users/chainimitsakhorn/Documents/Project/Slippy/web
 npm run dev:http
 ```
 
@@ -437,7 +437,7 @@ Go back to the trip's "สมาชิก" tab. Click "ลบออก" next to 
 - [ ] **Step 12: Commit**
 
 ```bash
-cd /Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub
+cd /Users/chainimitsakhorn/Documents/Project/Slippy
 git add web/src/components/trips/trip-detail-client.tsx
 git commit -m "feat(trips): wire members/chat panel into production trip detail page"
 ```

@@ -7,13 +7,13 @@
 ให้นำโฟลเดอร์นี้ไปวางที่:
 
 ```bash
-/Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub/slippy-play
+/Users/chainimitsakhorn/Documents/Project/Slippy/slippy-play
 ```
 
 ## Recommended Repo Structure
 
 ```text
-/Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub/
+/Users/chainimitsakhorn/Documents/Project/Slippy/
 └── slippy-play/
     ├── README.md
     ├── 01_PRD.md

@@ -33,14 +33,14 @@ This project is designed for Synology Container Manager or SSH-based Docker Comp
 Recommended NAS path:
 
 ```sh
-/volume1/docker/solutionx
+/volume1/docker/slippy
 ```
 
 From your Mac:
 
 ```sh
-cd /Users/chainimitsakhorn/Documents/SolutionX/Synology/Container
-NAS_SSH=chainimit@192.168.1.200 NAS_PATH=/volume1/docker/solutionx sh scripts/deploy-to-nas.sh
+cd /Users/chainimitsakhorn/Documents/Project/Slippy/synology-container-stack
+NAS_SSH=chainimit@192.168.1.200 NAS_PATH=/volume1/docker/slippy sh scripts/deploy-to-nas.sh
 ```
 
 Or copy the folder manually with Synology File Station.
@@ -51,7 +51,7 @@ SSH into Synology:
 
 ```sh
 ssh chainimit@192.168.1.200
-cd /volume1/docker/solutionx/synology-container-stack
+cd /volume1/docker/slippy/synology-container-stack
 cp .env.example .env
 cp web.env.example web.env
 cp api.env.example api.env
@@ -161,7 +161,7 @@ In Synology DSM:
 2. Go to Project.
 3. Create.
 4. Select `Create docker-compose.yml`.
-5. Project path: `/volume1/docker/solutionx/synology-container-stack`.
+5. Project path: `/volume1/docker/slippy/synology-container-stack`.
 6. Use the existing `docker-compose.yml`.
 7. Build and start.
 

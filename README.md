@@ -16,6 +16,14 @@ LINE OA / Web / Mobile
 
 ---
 
+## Documentation
+
+- [Document index and review status](docs/README.md)
+- [Repository structure](docs/MONOREPO_STRUCTURE.md)
+- [Documentation policy](docs/documentation-policy.md)
+- [Image and brand asset register](docs/assets/README.md)
+- [Slippy rename and environment status](docs/operations/SLIPPY_RENAME.md)
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -34,7 +42,7 @@ LINE OA / Web / Mobile
 ## Monorepo Structure
 
 ```
-doc-hub/
+slippy/
 ├── web/                  # Next.js frontend
 ├── api/                  # Fastify API + BullMQ workers
 ├── mobile/               # Expo React Native app
@@ -64,8 +72,8 @@ doc-hub/
 ### 1. Clone & install
 
 ```bash
-git clone https://github.com/your-org/slipify.git
-cd slipify/doc-hub
+git clone https://github.com/Chainimit/Slippy.git
+cd Slippy
 npm install
 ```
 
@@ -260,4 +268,4 @@ npm run workers -w api
 
 ## License
 
-MIT © 2026 Slipify
+MIT © 2026 Slippy

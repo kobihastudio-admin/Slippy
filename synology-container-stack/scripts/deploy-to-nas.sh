@@ -19,18 +19,18 @@ set -eu
 # structure changes significantly, clean the NAS path manually first.
 
 NAS_SSH="${NAS_SSH:-}"
-NAS_PATH="${NAS_PATH:-/volume1/docker/solutionx}"
+NAS_PATH="${NAS_PATH:-/volume1/docker/slippy}"
 
 if [ -z "$NAS_SSH" ]; then
   echo "Set NAS_SSH first, for example:"
-  echo "  NAS_SSH=chainimit@192.168.1.200 NAS_PATH=/volume1/docker/solutionx sh scripts/deploy-to-nas.sh"
+  echo "  NAS_SSH=chainimit@192.168.1.200 NAS_PATH=/volume1/docker/slippy sh scripts/deploy-to-nas.sh"
   exit 1
 fi
 
 # NAS_PATH must be the REPO ROOT on the NAS, not this stack's own folder —
 # this script tars the whole monorepo (see comment above) and the
 # docker-compose.yml lives at "$NAS_PATH/synology-container-stack/...".
-# Passing an already-nested path here (e.g. .../solutionx/synology-container-stack)
+# Passing an already-nested path here (e.g. .../slippy/synology-container-stack)
 # makes tar extract a second copy of the repo inside itself, one level too
 # deep — this happened once and left two live copies of .env/web.env/api.env
 # out of sync with each other, silently serving stale config.

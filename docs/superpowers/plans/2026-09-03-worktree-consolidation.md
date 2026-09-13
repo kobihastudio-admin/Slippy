@@ -16,7 +16,7 @@
 - `journey_type` (on `journeys`) is canonical; `trip_type` (on `trips`, values `travel`/`food_order`/`sport`/`general`) is a sub-classifier valid only when `journey_type = 'trip'`. Apply this in Task 6.
 - Re-check each worktree's actual current `git status`/diff immediately before acting on it — state may have moved since this plan was written (one worktree the design doc's earlier audit saw had already vanished by the time of a later check in the same session).
 - Never `git push --force`, never `--no-verify`, never skip hooks.
-- All paths below are relative to `/Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub` unless a `cd` is shown.
+- All paths below are relative to `/Users/chainimitsakhorn/Documents/Project/Slippy` unless a `cd` is shown.
 
 ---
 

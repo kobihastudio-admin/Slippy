@@ -4,7 +4,7 @@
 #   make deploy NAS_SSH=admin@192.168.1.50
 
 NAS_SSH  ?= admin@192.168.1.200
-NAS_PATH ?= /volume1/docker/solutionx
+NAS_PATH ?= /volume1/docker/slippy
 NAS_HOST ?= 192.168.1.200
 
 .PHONY: up down build restart logs ps deploy smoke-test smoke-test-full env

@@ -1,7 +1,7 @@
 # Slippy Trip Full Loop — Claude Implementation Handoff
 
 > Updated: 2026-08-09  
-> Workspace: `/Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub`  
+> Workspace: `/Users/chainimitsakhorn/Documents/Project/Slippy`
 > Product: Slippy — AI Life Assistant Platform  
 > Architecture: LINE OA → Services → Life Graph → AI Memory → AI Assistant
 

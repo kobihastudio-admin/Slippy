@@ -133,7 +133,7 @@ ALTER TABLE split_bills ADD COLUMN IF NOT EXISTS split_mode text DEFAULT 'equal'
 
 - [ ] **Step 2: Apply migration**
 ```bash
-cd /Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub && supabase db push --yes
+cd /Users/chainimitsakhorn/Documents/Project/Slippy && supabase db push --yes
 ```
 
 ---
@@ -264,7 +264,7 @@ In `api/src/scripts/setup-rich-menu.ts`, change:
 
 - [ ] **Step 4: Type-check**
 ```bash
-cd /Users/chainimitsakhorn/Documents/Projects/Accounting/doc-hub/web && npx tsc --noEmit -p tsconfig.json 2>&1 | grep -iE "liff/scan|scan/route"
+cd /Users/chainimitsakhorn/Documents/Project/Slippy/web && npx tsc --noEmit -p tsconfig.json 2>&1 | grep -iE "liff/scan|scan/route"
 ```
 Expected: no output
 
