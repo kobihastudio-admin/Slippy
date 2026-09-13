@@ -1,5 +1,5 @@
 import {
-  BadgeCheck, BedDouble, Camera, Cross, FileText, Image, MapPin, Plane,
+  BedDouble, Camera, Cross, FileText, Image, MapPin, Plane,
   ShieldCheck, ShoppingBag, Sparkles, Ticket, Trees, Users, Utensils,
   WalletCards,
 } from "lucide-react"
