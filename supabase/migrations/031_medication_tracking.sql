@@ -32,10 +32,8 @@ CREATE TABLE IF NOT EXISTS medications (
   created_at       timestamptz DEFAULT now(),
   updated_at       timestamptz DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS idx_med_user   ON medications(user_id, is_active);
 CREATE INDEX IF NOT EXISTS idx_med_doc    ON medications(document_id) WHERE document_id IS NOT NULL;
-
 -- ─── Dosage Schedules ────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS medication_schedules (
   id               uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -61,10 +59,8 @@ CREATE TABLE IF NOT EXISTS medication_schedules (
   is_active        bool    NOT NULL DEFAULT true,
   created_at       timestamptz DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS idx_msched_user ON medication_schedules(user_id, is_active);
 CREATE INDEX IF NOT EXISTS idx_msched_med  ON medication_schedules(medication_id);
-
 -- ─── Inventory Tracking ──────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS medication_inventory (
   id               uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -88,7 +84,6 @@ CREATE TABLE IF NOT EXISTS medication_inventory (
   updated_at       timestamptz DEFAULT now(),
   UNIQUE (medication_id, user_id)
 );
-
 -- ─── Medication Logs ─────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS medication_logs (
   id               uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -110,22 +105,18 @@ CREATE TABLE IF NOT EXISTS medication_logs (
     CHECK (confirmed_via IN ('app','line','auto')),
   created_at       timestamptz DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS idx_mlog_user      ON medication_logs(user_id, scheduled_at DESC);
 CREATE INDEX IF NOT EXISTS idx_mlog_schedule  ON medication_logs(schedule_id, scheduled_at DESC);
 CREATE INDEX IF NOT EXISTS idx_mlog_status    ON medication_logs(user_id, status, scheduled_at DESC);
-
 -- ─── RLS ──────────────────────────────────────────────────────────────────────
 ALTER TABLE medications           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE medication_schedules  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE medication_inventory  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE medication_logs       ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "med_own"   ON medications           FOR ALL USING (user_id = auth.uid());
 CREATE POLICY "msched_own" ON medication_schedules  FOR ALL USING (user_id = auth.uid());
 CREATE POLICY "minv_own"  ON medication_inventory  FOR ALL USING (user_id = auth.uid());
 CREATE POLICY "mlog_own"  ON medication_logs       FOR ALL USING (user_id = auth.uid());
-
 -- ─── Adherence stats view ─────────────────────────────────────────────────────
 CREATE OR REPLACE VIEW medication_adherence AS
 SELECT
@@ -144,7 +135,6 @@ SELECT
 FROM medication_logs
 WHERE status != 'pending'
 GROUP BY user_id, medication_id, DATE_TRUNC('month', scheduled_at);
-
 -- ─── Function: Get pending reminders ─────────────────────────────────────────
 -- Called by worker every minute to find due reminders
 CREATE OR REPLACE FUNCTION get_pending_medication_reminders(
@@ -180,14 +170,4 @@ RETURNS TABLE (
     AND ms.reminder_enabled = true
     AND ml.scheduled_at - (ms.reminder_minutes * interval '1 minute')
         BETWEEN p_from AND p_to;
-$$;
-
--- Decrement inventory qty (called after marking medication as taken)
-CREATE OR REPLACE FUNCTION decrement_medication_qty(
-  p_medication_id uuid, p_user_id uuid, p_qty numeric DEFAULT 1
-) RETURNS void LANGUAGE sql AS $$
-  UPDATE medication_inventory
-  SET qty_remaining = GREATEST(0, qty_remaining - p_qty),
-      updated_at    = now()
-  WHERE medication_id = p_medication_id AND user_id = p_user_id;
 $$;

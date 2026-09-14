@@ -29,8 +29,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </span>
         <nav className="flex gap-1 ml-4">
           {[
-            { href: "/admin/plans",  label: "Plans & Pricing" },
-            { href: "/admin/config", label: "System Config"   },
+            { href: "/admin/ops",       label: "Ops Dashboard"   },
+            { href: "/admin/documents", label: "Stuck Documents" },
+            { href: "/admin/errors",    label: "Error Logs"      },
+            { href: "/admin/users",     label: "Users"           },
+            { href: "/admin/orgs",      label: "Organizations"   },
+            { href: "/admin/plans",     label: "Plans & Pricing" },
+            { href: "/admin/config",    label: "System Config"   },
+            { href: "/admin/audit-log", label: "Audit Log"       },
           ].map(({ href, label }) => (
             <a key={href} href={href}
               className="px-3 py-1.5 rounded-md text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">

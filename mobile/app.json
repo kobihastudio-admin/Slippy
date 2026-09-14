@@ -52,9 +52,9 @@
     "experiments": { "typedRoutes": true },
     "extra": {
       "eas": { "projectId": "YOUR_EAS_PROJECT_ID" },
-      "supabaseUrl":  "YOUR_SUPABASE_URL",
-      "supabaseAnon": "YOUR_SUPABASE_ANON_KEY",
-      "apiBase":      "https://api.slippy.app"
+      "supabaseUrl":  "https://ntzztcnkedcxfjvfxjrf.supabase.co",
+      "supabaseAnon": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im50enp0Y25rZWRjeGZqdmZ4anJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAzNTEwOTIsImV4cCI6MjA2NTkyNzA5Mn0.QSGtQhIlrzssH8wzpE25OT3ZanZJLa10tV-eETIOOrA",
+      "apiBase":      "https://api-staging.slippyai.app"
     }
   }
 }

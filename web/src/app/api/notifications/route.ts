@@ -22,22 +22,32 @@ export async function GET(req: NextRequest) {
   const unreadOnly = searchParams.get("unread_only") === "true"
 
   let { organization_id: orgId } = await getMembership().catch(() => ({ organization_id: null }))
+  const scopeFilter = `user_id.eq.${user.id}${orgId ? `,organization_id.eq.${orgId}` : ""}`
 
   let query = supabase
     .from("notifications")
     .select("*")
-    .or(`user_id.eq.${user.id}${orgId ? `,organization_id.eq.${orgId}` : ""}`)
+    .or(scopeFilter)
     .order("created_at", { ascending: false })
     .limit(limit)
 
   if (unreadOnly) query = query.is("read_at", null)
 
-  const { data, error } = await query
+  // Independent exact count of ALL unread rows — NOT derived from `data`
+  // above, which is capped at `limit` (the header bell polls with limit=1
+  // to save bandwidth). Deriving the count from a 1-row page meant the
+  // badge could never show more than "1" no matter how many notifications
+  // were actually unread.
+  const [{ data, error }, { count: unreadCount, error: countError }] = await Promise.all([
+    query,
+    supabase.from("notifications").select("id", { count: "exact", head: true })
+      .or(scopeFilter)
+      .is("read_at", null),
+  ])
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (countError) return NextResponse.json({ error: countError.message }, { status: 500 })
 
-  const unreadCount = (data ?? []).filter(n => !n.read_at).length
-
-  return NextResponse.json({ notifications: data ?? [], unreadCount })
+  return NextResponse.json({ notifications: data ?? [], unreadCount: unreadCount ?? 0 })
 }
 
 // PATCH /api/notifications  — mark all read (or specific id)

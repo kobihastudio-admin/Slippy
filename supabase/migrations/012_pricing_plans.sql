@@ -15,15 +15,12 @@
 
 -- ── 1. Drop old constraint, migrate data ────────────────────────────────────
 ALTER TABLE organizations DROP CONSTRAINT IF EXISTS organizations_plan_check;
-
 UPDATE organizations SET plan = 'business'  WHERE plan = 'pro';
 UPDATE organizations SET plan = 'personal'  WHERE plan = 'starter';
-
 -- ── 2. Re-add constraint with new plan names ─────────────────────────────────
 ALTER TABLE organizations
   ADD CONSTRAINT organizations_plan_check
   CHECK (plan = ANY (ARRAY['free','starter','personal','sme','business','enterprise']));
-
 -- ── 3. Sync doc_quota to match plan definitions ──────────────────────────────
 UPDATE organizations SET doc_quota = 10    WHERE plan = 'free';
 UPDATE organizations SET doc_quota = 50    WHERE plan = 'personal';
@@ -42,7 +39,6 @@ CREATE TABLE IF NOT EXISTS pricing_plans (
   sort_order  smallint    NOT NULL DEFAULT 0,
   is_active   boolean     NOT NULL DEFAULT true
 );
-
 INSERT INTO pricing_plans (id, name_th, name_en, price_thb, doc_quota, features, sort_order)
 VALUES
   ('free',      'ฟรี',         'Free',      0,    10,
@@ -64,13 +60,10 @@ ON CONFLICT (id) DO UPDATE
       doc_quota  = EXCLUDED.doc_quota,
       features   = EXCLUDED.features,
       sort_order = EXCLUDED.sort_order;
-
 -- ── 5. RLS — pricing_plans is public read ────────────────────────────────────
 ALTER TABLE pricing_plans ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "pricing_plans_public_read" ON pricing_plans
   FOR SELECT USING (is_active = true);
-
 -- ── 6. Comments ──────────────────────────────────────────────────────────────
 COMMENT ON TABLE pricing_plans IS
   'Single source of truth for plan names, quotas, and feature lists. '

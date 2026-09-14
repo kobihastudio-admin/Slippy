@@ -1,0 +1,5 @@
+{
+  "//": "Next compiles JSX itself, so the app tsconfig uses jsx:preserve. Scripts run through tsx/esbuild, which needs a real transform — hence this override. Nothing else differs.",
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "jsx": "react-jsx", "module": "esnext", "moduleResolution": "bundler" }
+}

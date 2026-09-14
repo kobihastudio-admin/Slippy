@@ -12,7 +12,7 @@
 import { useState } from "react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
-import { Plus, TrendingUp, TrendingDown, X, Wallet, ChevronLeft } from "lucide-react"
+import { Plus, TrendingUp, TrendingDown, X, Wallet, ChevronLeft, ChevronRight, Calculator, Landmark } from "lucide-react"
 import Link from "next/link"
 import type { WealthDoc, WealthSeries, WealthCategory } from "@/app/(app)/personal/wealth/page"
 
@@ -302,6 +302,36 @@ export function WealthClient({
             <p className="font-semibold">{fmtTHB(totalThisYear)}</p>
           </div>
         </div>
+      </div>
+
+      {/* ── Tools ── */}
+      <div className="grid sm:grid-cols-2 gap-3 mb-6">
+        <Link
+          href="/personal/wealth/loan-calculator"
+          className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+            <Calculator className="w-5 h-5 text-emerald-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold">คำนวณผ่อน/โปะคอนโด</p>
+            <p className="text-xs text-muted-foreground">เทียบดอกเบี้ยที่ประหยัดได้ (what-if)</p>
+          </div>
+          <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 group-hover:translate-x-0.5 transition-transform" />
+        </Link>
+        <Link
+          href="/personal/wealth/loans"
+          className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+            <Landmark className="w-5 h-5 text-emerald-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold">สินเชื่อของฉัน</p>
+            <p className="text-xs text-muted-foreground">บันทึกการชำระจริง + วิเคราะห์สถานะ</p>
+          </div>
+          <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 group-hover:translate-x-0.5 transition-transform" />
+        </Link>
       </div>
 
       {/* ── Line chart ── */}

@@ -1,15 +1,17 @@
 import Foundation
 
-struct UserProfile: Codable {
+struct UserProfile: Codable, Identifiable {
     let id: String
     let email: String
     let fullName: String?
     let avatarUrl: String?
+    let dateOfBirth: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, email
         case fullName  = "full_name"
         case avatarUrl = "avatar_url"
+        case dateOfBirth = "date_of_birth"
     }
 
     var displayName: String {

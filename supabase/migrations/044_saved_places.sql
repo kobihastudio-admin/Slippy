@@ -16,16 +16,12 @@ CREATE TABLE saved_places (
   photo_url       text,
   created_at      timestamptz DEFAULT now()
 );
-
 CREATE INDEX idx_saved_places_org ON saved_places(organization_id, created_at DESC);
-
 ALTER TABLE saved_places ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "saved_places_select" ON saved_places FOR SELECT
   USING (organization_id IN (
     SELECT organization_id FROM organization_members WHERE user_id = auth.uid()
   ));
-
 CREATE POLICY "saved_places_insert" ON saved_places FOR INSERT
   WITH CHECK (
     creator_id = auth.uid()
@@ -33,6 +29,5 @@ CREATE POLICY "saved_places_insert" ON saved_places FOR INSERT
       SELECT organization_id FROM organization_members WHERE user_id = auth.uid()
     )
   );
-
 CREATE POLICY "saved_places_delete" ON saved_places FOR DELETE
   USING (creator_id = auth.uid());

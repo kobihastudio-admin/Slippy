@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient }       from "@/lib/supabase/server"
 import { createAdminClient }  from "@/lib/supabase/admin"
+import { isOrgMember }        from "@/lib/require-org-member"
 import Anthropic              from "@anthropic-ai/sdk"
 
 const anthropic = new Anthropic()
@@ -36,6 +37,9 @@ export async function POST(req: NextRequest) {
 
   const { orgId } = await req.json()
   if (!orgId) return NextResponse.json({ error: "orgId required" }, { status: 400 })
+  if (!(await isOrgMember(user.id, orgId))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
 
   const admin = createAdminClient()
   const since = new Date(Date.now() - 30 * 86400000).toISOString()
@@ -145,8 +149,17 @@ export async function PATCH(req: NextRequest) {
   const admin = createAdminClient()
 
   if (markAllRead && orgId) {
+    if (!(await isOrgMember(user.id, orgId))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
     await admin.from("life_insights").update({ is_read: true }).eq("organization_id", orgId)
   } else if (insightId) {
+    // No orgId supplied for a single insight — look up which org it belongs
+    // to and check membership before touching it, same as the batch branch.
+    const { data: insight } = await admin.from("life_insights").select("organization_id").eq("id", insightId).single()
+    if (!insight || !(await isOrgMember(user.id, insight.organization_id))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
     await admin.from("life_insights").update({ is_read: true }).eq("id", insightId)
   }
   return NextResponse.json({ ok: true })

@@ -15,12 +15,13 @@ struct BillingView: View {
     @StateObject private var vm = BillingViewModel()
     @State private var safariURL: IdentifiableURL?
 
+    // No NavigationStack here — always reached via a push from Profile or
+    // the "เพิ่มเติม" hub, both of which already own one.
     var body: some View {
-        NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
                     if vm.isLoading && vm.org == nil {
-                        ProgressView().padding(.top, 80)
+                        SlippyLoadingView(message: "กำลังโหลดข้อมูล...")
                     } else if let org = vm.org {
                         planCard(org)
                         usageCard(org)
@@ -40,7 +41,6 @@ struct BillingView: View {
             .sheet(item: $safariURL) { item in
                 SafariView(url: item.url).ignoresSafeArea()
             }
-        }
     }
 
     // MARK: – Plan
@@ -124,7 +124,10 @@ struct BillingView: View {
     private func billingActionRow(title: String, icon: String, tint: Color, path: String) -> some View {
         Button {
             hapticLight()
-            if let url = URL(string: "https://app.slippy.app\(path)") {
+            // Same dead-domain bug already found in TripDocumentAPI/
+            // MedicationScanAPI — "app.slippy.app" is NXDOMAIN, never
+            // actually provisioned. Config.webAppURL is the real one.
+            if let url = URL(string: "\(Config.webAppURL.absoluteString)\(path)") {
                 safariURL = IdentifiableURL(url: url)
             }
         } label: {

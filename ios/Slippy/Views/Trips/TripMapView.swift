@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import Supabase
 
 /// The trip map — real Apple Maps, and the itinerary is edited on it.
 ///
@@ -42,6 +43,18 @@ struct TripMapView: View {
     let canEdit: Bool
     /// Called after any write, so the parent can refresh from the server.
     let onChanged: () async -> Void
+    /// Owned by the caller (TripDetailView), not this view: TripMapView is
+    /// only on screen while the Map tab (or the itinerary tab's embedded
+    /// map) is active, so a `@StateObject` here used to be torn down every
+    /// time the user switched away — silently killing the ping loop and
+    /// hiding the "currently sharing" banner mid-share. Lifting the instance
+    /// to TripDetailView (which persists across its own tab switches) means
+    /// sharing survives leaving this view; TripDetailView also renders the
+    /// persistent banner itself now, so this view no longer shows its own.
+    /// Placed right after the other required (non-defaulted) parameters, and
+    /// before `showDayStrip`, so every call site's positional argument order
+    /// stays unambiguous.
+    @ObservedObject var locationVM: TripLocationViewModel
     /// False when a caller already renders its own day strip above this map
     /// (the itinerary tab, whose strip also drives the timeline list below).
     var showDayStrip: Bool = true
@@ -68,6 +81,8 @@ struct TripMapView: View {
     /// `pending` needs, because this one is already a known, specific place.
     @State private var poi: ResolvedPlace?
     @State private var resolvingPOI = false
+
+    @State private var showShareLocationSheet = false
 
     private struct PendingPlace {
         let coordinate: CLLocationCoordinate2D
@@ -118,11 +133,6 @@ struct TripMapView: View {
             daySelector
             mapArea
             bottomBar
-            if let selected {
-                selectionCard(selected)
-            } else if let pending {
-                pendingCard(pending)
-            }
         }
         .onAppear {
             // Start on a named day rather than "whole trip" — the whole point
@@ -132,6 +142,10 @@ struct TripMapView: View {
             }
             frameToPins()
             routeStore.ensure(for: legs)
+            // locationVM's polling start/stop lives in TripDetailView now
+            // (see locationVM's own doc comment above) — tied to the whole
+            // trip screen's lifetime rather than to whichever embedding of
+            // this map happens to be on screen.
         }
         .onChange(of: days.count) { _, _ in routeStore.ensure(for: legs) }
         .onChange(of: activeDay) { _, _ in
@@ -201,6 +215,12 @@ struct TripMapView: View {
                         if added { Task { await onChanged() } }
                     }
                 )
+            }
+        }
+        .sheet(isPresented: $showShareLocationSheet) {
+            ShareLocationSheet { duration in
+                showShareLocationSheet = false
+                locationVM.startSharing(journeyId: trip.id, duration: duration)
             }
         }
     }
@@ -282,6 +302,12 @@ struct TripMapView: View {
                         }
                     }
                 }
+
+                ForEach(locationVM.others) { loc in
+                    Annotation("", coordinate: CLLocationCoordinate2D(latitude: loc.latitude, longitude: loc.longitude)) {
+                        livePinBadge(loc)
+                    }
+                }
             }
             .mapStyle(.standard(elevation: .flat))
             .frame(minHeight: 320)
@@ -293,9 +319,32 @@ struct TripMapView: View {
                 }
             )
             .overlay(alignment: .top) {
+                // The "currently sharing" banner used to live here, but only
+                // ever appeared while THIS view happened to be on screen —
+                // TripDetailView renders it now, tab-independently, from the
+                // same shared locationVM instance. See locationVM's doc
+                // comment above.
                 VStack(spacing: 6) {
                     if resolvingPOI { resolvingBanner }
                     movingBanner
+                }
+            }
+            // Floats over the map itself — pinned to mapArea's own bottom
+            // edge, growing upward — rather than living in the outer VStack's
+            // linear flow. Both call sites embed this whole view in a fixed
+            // outer `.frame(height:)` sized only for daySelector + map +
+            // bottomBar; when this card lived in that flow, its own height
+            // (address/notes/price can push it past 150pt) routinely
+            // exceeded the remaining budget and got silently clipped by the
+            // parent's `.clipShape` — visually indistinguishable from
+            // "selecting a place does nothing." An overlay has no flow
+            // height to exceed, so it always renders fully, on top of
+            // bottomBar's own visible position, never crowding it out.
+            .overlay(alignment: .bottom) {
+                if let selected {
+                    selectionCard(selected)
+                } else if let pending {
+                    pendingCard(pending)
                 }
             }
         }
@@ -336,6 +385,41 @@ struct TripMapView: View {
         }
     }
 
+    /// Two formatters, not one: `ISO8601DateFormatter()`'s default options
+    /// can't parse PostgREST's `timestamptz` output, which normally includes
+    /// fractional seconds — without `.withFractionalSeconds` this silently
+    /// fails to parse every single time, and the `?? true` fallback below
+    /// then makes every live pin render as permanently stale regardless of
+    /// how recent it actually is. PostgREST isn't guaranteed to always
+    /// include fractional seconds either, so the fractional formatter is
+    /// tried first and the plain one is a fallback, not a replacement.
+    private static let iso8601Fractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    private static let iso8601Plain: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
+    private func livePinBadge(_ loc: TripLocationAPI.MemberLocation) -> some View {
+        let parsed = Self.iso8601Fractional.date(from: loc.recordedAt) ?? Self.iso8601Plain.date(from: loc.recordedAt)
+        let stale = (parsed.map { Date().timeIntervalSince($0) > 60 }) ?? true
+        return ZStack {
+            Circle()
+                .fill(stale ? Color.gray : Color.brand500)
+                .frame(width: 26, height: 26)
+                .overlay(Circle().stroke(.white, lineWidth: 2))
+                .shadow(radius: 3)
+            Image(systemName: "location.fill")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(.white)
+        }
+        .opacity(stale ? 0.6 : 1)
+    }
+
     @ViewBuilder
     private var movingBanner: some View {
         if let movingItem {
@@ -371,6 +455,15 @@ struct TripMapView: View {
                 }
                 .buttonStyle(.bordered)
             }
+            Button {
+                hapticLight()
+                if locationVM.mySession != nil { locationVM.stopSharing() } else { showShareLocationSheet = true }
+            } label: {
+                Label(locationVM.mySession != nil ? "หยุดแชร์ตำแหน่ง" : "แชร์ตำแหน่ง",
+                      systemImage: locationVM.mySession != nil ? "location.slash.fill" : "location.fill")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .buttonStyle(.bordered)
             Spacer()
             if busy { ProgressView().controlSize(.small) }
             Button {
@@ -501,7 +594,10 @@ struct TripMapView: View {
             }
         }
         .padding(12)
-        .background(Color.surface)
+        .background(Color.surface, in: RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.16), radius: 10, y: 4)
+        .padding(.horizontal, 10)
+        .padding(.bottom, 10)
     }
 
     private func pendingCard(_ place: PendingPlace) -> some View {
@@ -548,7 +644,10 @@ struct TripMapView: View {
             }
         }
         .padding(12)
-        .background(Color.surface)
+        .background(Color.surface, in: RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.16), radius: 10, y: 4)
+        .padding(.horizontal, 10)
+        .padding(.bottom, 10)
     }
 
     /// Directions when the type has a road/rail equivalent Google can route
@@ -669,15 +768,17 @@ struct TripMapView: View {
     /// there to correct it, so a wrong guess costs one tap, never a bad write.
     fileprivate static func appType(for category: MKPointOfInterestCategory?) -> String {
         guard let category else { return "activity" }
+        if #available(iOS 18.0, *) {
+            if category == .spa { return "onsen" }
+            if category == .rvPark { return "hotel" }
+        }
         switch category {
         case .restaurant, .cafe, .bakery, .foodMarket, .brewery, .winery, .nightlife:
             return "restaurant"
-        case .hotel, .campground, .rvPark, .marina:
+        case .hotel, .campground, .marina:
             return "hotel"
         case .store, .pharmacy, .laundry:
             return "shopping"
-        case .spa:
-            return "onsen"
         default:
             return "activity"
         }
@@ -748,6 +849,38 @@ fileprivate struct ResolvedPlace {
     let address: String?
     let phone: String?
     let website: String?
+}
+
+// MARK: – Share location
+
+private struct ShareLocationSheet: View {
+    let onPick: (TripLocationAPI.Duration) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Text("เพื่อนร่วมทริปจะเห็นตำแหน่งของคุณแบบสด ๆ จนกว่าจะหมดเวลาหรือคุณกดหยุด")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color.textSecondary)
+                }
+                ForEach([
+                    (TripLocationAPI.Duration.m15, "15 นาที"),
+                    (.h1, "1 ชั่วโมง"),
+                    (.h4, "4 ชั่วโมง"),
+                    (.eod, "จนถึงสิ้นวัน"),
+                ], id: \.0) { duration, label in
+                    Button(label) { onPick(duration); dismiss() }
+                }
+            }
+            .navigationTitle("แชร์ตำแหน่งนานแค่ไหน")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("ยกเลิก") { dismiss() } }
+            }
+        }
+    }
 }
 
 // MARK: – Add stop

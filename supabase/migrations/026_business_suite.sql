@@ -27,11 +27,9 @@ CREATE TABLE IF NOT EXISTS expense_claims (
   created_at       timestamptz DEFAULT now(),
   updated_at       timestamptz DEFAULT now()
 );
-
 CREATE INDEX idx_ec_org_status   ON expense_claims(organization_id, status, created_at DESC);
 CREATE INDEX idx_ec_submitter    ON expense_claims(submitter_id, status);
 CREATE INDEX idx_ec_reviewer     ON expense_claims(reviewer_id, status);
-
 -- ─── Projects (group claims by project) ──────────────────────────────────────
 CREATE TABLE IF NOT EXISTS business_projects (
   id               uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -47,12 +45,10 @@ CREATE TABLE IF NOT EXISTS business_projects (
   metadata         jsonb   NOT NULL DEFAULT '{}',
   created_at       timestamptz DEFAULT now()
 );
-
 -- Add FK from expense_claims to projects
 ALTER TABLE expense_claims
   ADD CONSTRAINT fk_ec_project
   FOREIGN KEY (project_id) REFERENCES business_projects(id) ON DELETE SET NULL;
-
 -- ─── Approval Audit Trail ─────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS approval_events (
   id               uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -63,14 +59,11 @@ CREATE TABLE IF NOT EXISTS approval_events (
   metadata         jsonb   NOT NULL DEFAULT '{}',
   created_at       timestamptz DEFAULT now()
 );
-
 CREATE INDEX idx_ae_claim ON approval_events(claim_id, created_at DESC);
-
 -- ─── RLS ──────────────────────────────────────────────────────────────────────
 ALTER TABLE expense_claims    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE business_projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE approval_events   ENABLE ROW LEVEL SECURITY;
-
 -- Submitter can see own claims; managers see all org claims
 CREATE POLICY "ec_member_select" ON expense_claims FOR SELECT USING (
   organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid())
@@ -82,7 +75,6 @@ CREATE POLICY "ec_submitter_insert" ON expense_claims FOR INSERT WITH CHECK (
 CREATE POLICY "ec_update" ON expense_claims FOR UPDATE USING (
   organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid())
 );
-
 CREATE POLICY "proj_member" ON business_projects FOR ALL USING (
   organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid())
 );
@@ -92,7 +84,6 @@ CREATE POLICY "ae_member"   ON approval_events   FOR ALL USING (
     WHERE organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid())
   )
 );
-
 -- ─── Helper: claim stats per org ─────────────────────────────────────────────
 CREATE OR REPLACE VIEW expense_claim_stats AS
 SELECT

@@ -14,7 +14,6 @@
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS account_mode text DEFAULT 'business'
     CHECK (account_mode IN ('business', 'personal', 'both'));
-
 -- ─────────────────────────────────────────────────────────
 -- 2. Extend documents table
 -- ─────────────────────────────────────────────────────────
@@ -24,10 +23,8 @@ ALTER TABLE documents
       'food_healthy','food_unhealthy','supplement','medical',
       'fitness','wellness','alcohol','caffeine','other_health'
     ));
-
 ALTER TABLE documents
   ADD COLUMN IF NOT EXISTS is_personal bool DEFAULT false;
-
 -- ─────────────────────────────────────────────────────────
 -- 3. personal_profiles
 -- ─────────────────────────────────────────────────────────
@@ -44,7 +41,6 @@ CREATE TABLE IF NOT EXISTS personal_profiles (
   created_at       timestamptz DEFAULT now(),
   updated_at       timestamptz DEFAULT now()
 );
-
 -- ─────────────────────────────────────────────────────────
 -- 4. health_entries
 -- ─────────────────────────────────────────────────────────
@@ -62,10 +58,8 @@ CREATE TABLE IF NOT EXISTS health_entries (
   recorded_at  timestamptz NOT NULL DEFAULT now(),
   created_at   timestamptz DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS health_entries_user_recorded
   ON health_entries(user_id, recorded_at DESC);
-
 -- ─────────────────────────────────────────────────────────
 -- 5. financial_goals
 -- ─────────────────────────────────────────────────────────
@@ -81,10 +75,8 @@ CREATE TABLE IF NOT EXISTS financial_goals (
   created_at     timestamptz DEFAULT now(),
   updated_at     timestamptz DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS financial_goals_user
   ON financial_goals(user_id);
-
 -- ─────────────────────────────────────────────────────────
 -- 6. detected_subscriptions
 -- ─────────────────────────────────────────────────────────
@@ -99,10 +91,8 @@ CREATE TABLE IF NOT EXISTS detected_subscriptions (
   is_confirmed     bool DEFAULT false,
   created_at       timestamptz DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS detected_subscriptions_user
   ON detected_subscriptions(user_id);
-
 -- ─────────────────────────────────────────────────────────
 -- 7. RLS
 -- ─────────────────────────────────────────────────────────
@@ -110,35 +100,29 @@ ALTER TABLE personal_profiles      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE health_entries         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE financial_goals        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE detected_subscriptions ENABLE ROW LEVEL SECURITY;
-
 -- personal_profiles: own row + public rows readable by all auth users
 CREATE POLICY "personal_profiles: own full access"
   ON personal_profiles FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
-
 CREATE POLICY "personal_profiles: public readable"
   ON personal_profiles FOR SELECT
   USING (is_public = true);
-
 -- health_entries: own data only
 CREATE POLICY "health_entries: own access"
   ON health_entries FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
-
 -- financial_goals: own data only
 CREATE POLICY "financial_goals: own access"
   ON financial_goals FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
-
 -- detected_subscriptions: own data only
 CREATE POLICY "detected_subscriptions: own access"
   ON detected_subscriptions FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
-
 -- ─────────────────────────────────────────────────────────
 -- 8. Grants
 -- ─────────────────────────────────────────────────────────

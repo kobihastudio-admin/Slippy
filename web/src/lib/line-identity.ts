@@ -37,7 +37,7 @@ export interface ResolvedLineUser {
   isNewUser: boolean
 }
 
-function hasPlaceholderEmail(email?: string | null): boolean {
+export function hasPlaceholderEmail(email?: string | null): boolean {
   return !!email && PLACEHOLDER_EMAIL_DOMAINS.some(domain => email.includes(domain))
 }
 
@@ -222,4 +222,79 @@ export async function ensureLineLinkage(
   }
 
   return orgId
+}
+
+/**
+ * Merge a LINE-only placeholder account (`fromUserId`, e.g.
+ * `line.<id>@noreply.slippy.app`) into a real-email account (`toUserId`).
+ *
+ * Happens when a user logs in with LINE first (no email from LINE →
+ * placeholder account + auto-created personal org), then later logs in via
+ * Google/Facebook with their real email (a separate Slippy account) and
+ * connects the same LINE account from Settings. Without this, the two
+ * accounts would stay permanently separate because the LINE user id is
+ * already tied to the placeholder account.
+ *
+ * Moves `organization_members` (respecting the
+ * `UNIQUE(organization_id, user_id)` constraint — duplicates are dropped,
+ * keeping the higher role) and `line_connections` rows to `toUserId`, copies
+ * over a missing avatar, and tags `fromUserId` as merged.
+ */
+export async function mergeLineOnlyAccount(
+  admin: SupabaseClient,
+  fromUserId: string,
+  toUserId: string,
+): Promise<void> {
+  const { data: fromMemberships } = await admin
+    .from("organization_members")
+    .select("organization_id, role")
+    .eq("user_id", fromUserId)
+
+  for (const m of fromMemberships ?? []) {
+    const { data: existing } = await admin
+      .from("organization_members")
+      .select("id, role")
+      .eq("organization_id", m.organization_id)
+      .eq("user_id", toUserId)
+      .maybeSingle()
+
+    if (existing) {
+      if (m.role === "owner" && existing.role !== "owner") {
+        await admin.from("organization_members").update({ role: "owner" }).eq("id", existing.id)
+      }
+      await admin.from("organization_members")
+        .delete()
+        .eq("organization_id", m.organization_id)
+        .eq("user_id", fromUserId)
+    } else {
+      await admin.from("organization_members")
+        .update({ user_id: toUserId })
+        .eq("organization_id", m.organization_id)
+        .eq("user_id", fromUserId)
+    }
+  }
+
+  await admin.from("line_connections").update({ user_id: toUserId }).eq("user_id", fromUserId)
+
+  const { data: { user: toUser } } = await admin.auth.admin.getUserById(toUserId)
+  const { data: { user: fromUser } } = await admin.auth.admin.getUserById(fromUserId)
+
+  if (toUser && fromUser) {
+    const metadataPatch: Record<string, any> = {}
+    if (!toUser.user_metadata?.avatar_url && fromUser.user_metadata?.avatar_url) {
+      metadataPatch.avatar_url = fromUser.user_metadata.avatar_url
+    }
+    if (Object.keys(metadataPatch).length) {
+      await admin.auth.admin.updateUserById(toUserId, {
+        user_metadata: { ...toUser.user_metadata, ...metadataPatch },
+      })
+    }
+
+    // Old placeholder account: drop its line_user_id (now owned by toUserId) and
+    // mark it merged so future lookups don't try to resolve through it.
+    const { line_user_id, ...restMeta } = fromUser.user_metadata ?? {}
+    await admin.auth.admin.updateUserById(fromUserId, {
+      user_metadata: { ...restMeta, merged_into: toUserId },
+    })
+  }
 }

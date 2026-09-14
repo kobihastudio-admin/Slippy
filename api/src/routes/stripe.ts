@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify"
 import Stripe from "stripe"
 import { supabase } from "../lib/supabase"
+import { logServerError } from "../lib/error-log"
+import { createNotification } from "../lib/notify"
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
@@ -46,8 +48,29 @@ export async function stripeRoutes(app: FastifyInstance) {
         data: event.data,
       })
 
-      // Handle event types
-      switch (event.type) {
+      // Handle event types — tagged try/catch so failures are clearly
+      // identifiable as Stripe webhook failures in the admin error log
+      // (instead of a generic "api_unhandled" entry), while still
+      // re-throwing so Fastify's global handler returns 500 and Stripe
+      // retries delivery per its normal retry schedule.
+      try {
+        await handleStripeEvent(event)
+      } catch (err) {
+        await logServerError({
+          errorType: "stripe_webhook",
+          error: err,
+          context: { stripeEventId: event.id, stripeEventType: event.type },
+        })
+        throw err
+      }
+
+      return { received: true }
+    }
+  )
+}
+
+async function handleStripeEvent(event: Stripe.Event) {
+  switch (event.type) {
 
         case "customer.subscription.created":
         case "customer.subscription.updated": {
@@ -110,6 +133,70 @@ export async function stripeRoutes(app: FastifyInstance) {
               period_end:        invoice.period_end
                 ? new Date(invoice.period_end * 1000).toISOString() : null,
             })
+
+            await createNotification({
+              organizationId: org.id,
+              type:  "payment_success",
+              title: "ชำระเงินสำเร็จ",
+              body:  `ชำระเงิน ${(invoice.amount_paid / 100).toLocaleString()} ${invoice.currency.toUpperCase()} เรียบร้อยแล้ว`,
+              metadata: { stripeInvoiceId: invoice.id, amountPaid: invoice.amount_paid / 100 },
+            })
+          }
+          break
+        }
+
+        // ── Renewal reminder — Stripe sends this ~3 days before a
+        // subscription invoice is charged (doesn't fire for invoices
+        // collected via "send invoice" instead of auto-charge) ────────────
+        case "invoice.upcoming": {
+          const invoice = event.data.object as Stripe.Invoice
+          const customerId = invoice.customer as string
+
+          const { data: org } = await supabase
+            .from("organizations")
+            .select("id")
+            .eq("stripe_customer_id", customerId)
+            .single()
+
+          if (org) {
+            const dueDate = invoice.next_payment_attempt
+              ? new Date(invoice.next_payment_attempt * 1000)
+              : null
+            await createNotification({
+              organizationId: org.id,
+              type:  "payment_due",
+              title: "ใกล้ถึงรอบตัดเงินแล้ว",
+              body:  dueDate
+                ? `ระบบจะตัดเงิน ${(invoice.amount_due / 100).toLocaleString()} ${invoice.currency.toUpperCase()} ในวันที่ ${dueDate.toLocaleDateString("th-TH")}`
+                : `ใกล้ถึงรอบตัดเงิน ${(invoice.amount_due / 100).toLocaleString()} ${invoice.currency.toUpperCase()} แล้ว`,
+              metadata: { stripeInvoiceId: invoice.id, amountDue: invoice.amount_due / 100 },
+            })
+          }
+          break
+        }
+
+        // ── Payment failed — subscription_status will also flip to
+        // "past_due" via the customer.subscription.updated event Stripe
+        // fires alongside this; this case is just for the user-facing
+        // notification (clearer trigger than inferring it from a status sync) ──
+        case "invoice.payment_failed": {
+          const invoice = event.data.object as Stripe.Invoice
+          const customerId = invoice.customer as string
+
+          const { data: org } = await supabase
+            .from("organizations")
+            .select("id")
+            .eq("stripe_customer_id", customerId)
+            .single()
+
+          if (org) {
+            await createNotification({
+              organizationId: org.id,
+              type:  "payment_failed",
+              title: "ชำระเงินไม่สำเร็จ",
+              body:  `ตัดเงิน ${(invoice.amount_due / 100).toLocaleString()} ${invoice.currency.toUpperCase()} ไม่สำเร็จ — กรุณาอัปเดตวิธีชำระเงินเพื่อไม่ให้บัญชีถูกระงับ`,
+              metadata: { stripeInvoiceId: invoice.id, amountDue: invoice.amount_due / 100 },
+            })
           }
           break
         }
@@ -138,9 +225,5 @@ export async function stripeRoutes(app: FastifyInstance) {
           })
           break
         }
-      }
-
-      return { received: true }
-    }
-  )
+  }
 }

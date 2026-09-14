@@ -6,6 +6,9 @@ import { cookies }            from "next/headers"
 import { createAdminClient }  from "@/lib/supabase/admin"
 import { createServerClient, type CookieOptions } from "@supabase/ssr"
 import { resolveOrCreateLineUser, ensureLineLinkage } from "@/lib/line-identity"
+import { safeRedirectPath } from "@/lib/safe-redirect"
+import { getAppUrl } from "@/lib/app-url"
+import { recordActivity }    from "@/lib/activity-log"
 
 const LINE_TOKEN_URL   = "https://api.line.me/oauth2/v2.1/token"
 const LINE_PROFILE_URL = "https://api.line.me/v2/profile"
@@ -21,7 +24,7 @@ export async function GET(req: NextRequest) {
   const state = searchParams.get("state")
   const error = searchParams.get("error")
 
-  const appUrl      = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
+  const appUrl      = getAppUrl()
   const cookieStore = await cookies()
   const savedState  = cookieStore.get("line_oauth_state")?.value
   const next        = cookieStore.get("line_oauth_next")?.value ?? "/dashboard"
@@ -42,13 +45,28 @@ export async function GET(req: NextRequest) {
   // Forward `next` (e.g. /liff/sport, /liff/trip) so the client-side
   // hash-reader page can route the user straight back to where they
   // started after auto-link completes. Only forward safe relative paths.
-  const isSafeNext = next.startsWith("/") && !next.startsWith("//")
-  const webRedirectTarget = isSafeNext && next !== "/dashboard"
-    ? `${appUrl}/auth/line-callback?next=${encodeURIComponent(next)}`
+  const safeNext = safeRedirectPath(next, "/dashboard")
+  const webRedirectTarget = safeNext !== "/dashboard"
+    ? `${appUrl}/auth/line-callback?next=${encodeURIComponent(safeNext)}`
     : `${appUrl}/auth/line-callback`
   const sessionRedirectTarget = isIOS ? "slippy://auth/callback" : webRedirectTarget
-  const errorRedirect = (code: string, detail?: string) => {
-    const qs = new URLSearchParams({ error: code, ...(detail ? { detail } : {}) })
+  const errorRedirect = (code: string) => {
+    // Every failure path in this route funnels through here, so one call
+    // records them all. Failed logins are the single most useful row in the
+    // activity table — repeated failures from one address is what credential
+    // stuffing looks like, and until now nothing recorded them at all.
+    // Only the reason CODE ever leaves this route — the raw LINE/Supabase
+    // error text stays in the server-side log() calls above each call site.
+    // It used to also ride along as a `detail` query param so the login
+    // page could render it, which meant internal error text (echoing
+    // request contents in some cases) sat in the browser's URL/history for
+    // a message nobody stuck on a login screen could act on anyway.
+    void recordActivity({
+      action: "login", outcome: "failed",
+      detail: `LINE login failed: ${code}`,
+      req, metadata: { provider: "line", reason: code },
+    })
+    const qs = new URLSearchParams({ error: code })
     const base = isIOS ? "slippy://auth/callback" : `${appUrl}/login`
     return NextResponse.redirect(`${base}?${qs.toString()}`)
   }
@@ -57,7 +75,7 @@ export async function GET(req: NextRequest) {
 
   if (error) {
     log("LINE returned error", error)
-    return errorRedirect("line_cancelled", String(error))
+    return errorRedirect("line_cancelled")
   }
 
   // CSRF check
@@ -104,7 +122,7 @@ export async function GET(req: NextRequest) {
 
     if (!tokenRes.ok) {
       log("token exchange failed", tokenBody)
-      return errorRedirect("line_token", String(tokenBody.error))
+      return errorRedirect("line_token")
     }
 
     const accessToken: string = tokenBody.access_token
@@ -170,7 +188,7 @@ export async function GET(req: NextRequest) {
       })
     } catch (err: any) {
       log("resolve user failed", err.message)
-      return errorRedirect("line_create", err.message)
+      return errorRedirect("line_create")
     }
     const { userId: resolvedUserId, email: targetEmail } = resolved
     log(resolved.isNewUser ? "created new user" : "found existing user", { id: resolvedUserId.slice(0,8) })
@@ -209,14 +227,20 @@ export async function GET(req: NextRequest) {
 
     if (linkErr || !linkData?.properties?.action_link) {
       log("generateLink failed", linkErr?.message)
-      return errorRedirect("line_session", linkErr?.message ?? "no_link")
+      return errorRedirect("line_session")
     }
 
     log("redirecting to action_link")
+    void recordActivity({
+      action: "login", outcome: "success",
+      userId: resolvedUserId,
+      detail: "เข้าสู่ระบบด้วย LINE",
+      req, metadata: { provider: "line", platform },
+    })
     return NextResponse.redirect(linkData.properties.action_link)
 
   } catch (err: any) {
     log("unexpected error", err.message)
-    return errorRedirect("line_unexpected", err.message)
+    return errorRedirect("line_unexpected")
   }
 }

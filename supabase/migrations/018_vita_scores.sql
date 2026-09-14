@@ -30,10 +30,8 @@ CREATE TABLE IF NOT EXISTS score_snapshots (
   created_at       timestamptz DEFAULT now(),
   UNIQUE (user_id, snapshot_date)
 );
-
 CREATE INDEX IF NOT EXISTS score_snapshots_user_date
   ON score_snapshots(user_id, snapshot_date DESC);
-
 -- ─────────────────────────────────────────────────────────
 -- 2. vita_cards — shareable public score cards
 -- ─────────────────────────────────────────────────────────
@@ -51,10 +49,8 @@ CREATE TABLE IF NOT EXISTS vita_cards (
   created_at       timestamptz DEFAULT now(),
   updated_at       timestamptz DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS vita_cards_user    ON vita_cards(user_id);
 CREATE INDEX IF NOT EXISTS vita_cards_slug    ON vita_cards(slug);
-
 -- ─────────────────────────────────────────────────────────
 -- 3. Postgres scoring function
 --    Returns (longevity_score, wealth_score, components)
@@ -430,27 +426,22 @@ BEGIN
 
 END;
 $$;
-
 -- ─────────────────────────────────────────────────────────
 -- 4. RLS
 -- ─────────────────────────────────────────────────────────
 ALTER TABLE score_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE vita_cards      ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "score_snapshots: own access"
   ON score_snapshots FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
-
 CREATE POLICY "vita_cards: public readable"
   ON vita_cards FOR SELECT
   USING (is_public = true OR auth.uid() = user_id);
-
 CREATE POLICY "vita_cards: own write"
   ON vita_cards FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
-
 -- ─────────────────────────────────────────────────────────
 -- 5. Grants
 -- ─────────────────────────────────────────────────────────

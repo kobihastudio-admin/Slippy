@@ -64,9 +64,9 @@ export function billCreatedCard(params: {
         type: "box", layout: "vertical", paddingAll: "18px",
         backgroundColor: themeColor,
         contents: [
-          { type: "text", text: title, size: "md", color: "#fff", weight: "bold" },
-          { type: "text", text: `฿ ${Math.round(total)}`, size: "xxl", color: "#fff", weight: "bold", margin: "sm" },
-          { type: "text", text: `เรียกเก็บโดย ${collectorName}`, size: "xs", color: "rgba(255,255,255,0.85)", margin: "xs" },
+          { type: "text", text: title, size: "md", color: "#ffffff", weight: "bold" },
+          { type: "text", text: `฿ ${Math.round(total)}`, size: "xxl", color: "#ffffff", weight: "bold", margin: "sm" },
+          { type: "text", text: `เรียกเก็บโดย ${collectorName}`, size: "xs", color: "#ffffffd9", margin: "xs" },
         ]
       },
       body: {
@@ -136,13 +136,69 @@ export function fullyPaidCard(params: {
         type: "box", layout: "vertical", paddingAll: "18px",
         backgroundColor: themeColor,
         contents: [
-          { type: "text", text: subtitle ? `${title} ${subtitle}` : title, size: "sm", color: "#fff", weight: "bold" },
-          { type: "text", text: "จ่ายครบแล้ว 🎉", size: "xl", color: "#fff", weight: "bold", margin: "sm" },
+          { type: "text", text: subtitle ? `${title} ${subtitle}` : title, size: "sm", color: "#ffffff", weight: "bold" },
+          { type: "text", text: "จ่ายครบแล้ว 🎉", size: "xl", color: "#ffffff", weight: "bold", margin: "sm" },
         ]
       },
       body: {
         type: "box", layout: "vertical", paddingAll: "16px", spacing: "sm",
         contents: rowContents,
+      }
+    }
+  }
+}
+
+// ─── Flex: roster update — "ตอนนี้มีใครอยู่บ้าง" posted to the group whenever
+// someone joins or a friend is added/removed. Named guests (added via the
+// public join-link guest form, or by a host friend-picker) nest under whoever
+// added them — same tree shown in the LIFF roster — since their cost is
+// folded into that person's amount rather than tracked separately.
+export function rosterUpdateCard(params: {
+  title: string; themeColor: string; statusUrl: string
+  participants: Array<{ name: string; isMe?: boolean; guests: Array<{ name: string }> }>
+}): object {
+  const { title, themeColor, statusUrl, participants } = params
+  const totalCount = participants.reduce((s, p) => s + 1 + p.guests.length, 0)
+
+  const rows: object[] = participants.flatMap(p => [
+    {
+      type: "box", layout: "horizontal", paddingTop: "6px",
+      contents: [
+        { type: "text", text: `👤 ${p.name}`, size: "sm", color: "#111827", weight: "bold", wrap: true, flex: 1 },
+      ]
+    },
+    ...p.guests.map(g => ({
+      type: "box", layout: "horizontal", paddingTop: "2px", paddingStart: "16px",
+      contents: [
+        { type: "text", text: `↳ ${g.name}`, size: "xs", color: "#6b7280", wrap: true, flex: 1 },
+        { type: "text", text: `รวมกับ ${p.name}`, size: "xxs", color: "#9ca3af", align: "end", flex: 0 },
+      ]
+    }) as object),
+  ])
+
+  return {
+    type: "flex",
+    altText: `👥 ${title} — ตอนนี้มี ${totalCount} คน`,
+    contents: {
+      type: "bubble",
+      header: {
+        type: "box", layout: "vertical", paddingAll: "16px",
+        backgroundColor: themeColor,
+        contents: [
+          { type: "text", text: title, size: "sm", color: "#ffffffd9", weight: "bold", wrap: true },
+          { type: "text", text: `👥 ตอนนี้มี ${totalCount} คน`, size: "lg", color: "#ffffff", weight: "bold", margin: "xs" },
+        ]
+      },
+      body: {
+        type: "box", layout: "vertical", paddingAll: "16px", spacing: "sm",
+        contents: rows.length > 0 ? rows : [{ type: "text", text: "ยังไม่มีผู้เข้าร่วม", size: "sm", color: "#9ca3af" }],
+      },
+      footer: {
+        type: "box", layout: "vertical", spacing: "sm", paddingAll: "12px",
+        contents: [
+          { type: "button", style: "link", height: "sm",
+            action: { type: "uri", label: "เปิดดูในแอป", uri: statusUrl } },
+        ]
       }
     }
   }

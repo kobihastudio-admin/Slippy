@@ -7,6 +7,7 @@
  * in whole or in part, is strictly prohibited without prior written permission.
  */
 
+import { Suspense } from "react"
 import Link from "next/link"
 import { RegisterForm } from "@/components/auth/register-form"
 import { getTranslations } from "next-intl/server"
@@ -81,8 +82,8 @@ export default async function RegisterPage() {
                 gradient: "from-sky-500/20 to-cyan-500/10",
                 border: "border-sky-500/25",
                 iconColor: "text-sky-400",
-                title: "เชื่อมต่อระบบบัญชี",
-                desc: "FlowAccount, PEAK และอื่นๆ ได้เลย",
+                title: "Export เข้าระบบบัญชี",
+                desc: "ส่งเข้า Google Sheets อัตโนมัติ ระบบอื่นๆ เร็วๆ นี้",
               },
               {
                 icon: <Icons.Smartphone size={15} />,
@@ -139,7 +140,9 @@ export default async function RegisterPage() {
             </p>
           </div>
 
-          <RegisterForm />
+          <Suspense fallback={null}>
+            <RegisterForm />
+          </Suspense>
         </div>
       </div>
     </div>

@@ -6,7 +6,6 @@
 
 -- PostGIS (usually pre-enabled in Supabase — IF NOT EXISTS handles gracefully)
 CREATE EXTENSION IF NOT EXISTS postgis;
-
 -- ─── Extend life_merchants with location + place data ─────────────────────────
 ALTER TABLE life_merchants
   ADD COLUMN IF NOT EXISTS latitude        double precision,
@@ -21,26 +20,22 @@ ALTER TABLE life_merchants
   ADD COLUMN IF NOT EXISTS photo_url       text,
   ADD COLUMN IF NOT EXISTS price_level     int CHECK (price_level BETWEEN 0 AND 4),
   ADD COLUMN IF NOT EXISTS geocoded_at     timestamptz;
-
 -- Unique constraint on google_place_id (idempotent)
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'life_merchants_google_place_id_key') THEN
     ALTER TABLE life_merchants ADD CONSTRAINT life_merchants_google_place_id_key UNIQUE (google_place_id);
   END IF;
 END $$;
-
 -- Spatial index for fast nearby queries
 -- Spatial GIST index (add manually after enabling PostGIS extension in Supabase Dashboard)
 
 -- Regular index for bounding box pre-filter
 CREATE INDEX IF NOT EXISTS idx_lm_latlon ON life_merchants(latitude, longitude)
   WHERE latitude IS NOT NULL;
-
 -- ─── Extend life_journeys with coordinates ────────────────────────────────────
 ALTER TABLE life_journeys
   ADD COLUMN IF NOT EXISTS latitude  double precision,
   ADD COLUMN IF NOT EXISTS longitude double precision;
-
 -- ─── Place cache (Google Maps results stored to reduce API calls) ─────────────
 CREATE TABLE IF NOT EXISTS place_cache (
   id              uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -60,11 +55,9 @@ CREATE TABLE IF NOT EXISTS place_cache (
   cached_at       timestamptz DEFAULT now(),
   expires_at      timestamptz DEFAULT now() + interval '7 days'  -- refresh weekly
 );
-
 CREATE INDEX IF NOT EXISTS idx_pc_location ON place_cache
   USING GIST(ST_GeogFromText('SRID=4326;POINT(' || longitude || ' ' || latitude || ')'));
 CREATE INDEX IF NOT EXISTS idx_pc_type ON place_cache(place_type);
-
 -- ─── Location search history (for AI learning) ────────────────────────────────
 CREATE TABLE IF NOT EXISTS location_searches (
   id              uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -78,9 +71,7 @@ CREATE TABLE IF NOT EXISTS location_searches (
   source          text DEFAULT 'google' CHECK (source IN ('internal','google','both')),
   searched_at     timestamptz DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS idx_ls_user ON location_searches(user_id, searched_at DESC);
-
 -- ─── Nearby merchants function (Haversine — works without full PostGIS) ────────
 CREATE OR REPLACE FUNCTION find_nearby_merchants(
   p_org_id uuid, p_lat double precision, p_lng double precision,
@@ -114,7 +105,6 @@ BEGIN
   WHERE sub.dist <= p_radius_km
   ORDER BY sub.dist LIMIT p_limit;
 END; $$;
-
 -- ─── Nearby from cache (Google results already fetched) ───────────────────────
 CREATE OR REPLACE FUNCTION find_nearby_cached(
   p_lat       double precision,
@@ -153,10 +143,8 @@ RETURNS TABLE (
       AND c.longitude BETWEEN p_lng-(p_radius_km/(111.0*cos(radians(p_lat)))) AND p_lng+(p_radius_km/(111.0*cos(radians(p_lat))))
   ) sub WHERE sub.dist <= p_radius_km ORDER BY sub.dist LIMIT p_limit;
 $$;
-
 -- ─── RLS ──────────────────────────────────────────────────────────────────────
 ALTER TABLE place_cache        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE location_searches  ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "pc_public_read"  ON place_cache        FOR SELECT USING (true);
 CREATE POLICY "ls_own"          ON location_searches   FOR ALL USING (user_id = auth.uid());

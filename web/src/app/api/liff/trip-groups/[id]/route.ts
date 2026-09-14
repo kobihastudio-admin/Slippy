@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { getVerifiedLineUserId, liffUnauthorized } from "@/lib/liff-auth"
 
 const TRIP_EMOJI: Record<string, string> = {
   "เที่ยวทะเล": "🏖️", "ทะเล": "🏖️", "beach": "🏖️",
@@ -40,14 +41,29 @@ async function rebalance(admin: ReturnType<typeof createAdminClient>, billId: st
   return n
 }
 
+// Resolve a LINE userId → { organization_id, user_id } via line_connections.
+async function resolveConnection(admin: ReturnType<typeof createAdminClient>, lineUserId: string) {
+  const { data } = await admin.from("line_connections")
+    .select("user_id, organization_id, display_name")
+    .eq("line_user_id", lineUserId)
+    .maybeSingle()
+  return data
+}
+
 async function loadDetail(admin: ReturnType<typeof createAdminClient>, id: string, lineUserId?: string | null) {
   const { data: bill } = await admin.from("split_bills")
-    .select("id, title, trip_type, destination, total_amount, status, share_token, organization_id, creator_id, split_participants(id, name, amount, paid_at, line_user_id)")
+    .select("id, title, trip_type, destination, total_amount, status, share_token, organization_id, creator_id, promptpay_id, split_participants(id, name, amount, paid_at, line_user_id)")
     .eq("id", id)
     .eq("category", "trip")
     .maybeSingle()
 
   if (!bill) return null
+
+  let isCreator = false
+  if (lineUserId) {
+    const conn = await resolveConnection(admin, lineUserId)
+    isCreator = !!conn && conn.user_id === bill.creator_id
+  }
 
   const participants = (bill.split_participants as any[])
     .map(p => ({ id: p.id, name: p.name, amount: Number(p.amount), paid: !!p.paid_at, isMe: lineUserId ? p.line_user_id === lineUserId : false }))
@@ -62,6 +78,8 @@ async function loadDetail(admin: ReturnType<typeof createAdminClient>, id: strin
     fee:         Number(bill.total_amount),
     status:      bill.status,
     shareToken:  bill.share_token,
+    promptpayId: bill.promptpay_id ?? null,
+    isCreator,
     participants,
     paidTotal:   participants.filter(p => p.paid).reduce((s, p) => s + p.amount, 0),
   }
@@ -82,16 +100,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 // POST /api/liff/trip-groups/[id] — actions: join | pay | unpay | finalize
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const { action, lineUserId, displayName } = await req.json() as {
-    action:      "join" | "pay" | "unpay" | "finalize"
+  const body = await req.json() as {
+    action:      "join" | "pay" | "unpay" | "finalize" | "setPromptPay"
     lineUserId:  string
     displayName?: string
+    promptpayId?: string
   }
+  const lineUserId = getVerifiedLineUserId(req, body.lineUserId)
+  if (!lineUserId) return liffUnauthorized("LINE identity mismatch")
+  const { action, displayName, promptpayId } = body
   if (!action || !lineUserId) return NextResponse.json({ error: "action and lineUserId required" }, { status: 400 })
 
   const admin = createAdminClient()
   const { data: bill } = await admin.from("split_bills")
-    .select("id, status, total_amount, category")
+    .select("id, status, total_amount, category, creator_id")
     .eq("id", id).eq("category", "trip").maybeSingle()
 
   if (!bill) return NextResponse.json({ error: "ไม่พบกลุ่ม" }, { status: 404 })
@@ -118,7 +140,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       .eq("id", me.id)
   }
 
+  if (action === "setPromptPay") {
+    const conn = await resolveConnection(admin, lineUserId)
+    if (!conn || conn.user_id !== bill.creator_id) {
+      return NextResponse.json({ error: "เฉพาะผู้สร้างกลุ่มเท่านั้นที่ตั้งค่า PromptPay ได้" }, { status: 403 })
+    }
+    await admin.from("split_bills")
+      .update({ promptpay_id: promptpayId?.trim() || null })
+      .eq("id", id)
+  }
+
   if (action === "finalize") {
+    const conn = await resolveConnection(admin, lineUserId)
+    if (!conn || conn.user_id !== bill.creator_id) {
+      return NextResponse.json({ error: "เฉพาะผู้สร้างกลุ่มเท่านั้นที่ปิดกลุ่มได้" }, { status: 403 })
+    }
     if (bill.status === "finalized") return NextResponse.json({ error: "กลุ่มนี้ปิดไปแล้วครับ" }, { status: 400 })
     await rebalance(admin, id, Number(bill.total_amount))
     await admin.from("split_bills").update({ status: "finalized" }).eq("id", id)

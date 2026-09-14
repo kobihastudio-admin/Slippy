@@ -23,14 +23,11 @@ CREATE TABLE IF NOT EXISTS user_consents (
   cross_border boolean NOT NULL DEFAULT false,
   updated_at   timestamptz NOT NULL DEFAULT now()
 );
-
 ALTER TABLE user_consents ENABLE ROW LEVEL SECURITY;
 GRANT SELECT, INSERT, UPDATE ON user_consents TO authenticated;
-
 CREATE POLICY "user_consents_own" ON user_consents
   USING  (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
-
 -- ── 2. Security Preferences ─────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS user_security_prefs (
   user_id      uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -39,14 +36,11 @@ CREATE TABLE IF NOT EXISTS user_security_prefs (
     CHECK (auto_lock IN ('immediate','1min','5min','30min','never')),
   updated_at   timestamptz NOT NULL DEFAULT now()
 );
-
 ALTER TABLE user_security_prefs ENABLE ROW LEVEL SECURITY;
 GRANT SELECT, INSERT, UPDATE ON user_security_prefs TO authenticated;
-
 CREATE POLICY "user_security_prefs_own" ON user_security_prefs
   USING  (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
-
 -- ── 3. User Activity Log ────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS user_activity_logs (
   id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -57,16 +51,12 @@ CREATE TABLE IF NOT EXISTS user_activity_logs (
   ip_address text,
   created_at timestamptz NOT NULL DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS idx_user_activity ON user_activity_logs(user_id, created_at DESC);
-
 ALTER TABLE user_activity_logs ENABLE ROW LEVEL SECURITY;
 GRANT SELECT, INSERT ON user_activity_logs TO authenticated;
-
 CREATE POLICY "user_activity_own" ON user_activity_logs
   USING  (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
-
 -- ── 4. Session Tracking ─────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS user_sessions (
   id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -81,19 +71,15 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   last_active timestamptz NOT NULL DEFAULT now(),
   created_at  timestamptz NOT NULL DEFAULT now()
 );
-
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_sessions_token
   ON user_sessions(user_id, token_hash);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_user
   ON user_sessions(user_id, last_active DESC);
-
 ALTER TABLE user_sessions ENABLE ROW LEVEL SECURITY;
 GRANT SELECT, INSERT, UPDATE, DELETE ON user_sessions TO authenticated;
-
 CREATE POLICY "user_sessions_own" ON user_sessions
   USING  (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
-
 -- ── 5. Cleanup function: remove stale sessions > 30 days ───────────────────
 CREATE OR REPLACE FUNCTION cleanup_stale_sessions()
 RETURNS void LANGUAGE sql SECURITY DEFINER AS $$

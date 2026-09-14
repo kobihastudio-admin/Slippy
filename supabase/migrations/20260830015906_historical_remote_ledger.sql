@@ -1,0 +1,1 @@
+-- Historical ledger placeholder only. See 20260829080740_historical_remote_ledger.sql.

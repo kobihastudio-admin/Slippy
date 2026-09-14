@@ -93,6 +93,7 @@ interface Doc {
   doc_date:           string | null
   doc_type?:          string | null
   doc_category?:      string | null
+  expense_category?:  string | null
   overall_confidence: number | null
   is_duplicate?:      boolean
   source:             string
@@ -100,10 +101,27 @@ interface Doc {
   doc_number?:        string | null
 }
 
-export function DocumentList({ documents: initialDocs, orgId, initialVendorFilter }: {
+/**
+ * Doc-type groups behind the dashboard's "เข้าถึงเอกสารได้อย่างรวดเร็ว" cards.
+ * The DB stores fine-grained doc_type values; the dashboard links in the
+ * user-facing grouping (`?type=receipt` etc.), so map it back here.
+ */
+const TYPE_GROUPS: Record<string, { th: string; types: string[] }> = {
+  receipt:     { th: "บิล / ใบเสร็จ", types: ["receipt", "expense"] },
+  invoice:     { th: "ใบแจ้งหนี้",    types: ["invoice", "tax_invoice"] },
+  credit_note: { th: "ใบลดหนี้",      types: ["credit_note"] },
+}
+
+export function DocumentList({
+  documents: initialDocs, orgId, initialVendorFilter,
+  initialStatus, initialType, initialCategory,
+}: {
   documents: Doc[]
   orgId?: string
   initialVendorFilter?: string
+  initialStatus?: string
+  initialType?: string
+  initialCategory?: string
 }) {
   const router = useRouter()
   const [aiResults,   setAiResults]   = useState<Doc[] | null>(null)
@@ -116,7 +134,16 @@ export function DocumentList({ documents: initialDocs, orgId, initialVendorFilte
   const supabase = sbRef.current
 
   const [documents, setDocuments] = useState(initialDocs)
-  const [status,   setStatus]   = useState("all")
+  const [status,   setStatus]   = useState(
+    STATUS_TABS.some(t => t.id === initialStatus) ? initialStatus! : "all",
+  )
+  // Deep-link filters from the dashboard's quick-access / folder cards.
+  // Both are dismissible chips rather than sticky state, so the list behaves
+  // exactly as before once cleared.
+  const [typeGroup, setTypeGroup] = useState(
+    initialType && TYPE_GROUPS[initialType] ? initialType : null,
+  )
+  const [category,  setCategory]  = useState(initialCategory?.trim() || null)
 
   // ── Realtime ────────────────────────────────────────────────────────────────
   const [connStatus,    setConnStatus]    = useState<"connecting" | "live" | "error">("connecting")
@@ -130,7 +157,7 @@ export function DocumentList({ documents: initialDocs, orgId, initialVendorFilte
   const fetchDoc = useCallback(async (id: string) => {
     const { data } = await sbRef.current
       .from("documents")
-      .select("id, vendor_name, total_amount, vat_amount, status, created_at, source, overall_confidence, doc_date, doc_category")
+      .select("id, vendor_name, total_amount, vat_amount, status, created_at, source, overall_confidence, doc_date, doc_type, doc_number, doc_category, expense_category")
       .eq("id", id)
       .single()
     return data
@@ -141,7 +168,7 @@ export function DocumentList({ documents: initialDocs, orgId, initialVendorFilte
     if (!orgId) return
     const { data } = await sbRef.current
       .from("documents")
-      .select("id, vendor_name, total_amount, vat_amount, status, created_at, source, overall_confidence, doc_date, doc_category")
+      .select("id, vendor_name, total_amount, vat_amount, status, created_at, source, overall_confidence, doc_date, doc_type, doc_number, doc_category, expense_category")
       .eq("organization_id", orgId)
       .order("created_at", { ascending: false })
       .limit(100)
@@ -317,6 +344,8 @@ export function DocumentList({ documents: initialDocs, orgId, initialVendorFilte
     const base = aiResults ?? documents
     return base.filter(d => {
       if (status !== "all" && d.status !== status) return false
+      if (typeGroup && !TYPE_GROUPS[typeGroup].types.includes(d.doc_type ?? "")) return false
+      if (category && (d.expense_category ?? "") !== category) return false
       if (!aiResults && search) {
         const q = search.toLowerCase()
         if (!(d.vendor_name ?? "").toLowerCase().includes(q) &&
@@ -324,12 +353,19 @@ export function DocumentList({ documents: initialDocs, orgId, initialVendorFilte
       }
       return true
     })
-  }, [documents, status, search, aiResults])
+  }, [documents, status, typeGroup, category, search, aiResults])
+
+  // Status-tab counts respect the deep-link chips so the numbers match the rows.
+  const scoped = useMemo(() => documents.filter(d => {
+    if (typeGroup && !TYPE_GROUPS[typeGroup].types.includes(d.doc_type ?? "")) return false
+    if (category && (d.expense_category ?? "") !== category) return false
+    return true
+  }), [documents, typeGroup, category])
 
   const counts = useMemo(() => STATUS_TABS.reduce((acc, t) => {
-    acc[t.id] = t.id === "all" ? documents.length : documents.filter(d => d.status === t.id).length
+    acc[t.id] = t.id === "all" ? scoped.length : scoped.filter(d => d.status === t.id).length
     return acc
-  }, {} as Record<string, number>), [documents])
+  }, {} as Record<string, number>), [scoped])
 
   const toggleSelect = (id: string) => {
     setSelected(prev => {
@@ -411,6 +447,32 @@ export function DocumentList({ documents: initialDocs, orgId, initialVendorFilte
           )
         })}
       </div>
+
+      {/* Deep-link filter chips (from the dashboard cards) */}
+      {(typeGroup || category) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {typeGroup && (
+            <button
+              onClick={() => setTypeGroup(null)}
+              className="flex items-center gap-1.5 h-7 pl-3 pr-2 rounded-full text-[12px] font-medium
+                bg-brand-500/10 text-brand-600 dark:text-brand-300 hover:bg-brand-500/15 transition-colors"
+            >
+              ประเภท: {TYPE_GROUPS[typeGroup].th}
+              <X className="w-3 h-3" />
+            </button>
+          )}
+          {category && (
+            <button
+              onClick={() => setCategory(null)}
+              className="flex items-center gap-1.5 h-7 pl-3 pr-2 rounded-full text-[12px] font-medium
+                bg-amber-500/10 text-amber-600 dark:text-amber-300 hover:bg-amber-500/15 transition-colors"
+            >
+              หมวดหมู่: {category}
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">

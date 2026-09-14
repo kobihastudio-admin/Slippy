@@ -14,8 +14,11 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <StatusBar style="auto" />
         <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(auth)"  options={{ animation: 'fade' }} />
-          <Stack.Screen name="(app)"   options={{ animation: 'fade' }} />
+          <Stack.Screen name="(auth)"              options={{ animation: 'fade' }} />
+          <Stack.Screen name="(app)"               options={{ animation: 'fade' }} />
+          <Stack.Screen name="auth/callback"       options={{ animation: 'none' }} />
+          <Stack.Screen name="(app)/messages/[id]" options={{ headerShown: false, animation: 'slide_from_right' }} />
+          <Stack.Screen name="(app)/pay/[id]"      options={{ headerShown: false, animation: 'slide_from_bottom' }} />
         </Stack>
       </SafeAreaProvider>
     </GestureHandlerRootView>

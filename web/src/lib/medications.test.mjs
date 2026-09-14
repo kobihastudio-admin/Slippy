@@ -160,6 +160,14 @@ test("updateMedication always edits the medication's own fields", async () => {
   assert.equal(med.purpose, "ลดไข้")
 })
 
+test("updateMedication persists the verbatim label note after scan review", async () => {
+  const db = fakeDb(seedMedication({}))
+  const labelNote = "รับประทานครั้งละ 1 เม็ด หลังอาหารทันที"
+  await updateMedication("med-1", "user-1", { name: "SERC", notes: labelNote }, db)
+
+  assert.equal(db._tables.medications[0].notes, labelNote)
+})
+
 // ── A medication with no existing schedule/inventory gets one inserted ─────
 
 test("updateMedication with no scheduleId inserts one, only when times is non-empty", async () => {

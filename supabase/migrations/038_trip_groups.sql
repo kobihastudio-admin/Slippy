@@ -7,11 +7,11 @@
 
 ALTER TABLE split_bills
   ADD COLUMN IF NOT EXISTS trip_type   text,   -- เช่น เที่ยวทะเล, แคมป์ปิ้ง, ปีนเขา, ทริปต่างประเทศ
-  ADD COLUMN IF NOT EXISTS destination text;   -- เช่น เขาใหญ่, ภูเก็ต, ญี่ปุ่น
+  ADD COLUMN IF NOT EXISTS destination text;
+-- เช่น เขาใหญ่, ภูเก็ต, ญี่ปุ่น
 
 CREATE INDEX IF NOT EXISTS idx_split_bills_category_trip
   ON split_bills(organization_id, category, status) WHERE category = 'trip';
-
 COMMENT ON COLUMN split_bills.trip_type IS
   'Trip theme/category for category=trip bills (เที่ยวทะเล/แคมป์ปิ้ง/ปีนเขา/...) — set via /tripgroup on LINE';
 COMMENT ON COLUMN split_bills.destination IS

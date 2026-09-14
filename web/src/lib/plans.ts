@@ -60,6 +60,13 @@ export interface Plan {
   taglineEn:     string
   priceTHB:      number       // 0 = free or contact sales
   docQuota:      number       // docs/month; 0 = unlimited
+  /** Fair-use ceiling for "unlimited" (docQuota=0) plans — see
+   * supabase/migrations/071_fair_use_doc_caps.sql, which is the actual
+   * enforcement point (pricing_plans.doc_quota). Kept here too so the UI can
+   * disclose it next to "ไม่จำกัดเอกสาร" instead of advertising a limit that
+   * silently exists in the backend but not in the marketing copy.
+   * undefined = genuinely no cap (Enterprise, contract-based). */
+  fairUseCapDocs?: number
   orgQuota:      number       // max orgs owned; 0 = unlimited
   maxUsers:      number       // max seats; 0 = unlimited
   extraSeatTHB:  number       // ราคา/seat เพิ่ม; 0 = ไม่รองรับ
@@ -92,17 +99,19 @@ export const PLANS: Plan[] = [
     category:     "consumer",
     planFeatures: {
       aiExtraction:  true,  lineBot:       true,  emailIngestion: false,
-      splitBill:     true,  splitBillFee:  false, taxReports:     false,
-      lifeGraph:     false, aiAssistant:   false, aiSearch:       false,
-      aiCoach:       false, lifeInsights:  false, multiUser:      false,
+      splitBill:     true,  splitBillFee:  true,  taxReports:     false,
+      lifeGraph:     true,  aiAssistant:   false, aiSearch:       false,
+      aiCoach:       false, lifeInsights:  false, multiUser:      true,
       expenseClaims: false, flowAccount:   false, apiAccess:      false,
       sso:           false, priorityAI:    false, whiteLabel:     false,
     },
     features: [
-      "15 เอกสาร / เดือน",
+      "หารบิล + เก็บเงินออนไลน์ ไม่จำกัด",
+      "นัดกีฬา + ทริปกับเพื่อน ไม่จำกัด",
+      "เพิ่มเพื่อนผ่าน QR / LINE ไม่จำกัด",
+      "15 เอกสาร AI / เดือน",
       "AI อ่านใบเสร็จ + ใบกำกับภาษี",
       "เชื่อมต่อ LINE Bot",
-      "หารบิลพื้นฐาน",
       "Dashboard ค่าใช้จ่าย",
       "ซัพพอร์ตทางอีเมล",
     ],
@@ -116,7 +125,8 @@ export const PLANS: Plan[] = [
     taglineTh:    "สำหรับผู้ใช้ส่วนตัว — AI ครบทุกฟีเจอร์",
     taglineEn:    "Personal users — full AI features",
     priceTHB:     199,
-    docQuota:     0,        // unlimited
+    docQuota:     0,        // unlimited (fair use — see fairUseCapDocs)
+    fairUseCapDocs: 500,
     orgQuota:     3,
     maxUsers:     1,
     extraSeatTHB: 99,       // เพิ่ม seat ได้ ฿99/คน/เดือน
@@ -134,14 +144,13 @@ export const PLANS: Plan[] = [
       sso:           false, priorityAI:    false, whiteLabel:     false,
     },
     features: [
-      "ไม่จำกัดเอกสาร",
+      "ไม่จำกัดเอกสาร (Fair use ~500/เดือน)",
       "AI OCR แม่นยำสูง (Smart routing)",
       "AI Assistant — ถามตอบเอกสาร",
       "AI Search — ค้นด้วยภาษาธรรมชาติ",
       "Life Graph — Wealth + Journey + Social",
       "Export ภ.ง.ด.3/53, ภ.พ.30",
       "รับเอกสารทางอีเมล",
-      "Split Bill + เก็บเงินออนไลน์",
       "20 GB Storage",
     ],
   },
@@ -155,6 +164,7 @@ export const PLANS: Plan[] = [
     taglineEn:    "Power users — personal AI Coach",
     priceTHB:     499,
     docQuota:     0,
+    fairUseCapDocs: 600,
     orgQuota:     5,
     maxUsers:     1,
     extraSeatTHB: 149,
@@ -192,6 +202,7 @@ export const PLANS: Plan[] = [
     taglineEn:    "Small business — team expense management",
     priceTHB:     999,
     docQuota:     0,
+    fairUseCapDocs: 2500,
     orgQuota:     0,
     maxUsers:     10,
     extraSeatTHB: 99,
@@ -207,13 +218,12 @@ export const PLANS: Plan[] = [
       sso:           false, priorityAI:    false, whiteLabel:     false,
     },
     features: [
-      "ไม่จำกัดเอกสาร",
+      "ไม่จำกัดเอกสาร (Fair use ~2,500/เดือน)",
       "10 สมาชิก (เพิ่มได้ ฿99/คน)",
       "เบิกค่าใช้จ่าย + Approval Workflow",
       "Audit Trail ทุกรายการ",
       "Reports VAT + WHT ครบ",
       "AI Assistant สำหรับทีม",
-      "Split Bill + เก็บเงินออนไลน์",
       "100 GB Storage",
     ],
   },
@@ -227,6 +237,7 @@ export const PLANS: Plan[] = [
     taglineEn:    "SME — complete accounting system",
     priceTHB:     2990,
     docQuota:     0,
+    fairUseCapDocs: 5000,
     orgQuota:     0,
     maxUsers:     0,        // unlimited
     extraSeatTHB: 149,
@@ -244,11 +255,11 @@ export const PLANS: Plan[] = [
       sso:           false, priorityAI:    true,  whiteLabel:     false,
     },
     features: [
-      "ไม่จำกัดเอกสาร",
+      "ไม่จำกัดเอกสาร (Fair use ~5,000/เดือน)",
       "ไม่จำกัดสมาชิก (฿149/คน)",
       "AI OCR Priority (Sonnet เต็มรูปแบบ)",
       "หลายแผนก / หน่วยงาน",
-      "เชื่อมต่อ FlowAccount / PEAK",
+      "Export เข้า Google Sheets อัตโนมัติ (เชื่อมต่อระบบบัญชีอื่นๆ เร็วๆ นี้)",
       "API Access + Webhook",
       "Advanced Reports + VAT ภ.พ.30",
       "Priority Support",

@@ -33,30 +33,23 @@ CREATE TABLE IF NOT EXISTS vendors (
   created_at      timestamptz DEFAULT now(),
   updated_at      timestamptz DEFAULT now()
 );
-
 -- Unique: per org, match by tax_id when present, otherwise by lower(name)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_vendors_tax_id
   ON vendors(organization_id, tax_id)
   WHERE tax_id IS NOT NULL AND tax_id != '';
-
 CREATE UNIQUE INDEX IF NOT EXISTS idx_vendors_name
   ON vendors(organization_id, lower(name))
   WHERE tax_id IS NULL OR tax_id = '';
-
 CREATE INDEX IF NOT EXISTS idx_vendors_org_total
   ON vendors(organization_id, total_amount DESC);
-
 CREATE INDEX IF NOT EXISTS idx_vendors_geocoded
   ON vendors(organization_id, lat, lng)
   WHERE lat IS NOT NULL;
-
 -- Trigger: auto-update updated_at
 CREATE TRIGGER vendors_updated_at
   BEFORE UPDATE ON vendors FOR EACH ROW EXECUTE FUNCTION update_updated_at();
-
 -- RLS
 ALTER TABLE vendors ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "vendors: org members can read"
   ON vendors FOR SELECT
   USING (
@@ -64,7 +57,6 @@ CREATE POLICY "vendors: org members can read"
       SELECT organization_id FROM organization_members WHERE user_id = auth.uid()
     )
   );
-
 CREATE POLICY "vendors: org members can write"
   ON vendors FOR ALL
   USING (
@@ -74,9 +66,7 @@ CREATE POLICY "vendors: org members can write"
         AND role IN ('owner','admin','accountant')
     )
   );
-
 GRANT SELECT, INSERT, UPDATE ON TABLE vendors TO authenticated;
-
 -- Function: upsert vendor from a document, returns vendor id
 CREATE OR REPLACE FUNCTION upsert_vendor(
   p_org_id      uuid,

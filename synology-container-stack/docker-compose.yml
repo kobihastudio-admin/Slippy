@@ -1,0 +1,143 @@
+name: ${COMPOSE_PROJECT_NAME:-slippy-dev}
+
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: slippy-caddy
+    restart: unless-stopped
+    ports:
+      - "${CADDY_HTTP_PORT:-8080}:80"
+      - "${CADDY_HTTPS_PORT:-8443}:443"
+    environment:
+      WEB_DOMAIN: ${WEB_DOMAIN:-web.local}
+      API_DOMAIN: ${API_DOMAIN:-api.local}
+      SUPABASE_DOMAIN: ${SUPABASE_DOMAIN:-supabase.local}
+      NAS_HOST: ${NAS_HOST:-192.168.1.200}
+    volumes:
+      - ./config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - slippy
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: slippy-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - slippy
+
+  mailpit:
+    image: axllent/mailpit:v1.20
+    container_name: slippy-mailpit
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_WEB_PORT:-8025}:8025"
+    networks:
+      - slippy
+
+  # ── web (Next.js) — replaces the old apps/hello-web placeholder ────────────
+  # Build context is the repo root (`..`), not ./apps/web — this is an npm
+  # workspaces monorepo, so `npm ci` needs the root lockfile + every
+  # workspace's package.json to resolve correctly. See apps/web/Dockerfile.
+  web:
+    image: slippy-web:latest
+    build:
+      context: ..
+      dockerfile: synology-container-stack/apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_LIFF_ID: ${NEXT_PUBLIC_LIFF_ID}
+        NEXT_PUBLIC_LINE_BOT_ID: ${NEXT_PUBLIC_LINE_BOT_ID}
+        NEXT_PUBLIC_LINE_CHANNEL_ID: ${NEXT_PUBLIC_LINE_CHANNEL_ID}
+        NEXT_PUBLIC_GOOGLE_MAPS_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_KEY}
+        NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
+        NEXT_PUBLIC_STRIPE_PRICE_PACK_100: ${NEXT_PUBLIC_STRIPE_PRICE_PACK_100}
+        NEXT_PUBLIC_STRIPE_PRICE_PACK_300: ${NEXT_PUBLIC_STRIPE_PRICE_PACK_300}
+        NEXT_PUBLIC_STRIPE_PRICE_PACK_500: ${NEXT_PUBLIC_STRIPE_PRICE_PACK_500}
+    container_name: slippy-web
+    restart: unless-stopped
+    env_file:
+      - ./web.env
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      API_BASE_URL: http://api:4000
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      - redis
+      - mailpit
+    networks:
+      - slippy
+
+  # ── api (Fastify) — replaces the old apps/hello-api placeholder ────────────
+  api:
+    image: slippy-api:latest
+    build:
+      context: ..
+      dockerfile: synology-container-stack/apps/api/Dockerfile
+    container_name: slippy-api
+    restart: unless-stopped
+    env_file:
+      - ./api.env
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 4000
+      REDIS_URL: redis://redis:6379
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+    # Optional: if you use Google Document AI (api.env's
+    # GOOGLE_APPLICATION_CREDENTIALS), uncomment and place your real
+    # service-account JSON at this path first — a bind mount of a missing
+    # file silently creates an empty directory instead of erroring, which
+    # then fails confusingly at runtime instead of at `docker compose up`.
+    # volumes:
+    #   - ./google-credentials.json:/repo/api/google-credentials.json:ro
+    ports:
+      - "${API_PORT:-4000}:4000"
+    depends_on:
+      - redis
+      - mailpit
+    networks:
+      - slippy
+
+  # ── cloudflared — replaces ngrok for public HTTPS access ───────────────────
+  # No bandwidth cap, no random URL on every restart. Create the tunnel once
+  # in the Cloudflare Zero Trust dashboard (Networks → Tunnels → Create a
+  # tunnel → Docker), then add two "Public Hostnames" there pointing at:
+  #   <your-web-hostname>  → http://web:3000
+  #   <your-api-hostname>  → http://api:4000
+  # (the api hostname is what you register as the LINE webhook URL —
+  # api/src/routes/line.ts handles the webhook directly, not via web).
+  # See docs/SYNOLOGY_DEPLOY.md for the full walkthrough.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: slippy-cloudflared
+    restart: unless-stopped
+    # protocol http2 (TCP) instead of the default quic (UDP) — quic was
+    # dropping/timing out ("no recent network activity") on this NAS's
+    # network, likely a router/ISP that throttles or drops idle UDP flows.
+    command: tunnel --no-autoupdate --protocol http2 run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - web
+      - api
+    networks:
+      - slippy
+
+networks:
+  slippy:
+    name: slippy
+
+volumes:
+  caddy_data:
+  caddy_config:
+  redis_data:

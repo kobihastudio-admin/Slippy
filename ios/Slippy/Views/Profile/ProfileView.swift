@@ -1,6 +1,7 @@
 import SwiftUI
 import LocalAuthentication
 import Supabase
+import PhotosUI
 
 private enum ProfileTab: String, CaseIterable, Identifiable {
     case info = "ข้อมูลส่วนตัว"
@@ -11,17 +12,27 @@ private enum ProfileTab: String, CaseIterable, Identifiable {
 
 struct ProfileView: View {
     @EnvironmentObject var authVM: AuthViewModel
+    @StateObject private var profileVM = ProfileViewModel()
     @State private var biometric      = false
+    @State private var resetPasswordMessage: String?
     @State private var lineNotif      = true
     @State private var weeklyRpt      = false
     @State private var docNotif       = true
     @State private var showLogoutAlert = false
     @State private var loggingOut     = false
     @State private var tab: ProfileTab = .info
-    @State private var showEditName = false
+    @State private var showEditName    = false
     @State private var showOrgSwitcher = false
-    @State private var editedName = ""
-    @State private var savingName = false
+    @State private var editedName      = ""
+    @State private var savingName      = false
+    @State private var editedDOB: Date = Date()
+    @State private var hasDOB          = false
+
+    // Photo pickers
+    @State private var avatarItem:     PhotosPickerItem?
+    @State private var bgItem:         PhotosPickerItem?
+    @State private var uploadingAvatar = false
+    @State private var customBgData:   Data? = UserDefaults.standard.data(forKey: "slippy_profile_bg")
 
     private var role: String { authVM.membership?.role ?? "member" }
     private let roleColors: [String: Color] = [
@@ -32,8 +43,9 @@ struct ProfileView: View {
         "owner":"OWNER","admin":"ADMIN","accountant":"ACCOUNTANT","member":"MEMBER"
     ]
 
+    // No NavigationStack here — always reached via a push from Dashboard,
+    // SplitView, or the "เพิ่มเติม" hub, all of which already own one.
     var body: some View {
-        NavigationStack {
             ZStack(alignment: .bottomTrailing) {
                 ScrollView {
                     VStack(spacing: 0) {
@@ -54,10 +66,25 @@ struct ProfileView: View {
                 .background(Color.background)
                 .navigationBarTitleDisplayMode(.inline)
                 .onAppear {
-                    biometric = UserDefaults.standard.bool(forKey: "slippy_biometric")
-                    lineNotif  = UserDefaults.standard.bool(forKey: "slippy_line_notif")
-                    weeklyRpt  = UserDefaults.standard.bool(forKey: "slippy_weekly_rpt")
-                    docNotif   = UserDefaults.standard.bool(forKey: "slippy_doc_notif")
+                    // `bool(forKey:)` returns false for a key that was never
+                    // written, so on a fresh install this silently flipped every
+                    // switch OFF — contradicting the `= true` declared above, and
+                    // then persisting that false through onChange. Read the
+                    // stored value only when one exists.
+                    biometric = storedFlag("slippy_biometric", default: biometric)
+                    lineNotif = storedFlag("slippy_line_notif", default: lineNotif)
+                    weeklyRpt = storedFlag("slippy_weekly_rpt", default: weeklyRpt)
+                    docNotif  = storedFlag("slippy_doc_notif",  default: docNotif)
+                }
+                .alert("เปลี่ยนรหัสผ่าน",
+                       isPresented: Binding(get: { resetPasswordMessage != nil },
+                                            set: { if !$0 { resetPasswordMessage = nil } })) {
+                    Button("ตกลง", role: .cancel) { resetPasswordMessage = nil }
+                } message: { Text(resetPasswordMessage ?? "") }
+                .task {
+                    guard let orgId = authVM.org?.id,
+                          let userId = authVM.session?.user.id.uuidString else { return }
+                    await profileVM.load(orgId: orgId, userId: userId)
                 }
 
                 // Floating support / chat button (matches web FAB)
@@ -78,7 +105,6 @@ struct ProfileView: View {
                 .padding(.trailing, 20)
                 .padding(.bottom, 24)
             }
-        }
         .alert("ออกจากระบบ", isPresented: $showLogoutAlert) {
             Button("ยกเลิก", role: .cancel) {}
             Button("ออกจากระบบ", role: .destructive) {
@@ -96,6 +122,13 @@ struct ProfileView: View {
                     Section("ชื่อ-นามสกุล") {
                         TextField("ชื่อ-นามสกุล", text: $editedName)
                     }
+                    Section("วันเกิด") {
+                        Toggle("ระบุวันเกิด", isOn: $hasDOB)
+                        if hasDOB {
+                            DatePicker("วันเกิด", selection: $editedDOB, displayedComponents: .date)
+                                .datePickerStyle(.compact)
+                        }
+                    }
                 }
                 .navigationTitle("แก้ไขโปรไฟล์")
                 .navigationBarTitleDisplayMode(.inline)
@@ -107,9 +140,13 @@ struct ProfileView: View {
                         Button {
                             savingName = true
                             Task {
-                                let ok = await authVM.updateProfile(fullName: editedName)
+                                let nameOK = await authVM.updateProfile(fullName: editedName)
+                                let f = DateFormatter()
+                                f.dateFormat = "yyyy-MM-dd"
+                                f.timeZone = TimeZone(identifier: "UTC")
+                                let dobOK = await authVM.updateDateOfBirth(hasDOB ? f.string(from: editedDOB) : nil)
                                 savingName = false
-                                if ok { showEditName = false }
+                                if nameOK && dobOK { showEditName = false }
                             }
                         } label: {
                             if savingName { ProgressView() } else { Text("บันทึก").bold() }
@@ -118,46 +155,143 @@ struct ProfileView: View {
                     }
                 }
             }
-            .presentationDetents([.height(220)])
+            .presentationDetents([.height(340)])
         }
+    }
+
+    /// A stored toggle, or the declared default when the key was never written.
+    private func storedFlag(_ key: String, default fallback: Bool) -> Bool {
+        UserDefaults.standard.object(forKey: key) == nil
+            ? fallback
+            : UserDefaults.standard.bool(forKey: key)
+    }
+
+    // MARK: – Stats grid (DB data)
+    private var statsGrid: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3),
+                  spacing: 10) {
+            statCard(value: profileVM.isLoading ? "—" : "\(profileVM.docCount)",
+                     label: "เอกสาร",
+                     icon: "doc.text.fill", color: Color(hex: "#6366f1"))
+            statCard(value: profileVM.isLoading ? "—" : "\(profileVM.splitCount)",
+                     label: "หารบิล",
+                     icon: "person.2.fill", color: Color(hex: "#3b82f6"))
+            statCard(value: profileVM.isLoading ? "—" : "\(profileVM.tripCount)",
+                     label: "ทริป",
+                     icon: "airplane", color: Color(hex: "#f59e0b"))
+        }
+    }
+
+    private func statCard(value: String, label: String, icon: String, color: Color) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 18))
+                .foregroundColor(color)
+                .frame(width: 40, height: 40)
+                .background(color.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            Text(value)
+                .font(.system(size: 20, weight: .heavy))
+                .foregroundColor(Color.textPrimary)
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(Color.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+        .background(Color.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.border, lineWidth: 1))
     }
 
     // MARK: – Hero card (gradient cover + avatar, matches web profile header)
     private var heroCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .topTrailing) {
-                // Gradient cover banner with subtle dotted texture
-                LinearGradient(
-                    colors: [Color(hex: "#4338ca"), Color(hex: "#7c3aed"), Color(hex: "#c026d3")],
-                    startPoint: .topLeading, endPoint: .bottomTrailing
-                )
-                .frame(height: 110)
-                .overlay(DotPattern().opacity(0.18))
+                // Cover banner — custom photo or gradient fallback
+                coverBanner
+                    .frame(height: 110)
+                    .clipped()
 
-                Button {} label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 12, weight: .semibold))
-                        Text("แก้ไขโปรไฟล์")
-                            .font(.system(size: 13, weight: .semibold))
+                // Buttons row: change background + edit profile
+                HStack(spacing: 8) {
+                    PhotosPicker(selection: $bgItem, matching: .images) {
+                        Image(systemName: "photo.badge.plus")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white)
+                            .padding(9)
+                            .background(Color.black.opacity(0.30))
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(Color.white.opacity(0.18), lineWidth: 1))
                     }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 14).padding(.vertical, 9)
-                    .background(Color.black.opacity(0.28))
-                    .clipShape(Capsule())
-                    .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
+                    .onChange(of: bgItem) { _, newItem in
+                        Task {
+                            if let data = try? await newItem?.loadTransferable(type: Data.self) {
+                                customBgData = data
+                                UserDefaults.standard.set(data, forKey: "slippy_profile_bg")
+                            }
+                        }
+                    }
+
+                    Button {
+                        editedName = authVM.profile?.fullName ?? authVM.profile?.displayName ?? ""
+                        hasDOB = false
+                        if let dobString = authVM.profile?.dateOfBirth {
+                            let f = DateFormatter()
+                            f.dateFormat = "yyyy-MM-dd"
+                            f.timeZone = TimeZone(identifier: "UTC")
+                            if let parsed = f.date(from: dobString) {
+                                editedDOB = parsed
+                                hasDOB = true
+                            }
+                        }
+                        showEditName = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 12, weight: .semibold))
+                            Text("แก้ไขโปรไฟล์")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14).padding(.vertical, 9)
+                        .background(Color.black.opacity(0.28))
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
+                    }
                 }
-                .padding(16)
+                .padding(12)
             }
 
-            // Avatar overlapping the banner
+            // Avatar overlapping the banner — tappable to change photo
             ZStack(alignment: .bottomTrailing) {
-                InitialsAvatar(text: authVM.profile?.initials ?? "?",
-                               size: 84, color: roleColors[role] ?? .brand500)
-                    .overlay(Circle().stroke(Color.surface, lineWidth: 4))
-                Circle().fill(Color(hex: "#10b981"))
-                    .frame(width: 18, height: 18)
-                    .overlay(Circle().stroke(Color.surface, lineWidth: 3))
+                PhotosPicker(selection: $avatarItem, matching: .images) {
+                    avatarView
+                        .overlay(Circle().stroke(Color.surface, lineWidth: 4))
+                }
+                .onChange(of: avatarItem) { _, newItem in
+                    Task {
+                        guard let data = try? await newItem?.loadTransferable(type: Data.self),
+                              let compressed = compressImage(data) else { return }
+                        uploadingAvatar = true
+                        _ = await authVM.uploadAvatar(compressed)
+                        uploadingAvatar = false
+                    }
+                }
+
+                // Green online dot + camera hint
+                ZStack {
+                    Circle().fill(Color(hex: "#10b981"))
+                    if uploadingAvatar {
+                        ProgressView().tint(.white).scaleEffect(0.55)
+                    } else {
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 7, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                }
+                .frame(width: 22, height: 22)
+                .overlay(Circle().stroke(Color.surface, lineWidth: 3))
             }
             .padding(.top, -42)
             .padding(.leading, 20)
@@ -218,8 +352,72 @@ struct ProfileView: View {
         .padding(.top, 12)
     }
 
+    // MARK: – Cover banner (custom photo or gradient)
+    @ViewBuilder
+    private var coverBanner: some View {
+        if let data = customBgData, let uiImg = UIImage(data: data) {
+            Image(uiImage: uiImg)
+                .resizable()
+                .scaledToFill()
+                .overlay(Color.black.opacity(0.25))
+        } else {
+            LinearGradient(
+                colors: [Color(hex: "#4338ca"), Color(hex: "#7c3aed"), Color(hex: "#c026d3")],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            )
+            .overlay(DotPattern().opacity(0.18))
+        }
+    }
+
+    // MARK: – Avatar (URL image or initials fallback)
+    @ViewBuilder
+    private var avatarView: some View {
+        if let urlStr = authVM.profile?.avatarUrl, let url = URL(string: urlStr) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let img):
+                    img.resizable().scaledToFill()
+                        .frame(width: 84, height: 84)
+                        .clipShape(Circle())
+                default:
+                    InitialsAvatar(text: authVM.profile?.initials ?? "?",
+                                   size: 84, color: roleColors[role] ?? .brand500)
+                }
+            }
+        } else {
+            InitialsAvatar(text: authVM.profile?.initials ?? "?",
+                           size: 84, color: roleColors[role] ?? .brand500)
+        }
+    }
+
+    // MARK: – Compress selected image to JPEG ~500KB
+    private func compressImage(_ data: Data) -> Data? {
+        guard let uiImg = UIImage(data: data) else { return nil }
+        // Resize to max 800px
+        let maxDim: CGFloat = 800
+        let scale = min(maxDim / uiImg.size.width, maxDim / uiImg.size.height, 1)
+        let newSize = CGSize(width: uiImg.size.width * scale, height: uiImg.size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        let resized  = renderer.image { _ in uiImg.draw(in: CGRect(origin: .zero, size: newSize)) }
+        return resized.jpegData(compressionQuality: 0.75)
+    }
+
     private var joinedDateString: String {
         guard let date = authVM.session?.user.createdAt else { return "—" }
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "th_TH")
+        fmt.dateFormat = "MMMM yyyy"
+        return fmt.string(from: date)
+    }
+
+    private func formatJoinedDate(_ iso: String) -> String {
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let date = parser.date(from: iso) ?? {
+            parser.formatOptions = [.withInternetDateTime]
+            return parser.date(from: iso)
+        }()
+        guard let date else { return "—" }
         let fmt = DateFormatter()
         fmt.locale = Locale(identifier: "th_TH")
         fmt.dateFormat = "MMMM yyyy"
@@ -252,11 +450,25 @@ struct ProfileView: View {
     // MARK: – Tab: ข้อมูลส่วนตัว
     private var infoTabContent: some View {
         VStack(alignment: .leading, spacing: 22) {
+
+            // ── Stats from DB ────────────────────────────────────────────────
+            statsGrid
+
             groupHeader("บัญชี")
             VStack(spacing: 10) {
                 Button {
                     hapticLight()
                     editedName = authVM.profile?.fullName ?? authVM.profile?.displayName ?? ""
+                    hasDOB = false
+                    if let dobString = authVM.profile?.dateOfBirth {
+                        let f = DateFormatter()
+                        f.dateFormat = "yyyy-MM-dd"
+                        f.timeZone = TimeZone(identifier: "UTC")
+                        if let parsed = f.date(from: dobString) {
+                            editedDOB = parsed
+                            hasDOB = true
+                        }
+                    }
                     showEditName = true
                 } label: {
                     HStack {
@@ -317,12 +529,21 @@ struct ProfileView: View {
 
             groupHeader("บัญชีที่เชื่อมต่อ")
             VStack(spacing: 10) {
-                connectedAccountRow(
-                    icon: "bubble.left.fill", iconBg: Color(hex: "#06C755"),
-                    title: "LINE",
-                    subtitle: "\(authVM.profile?.displayName ?? "—") · เชื่อมเมื่อ \(joinedDateString)",
-                    actionTitle: "ยกเลิก", actionColor: Color(hex: "#ef4444"), enabled: true
-                ) {}
+                if let line = profileVM.lineConnection {
+                    connectedAccountRow(
+                        icon: "bubble.left.fill", iconBg: Color(hex: "#06C755"),
+                        title: "LINE",
+                        subtitle: "\(line.displayName ?? "—") · เชื่อมเมื่อ \(formatJoinedDate(line.createdAt))",
+                        actionTitle: "ยกเลิก", actionColor: Color(hex: "#ef4444"), enabled: true
+                    ) {}
+                } else {
+                    connectedAccountRow(
+                        icon: "bubble.left.fill", iconBg: Color(hex: "#9ca3af"),
+                        title: "LINE",
+                        subtitle: "ยังไม่ได้เชื่อมต่อ",
+                        actionTitle: "เชื่อมต่อ", actionColor: Color(hex: "#06C755"), enabled: true
+                    ) {}
+                }
                 connectedAccountRow(
                     icon: "iphone", iconBg: Color(hex: "#1f2937"),
                     title: "Mobile App",
@@ -332,12 +553,47 @@ struct ProfileView: View {
             }
 
             groupHeader("กิจกรรมล่าสุด")
-            VStack(spacing: 8) {
-                Text("ยังไม่มีกิจกรรม")
-                    .font(.system(size: 14))
-                    .foregroundColor(Color.textSecondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 28)
+            VStack(spacing: 0) {
+                if profileVM.isLoading {
+                    HStack { Spacer(); ProgressView().tint(Color.brand500); Spacer() }
+                        .padding(.vertical, 24)
+                } else if profileVM.activityLogs.isEmpty {
+                    Text("ยังไม่มีกิจกรรม")
+                        .font(.system(size: 14))
+                        .foregroundColor(Color.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 28)
+                } else {
+                    ForEach(Array(profileVM.activityLogs.enumerated()), id: \.element.id) { idx, log in
+                        if idx > 0 { Divider().padding(.leading, 52) }
+                        HStack(spacing: 12) {
+                            Image(systemName: log.icon)
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(Color.brand500)
+                                .frame(width: 36, height: 36)
+                                .background(Color.brand500.opacity(0.12))
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(log.label)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(Color.textPrimary)
+                                    .lineLimit(1)
+                                if let detail = log.detail {
+                                    Text(detail)
+                                        .font(.system(size: 11))
+                                        .foregroundColor(Color.textSecondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                            Spacer()
+                            Text(relTime(log.createdAt))
+                                .font(.system(size: 11))
+                                .foregroundColor(Color.textSecondary)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                    }
+                }
             }
             .background(Color.surface)
             .clipShape(RoundedRectangle(cornerRadius: 16))
@@ -385,6 +641,12 @@ struct ProfileView: View {
                         UserDefaults.standard.set(v, forKey: "slippy_biometric")
                         if v { Task { await checkBiometric() } }
                     }
+                rowDivider
+                NavigationLink {
+                    TwoFactorSettingsView()
+                } label: {
+                    actionRowLabel("2-Factor Authentication", icon: "shield.checkered")
+                }
             }
             .background(Color.surface)
             .clipShape(RoundedRectangle(cornerRadius: 16))
@@ -396,6 +658,12 @@ struct ProfileView: View {
                     VendorsView().environmentObject(authVM)
                 } label: {
                     actionRowLabel("ผู้ขาย / Vendors", icon: "building.2.fill")
+                }
+                rowDivider
+                NavigationLink {
+                    DocumentCategoriesView().environmentObject(authVM)
+                } label: {
+                    actionRowLabel("จัดการหมวดหมู่บิล", icon: "folder.fill")
                 }
                 rowDivider
                 NavigationLink {
@@ -411,9 +679,21 @@ struct ProfileView: View {
             groupHeader("การดำเนินการ")
             VStack(spacing: 0) {
                 actionRow("เปลี่ยนรหัสผ่าน", icon: "key.fill") {
+                    // `try?` used to swallow the result entirely: the tap looked
+                    // identical whether the email went out, the address was
+                    // missing, or the request failed. A person waiting for a
+                    // reset link has no way to tell which happened.
                     Task {
-                        let email = authVM.session?.user.email ?? ""
-                        try? await SupabaseManager.shared.client.auth.resetPasswordForEmail(email)
+                        guard let email = authVM.session?.user.email, !email.isEmpty else {
+                            resetPasswordMessage = "ไม่พบอีเมลของบัญชีนี้ — ติดต่อฝ่ายสนับสนุน"
+                            return
+                        }
+                        do {
+                            try await SupabaseManager.shared.client.auth.resetPasswordForEmail(email)
+                            resetPasswordMessage = "ส่งลิงก์เปลี่ยนรหัสผ่านไปที่ \(email) แล้ว"
+                        } catch {
+                            resetPasswordMessage = "ส่งไม่สำเร็จ: \(error.localizedDescription)"
+                        }
                     }
                 }
                 rowDivider

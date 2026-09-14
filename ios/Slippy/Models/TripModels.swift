@@ -185,6 +185,8 @@ struct TripItineraryItem: Codable, Identifiable {
     var placePhone: String? { detailString("phone") }
     var placeWebsite: String? { detailString("website") }
     var placeAddress: String? { detailString("address") }
+    var placeGooglePlaceId: String? { detailString("google_place_id") }
+    var placePhotoURL: String? { detailString("photo_url") }
 
     /// Trip-currency figure — the only one safe to show with a ฿ or to total.
     var baseAmount: Double { amountBaseCurrency ?? amount ?? 0 }
@@ -208,7 +210,12 @@ struct TripItineraryItem: Codable, Identifiable {
 struct TripParticipant: Codable, Identifiable {
     let id: String
     let journeyId: String
+    let userId: String?
     let displayName: String
+    let avatarUrl: String?
+    let tripRole: String?
+    let emergencyContact: String?
+    let profileSharedWithTrip: Bool
     let isHost: Bool
     let amountOwed: Double
     let amountPaid: Double
@@ -220,7 +227,12 @@ struct TripParticipant: Codable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id
         case journeyId = "journey_id"
+        case userId = "user_id"
         case displayName = "display_name"
+        case avatarUrl = "avatar_url"
+        case tripRole = "trip_role"
+        case emergencyContact = "emergency_contact"
+        case profileSharedWithTrip = "profile_shared_with_trip"
         case isHost = "is_host"
         case amountOwed = "amount_owed"
         case amountPaid = "amount_paid"
@@ -228,6 +240,28 @@ struct TripParticipant: Codable, Identifiable {
         case promptpayValue = "promptpay_value"
         case qrImageUrl = "qr_image_url"
         case createdAt = "created_at"
+    }
+
+    /// The profile fields were introduced after trips had already been created.
+    /// Decode older participant rows safely until the database migration is live,
+    /// so a missing optional profile column can never prevent a Journey opening.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        journeyId = try container.decode(String.self, forKey: .journeyId)
+        userId = try container.decodeIfPresent(String.self, forKey: .userId)
+        displayName = try container.decode(String.self, forKey: .displayName)
+        avatarUrl = try container.decodeIfPresent(String.self, forKey: .avatarUrl)
+        tripRole = try container.decodeIfPresent(String.self, forKey: .tripRole)
+        emergencyContact = try container.decodeIfPresent(String.self, forKey: .emergencyContact)
+        profileSharedWithTrip = try container.decodeIfPresent(Bool.self, forKey: .profileSharedWithTrip) ?? false
+        isHost = try container.decode(Bool.self, forKey: .isHost)
+        amountOwed = try container.decode(Double.self, forKey: .amountOwed)
+        amountPaid = try container.decode(Double.self, forKey: .amountPaid)
+        paidAt = try container.decodeIfPresent(String.self, forKey: .paidAt)
+        promptpayValue = try container.decodeIfPresent(String.self, forKey: .promptpayValue)
+        qrImageUrl = try container.decodeIfPresent(String.self, forKey: .qrImageUrl)
+        createdAt = try container.decode(String.self, forKey: .createdAt)
     }
 
     var isPaid: Bool { paidAt != nil || amountPaid >= amountOwed }

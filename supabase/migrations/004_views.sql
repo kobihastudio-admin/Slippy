@@ -26,7 +26,6 @@ FROM documents
 WHERE status IN ('approved','pushed')
   AND doc_date IS NOT NULL
 GROUP BY organization_id, DATE_TRUNC('month', doc_date);
-
 -- ── VAT Report function ────────────────────────────────────────
 CREATE OR REPLACE FUNCTION get_vat_report(
   p_org_id  uuid,
@@ -57,7 +56,6 @@ RETURNS TABLE (
     AND d.vat_amount > 0
     AND doc_type = 'invoice'
 $$;
-
 -- ── WHT Report function ────────────────────────────────────────
 CREATE OR REPLACE FUNCTION get_wht_report(
   p_org_id   uuid,
@@ -88,7 +86,6 @@ RETURNS TABLE (
   GROUP BY vendor_name, vendor_tax_id, wht_rate
   ORDER BY wht_amount DESC
 $$;
-
 -- ── Top vendors ────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION get_top_vendors(
   p_org_id    uuid,

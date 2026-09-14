@@ -24,8 +24,12 @@ function QRCanvas({ code }: { code: string }) {
   useEffect(() => {
     if (!canvasRef.current || !code) return
     // ใช้ https scheme แทน line:// เพื่อให้ auto-add friend ก่อนถ้ายังไม่ได้เพิ่ม
-    const botId = BOT_ID.replace(/^@/, "")
-    const text = `https://line.me/R/oaMessage/${botId}?text=%2Fconnect%20${code}`
+    // หมายเหตุ: oaMessage deep link ต้องมี "@" (encode เป็น %40) และมี "/" ปิดท้าย ID
+    // ไม่งั้น LINE จะหาบัญชีไม่เจอ (user not found) — และทุกอย่างหลัง "?"
+    // คือข้อความที่จะใส่ในกล่องแชทเลย ห้ามมี "text=" นำหน้า ไม่งั้น LINE
+    // จะเอาคำว่า "text=" ไปแสดงในกล่องข้อความด้วย
+    const botId = BOT_ID.startsWith("@") ? BOT_ID.slice(1) : BOT_ID
+    const text = `https://line.me/R/oaMessage/%40${botId}/?%2Fconnect%20${code}`
     QRCode.toCanvas(canvasRef.current, text, {
       width:  148,
       margin: 2,
@@ -176,8 +180,12 @@ export function LineSection({ orgId, isAdmin }: Props) {
     const connected = searchParams.get("connected")
     const name      = searchParams.get("name")
     const error     = searchParams.get("error")
+    const merged    = searchParams.get("merged")
     if (connected === "true") {
       toast.success(`เชื่อมต่อ LINE สำเร็จ! ${name ? `ยินดีต้อนรับ ${decodeURIComponent(name)}` : ""}`)
+      if (merged === "true") {
+        toast.info("พบบัญชี LINE เดิมที่เคยใช้แยกต่างหาก ระบบได้รวมข้อมูลเข้ากับบัญชีนี้ให้แล้ว")
+      }
       fetchConnections()
     } else if (error) {
       const msg: Record<string, string> = {
@@ -319,6 +327,41 @@ export function LineSection({ orgId, isAdmin }: Props) {
                 ใช้ QR Code / รหัส
               </button>
             </div>
+
+            {/* QR Code / manual code result */}
+            {showQR && code && (
+              <div className="flex gap-4 items-start pt-1">
+                <div className="shrink-0">
+                  <div className="rounded-[10px] border-2 border-[#06C755]/30 overflow-hidden bg-white p-1.5 inline-flex">
+                    <QRCanvas code={code} />
+                  </div>
+                  <p className="text-[9.5px] text-muted-foreground text-center mt-1">สแกนด้วยมือถือ</p>
+                </div>
+
+                <div className="flex-1 space-y-2 pt-1">
+                  <p className="text-[11.5px] text-muted-foreground">หรือพิมพ์คำสั่งใน LINE:</p>
+                  <div className="flex items-center gap-2 bg-muted/50 rounded-[8px] border px-2.5 py-2">
+                    <code className="flex-1 text-[12.5px] font-mono font-bold text-foreground">
+                      /connect {code}
+                    </code>
+                    <button onClick={copyCode}
+                      className="p-1 rounded-md hover:bg-muted transition-colors shrink-0">
+                      {copied
+                        ? <Check className="w-3.5 h-3.5 text-emerald-500" />
+                        : <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                      }
+                    </button>
+                  </div>
+                  <p className="text-[10.5px] text-muted-foreground">
+                    รหัสนี้ใช้ได้ 24 ชั่วโมง
+                  </p>
+                  <button onClick={generateCode} disabled={genLoading}
+                    className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors">
+                    <RefreshCw className="w-3 h-3" /> สร้างรหัสใหม่
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
         ) : (

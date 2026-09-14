@@ -17,6 +17,7 @@ import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { Upload, Loader2, CheckCircle2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { ImageCropStep } from "./image-crop-step"
 
 interface DocumentUploadProps { orgId: string }
 
@@ -28,6 +29,9 @@ export function DocumentUpload({ orgId }: DocumentUploadProps) {
   const [status, setStatus] = useState<"idle"|"uploading"|"processing"|"done">("idle")
   const [progress, setProgress] = useState(0)
   const [fileName, setFileName] = useState("")
+  // PDFs skip the crop step entirely — only photos benefit from trimming
+  // background clutter before they hit the AI pipeline.
+  const [pendingCropFile, setPendingCropFile] = useState<File | null>(null)
 
   const processFile = async (file: File) => {
     setStatus("uploading")
@@ -98,7 +102,10 @@ export function DocumentUpload({ orgId }: DocumentUploadProps) {
   }
 
   const onDrop = useCallback((files: File[]) => {
-    if (files[0]) processFile(files[0])
+    const file = files[0]
+    if (!file) return
+    if (file.type === "application/pdf") { processFile(file); return }
+    setPendingCropFile(file)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId])
 
@@ -108,6 +115,17 @@ export function DocumentUpload({ orgId }: DocumentUploadProps) {
     maxFiles: 1,
     disabled: status !== "idle",
   })
+
+  if (pendingCropFile) {
+    return (
+      <ImageCropStep
+        file={pendingCropFile}
+        onConfirm={(cropped) => { setPendingCropFile(null); processFile(cropped) }}
+        onSkip={() => { const f = pendingCropFile; setPendingCropFile(null); processFile(f) }}
+        onCancel={() => setPendingCropFile(null)}
+      />
+    )
+  }
 
   if (status !== "idle") {
     return (

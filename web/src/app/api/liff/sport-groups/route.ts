@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { sportEmoji, resolveConnection, generateSessions, SportGroupRow } from "./_lib"
+import { sportEmoji, resolveConnection } from "./_lib"
+import { getVerifiedLineUserId, liffUnauthorized } from "@/lib/liff-auth"
 
 // GET /api/liff/sport-groups?lineUserId=Uxxx — list recurring sport groups
 // (created by this user) plus legacy standalone sessions (sport_group_id IS NULL)
@@ -95,10 +96,7 @@ export async function GET(req: NextRequest) {
 // POST /api/liff/sport-groups — create a new recurring sport group + auto-generate
 // its first batch of upcoming sessions
 export async function POST(req: NextRequest) {
-  const {
-    lineUserId, displayName, sportType, venue,
-    recurringDays, startTime, endTime, courtNo, mapUrl, maxPlayers, lineGroupId,
-  } = await req.json() as {
+  const body = await req.json() as {
     lineUserId:  string
     displayName: string
     sportType:   string
@@ -110,9 +108,16 @@ export async function POST(req: NextRequest) {
     mapUrl?:      string
     maxPlayers?:  number
     lineGroupId?: string  // LINE group/room chat this was created from — receives invite cards
+    promptpayId?: string  // host's PromptPay mobile/national ID — for dynamic QR
   }
+  const lineUserId = getVerifiedLineUserId(req, body.lineUserId)
+  if (!lineUserId) return liffUnauthorized("LINE identity mismatch")
+  const {
+    displayName, sportType, venue,
+    recurringDays, startTime, endTime, courtNo, mapUrl, maxPlayers, lineGroupId, promptpayId,
+  } = body
 
-  if (!lineUserId || !sportType) {
+  if (!sportType) {
     return NextResponse.json({ error: "lineUserId, sportType required" }, { status: 400 })
   }
 
@@ -136,19 +141,17 @@ export async function POST(req: NextRequest) {
       default_map_url:    mapUrl || null,
       max_players:        maxPlayers || null,
       line_group_id:      lineGroupId || null,
+      promptpay_id:       promptpayId || null,
     })
     .select("*")
     .single()
 
   if (error || !group) return NextResponse.json({ error: error?.message ?? "สร้างกลุ่มไม่สำเร็จ" }, { status: 500 })
 
-  const created = await generateSessions(admin, group as SportGroupRow)
-
   return NextResponse.json({
     ok: true,
     groupId:    group.id,
     shareToken: group.share_token,
-    sessionIds: created.map(c => c.id),
   })
 }
 

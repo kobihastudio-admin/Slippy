@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify"
 import { supabase } from "../lib/supabase"
-import { queueExtraction } from "../queue/setup"
+import { ingestDocument } from "../services/ingest"
 
 const ALLOWED_TYPES = new Set([
   "image/jpeg", "image/jpg", "image/png",
@@ -124,11 +124,17 @@ export async function emailRoutes(app: FastifyInstance) {
           continue
         }
 
-        await queueExtraction({
-          documentId: doc.id,
-          filePath,
-          fileType:   contentType.split(";")[0].trim(),
-          orgId,
+        // Shared ingestion contract — same durable-queue-with-inline-fallback
+        // path as LINE/web/iOS, so an emailed receipt can't be dropped when the
+        // queue is unavailable.
+        //
+        // Deliberately NOT awaited: if the queue is down the fallback runs the
+        // pipeline right here, which takes far longer than Postmark's webhook
+        // timeout — the retry that followed would re-upload every attachment as
+        // a duplicate document. The row is already persisted, so returning now
+        // loses nothing.
+        void ingestDocument(doc.id, orgId).then(r => {
+          if (!r.ok) console.error(`[email] ingest failed for ${doc.id} (${r.mode}):`, r.error)
         })
 
         processedCount++

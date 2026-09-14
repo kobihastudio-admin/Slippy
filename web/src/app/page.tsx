@@ -10,6 +10,7 @@
 import { createClient }  from "@/lib/supabase/server"
 import { redirect }       from "next/navigation"
 import { LandingPage }    from "@/components/landing/landing-page"
+import { safeRedirectPath } from "@/lib/safe-redirect"
 
 export default async function RootPage({
   searchParams,
@@ -24,8 +25,9 @@ export default async function RootPage({
   // without this redirect, unauthenticated users land on the marketing
   // landing page instead of the LIFF login gate at /liff/home.
   const { "liff.state": liffState } = await searchParams
-  if (liffState && liffState.startsWith("/")) {
-    redirect(liffState)
+  if (liffState) {
+    const safeLiffState = safeRedirectPath(liffState, "")
+    if (safeLiffState) redirect(safeLiffState)
   }
 
   const supabase          = await createClient()

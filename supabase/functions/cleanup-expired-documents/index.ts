@@ -10,6 +10,7 @@
  */
 
 import { createClient } from "jsr:@supabase/supabase-js@2"
+import { logEdgeFunctionError } from "../_shared/error-log.ts"
 
 Deno.serve(async (req: Request) => {
   const authHeader = req.headers.get("Authorization") ?? ""
@@ -33,6 +34,11 @@ Deno.serve(async (req: Request) => {
 
   if (archiveErr) {
     console.error("cleanup_expired_documents failed:", archiveErr.message)
+    await logEdgeFunctionError(supabase, {
+      functionName: "cleanup-expired-documents",
+      error: archiveErr,
+      context: { step: "cleanup_expired_documents" },
+    })
     return new Response(JSON.stringify({ error: archiveErr.message }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
@@ -52,6 +58,11 @@ Deno.serve(async (req: Request) => {
 
   if (deleteErr) {
     console.error("hard_delete_archived_documents failed:", deleteErr.message)
+    await logEdgeFunctionError(supabase, {
+      functionName: "cleanup-expired-documents",
+      error: deleteErr,
+      context: { step: "hard_delete_archived_documents" },
+    })
     // Don't fail — archiving succeeded, deletion can retry next run
   }
 

@@ -9,7 +9,8 @@
 -- ══════════════════════════════════════════════════════════════
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-CREATE EXTENSION IF NOT EXISTS "pg_trgm";  -- for fuzzy text search
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+-- for fuzzy text search
 
 -- ── Organizations ──────────────────────────────────────────────
 CREATE TABLE organizations (
@@ -30,7 +31,6 @@ CREATE TABLE organizations (
   created_at       timestamptz DEFAULT now(),
   updated_at       timestamptz DEFAULT now()
 );
-
 -- ── Users (mirrors auth.users) ─────────────────────────────────
 CREATE TABLE users (
   id         uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -39,7 +39,6 @@ CREATE TABLE users (
   avatar_url text,
   created_at timestamptz DEFAULT now()
 );
-
 -- Trigger: auto-insert user record on auth signup
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
@@ -54,11 +53,9 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION handle_new_user();
-
 -- ── Organization Members ───────────────────────────────────────
 CREATE TABLE organization_members (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -69,7 +66,6 @@ CREATE TABLE organization_members (
   joined_at       timestamptz DEFAULT now(),
   UNIQUE(organization_id, user_id)
 );
-
 -- ── Invitations ────────────────────────────────────────────────
 CREATE TABLE invitations (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -83,7 +79,6 @@ CREATE TABLE invitations (
   accepted_at     timestamptz,
   created_at      timestamptz DEFAULT now()
 );
-
 -- ── Integrations ───────────────────────────────────────────────
 CREATE TABLE integrations (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -98,7 +93,6 @@ CREATE TABLE integrations (
   updated_at      timestamptz DEFAULT now(),
   UNIQUE(organization_id, provider)
 );
-
 CREATE TABLE integration_accounts (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   integration_id uuid NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
@@ -108,7 +102,6 @@ CREATE TABLE integration_accounts (
   synced_at      timestamptz DEFAULT now(),
   UNIQUE(integration_id, external_code)
 );
-
 CREATE TABLE integration_contacts (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   integration_id uuid NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
@@ -119,7 +112,6 @@ CREATE TABLE integration_contacts (
   synced_at      timestamptz DEFAULT now(),
   UNIQUE(integration_id, external_id)
 );
-
 CREATE TABLE account_mappings (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   integration_id uuid NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
@@ -130,7 +122,6 @@ CREATE TABLE account_mappings (
   updated_at     timestamptz DEFAULT now(),
   UNIQUE(integration_id, vendor_name, account_code)
 );
-
 -- ── Documents ──────────────────────────────────────────────────
 CREATE TABLE documents (
   id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -167,7 +158,6 @@ CREATE TABLE documents (
   created_at          timestamptz DEFAULT now(),
   updated_at          timestamptz DEFAULT now()
 );
-
 CREATE TABLE document_line_items (
   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   document_id  uuid NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
@@ -178,7 +168,6 @@ CREATE TABLE document_line_items (
   account_code text,
   sort_order   int DEFAULT 0
 );
-
 CREATE TABLE document_audit_logs (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   document_id uuid NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
@@ -189,7 +178,6 @@ CREATE TABLE document_audit_logs (
   note        text,
   created_at  timestamptz DEFAULT now()
 );
-
 CREATE TABLE document_push_logs (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   document_id     uuid NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
@@ -203,7 +191,6 @@ CREATE TABLE document_push_logs (
   attempt         int DEFAULT 1,
   pushed_at       timestamptz DEFAULT now()
 );
-
 -- ── Line Bot Connections ───────────────────────────────────────
 CREATE TABLE line_connections (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -213,7 +200,6 @@ CREATE TABLE line_connections (
   display_name    text,
   created_at      timestamptz DEFAULT now()
 );
-
 CREATE TABLE line_connection_tokens (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   token           text NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(16),'hex'),
@@ -223,7 +209,6 @@ CREATE TABLE line_connection_tokens (
   used_at         timestamptz,
   created_at      timestamptz DEFAULT now()
 );
-
 -- ── Indexes ────────────────────────────────────────────────────
 CREATE INDEX idx_docs_org_status    ON documents(organization_id, status, created_at DESC);
 CREATE INDEX idx_docs_org_date      ON documents(organization_id, doc_date DESC);
@@ -236,13 +221,11 @@ CREATE INDEX idx_members_user       ON organization_members(user_id);
 CREATE INDEX idx_invite_token       ON invitations(token) WHERE accepted_at IS NULL;
 CREATE INDEX idx_docs_vendor_search ON documents USING gin(vendor_name gin_trgm_ops)
   WHERE vendor_name IS NOT NULL;
-
 -- ── Auto-update updated_at ─────────────────────────────────────
 CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN NEW.updated_at = now(); RETURN NEW; END;
 $$;
-
 CREATE TRIGGER organizations_updated_at
   BEFORE UPDATE ON organizations FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER documents_updated_at

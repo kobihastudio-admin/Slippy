@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useAppLoading } from "@/lib/loading"
 import { toast } from "sonner"
 import { formatThb, formatDate } from "@/lib/utils"
+import { readAmountShape, recalcTotals } from "@/lib/vat"
 import {
   ChevronLeft, ZoomIn, ZoomOut, RotateCw, Download,
   AlertTriangle, Sparkles, Plus, X, Save, Check, Send,
@@ -589,6 +590,26 @@ export function ReviewClient({ doc, fileUrl, integrations, userRole, duplicateOr
     }))
   })
 
+  /**
+   * How this receipt states its money — read once, from the document as it
+   * loaded, and never re-derived. See lib/vat.ts: deriving it again after an
+   * edit reads the convention off figures this screen just wrote, which is what
+   * turned a correctly-read ฿856 Jones Salad bill into ฿915.92.
+   */
+  const amountShape = useRef(
+    readAmountShape(
+      {
+        subtotal:        Number(doc.subtotal        ?? rawAI?.subtotal        ?? 0),
+        vat_amount:      Number(doc.vat_amount      ?? rawAI?.vat_amount      ?? 0),
+        total_amount:    Number(doc.total_amount    ?? rawAI?.total_amount    ?? 0),
+        discount_amount: Number(doc.discount_amount ?? rawAI?.discount_amount ?? 0),
+        delivery_fee:    Number(doc.delivery_fee    ?? rawAI?.delivery_fee    ?? 0),
+        wht_amount:      Number(doc.wht_amount      ?? rawAI?.wht_amount      ?? 0),
+      },
+      items.reduce((s, it) => s + (it.amount ?? 0), 0),
+    ),
+  ).current
+
   const [saving,  setSaving]  = useState(false)
   const [isDirty, setIsDirty] = useState(false)
   const [debug,   setDebug]   = useState(false)
@@ -883,27 +904,18 @@ export function ReviewClient({ doc, fileUrl, integrations, userRole, duplicateOr
     setItems(next)
     setIsDirty(true)
 
-    // Sync totals back to form (subtotal = sum of amounts, keep VAT rate, recalc total)
-    const newSubtotal = +next.reduce((s, it) => s + (it.amount ?? 0), 0).toFixed(2)
-    setFormRaw((f: any) => {
-      const vatRate    = f.subtotal > 0 ? f.vat_amount / f.subtotal : 0.07
-      const newVat     = +(newSubtotal * vatRate).toFixed(2)
-      const newTotal   = +(newSubtotal + newVat - (f.discount_amount ?? 0) + (f.delivery_fee ?? 0) - (f.wht_amount ?? 0)).toFixed(2)
-      return { ...f, subtotal: newSubtotal, vat_amount: newVat, total_amount: newTotal }
-    })
+    // Sync totals back to form (subtotal = sum of amounts, recalc VAT + total).
+    // recalcTotals keeps the receipt's own VAT convention — see lib/vat.ts.
+    const newItemSum = +next.reduce((s, it) => s + (it.amount ?? 0), 0).toFixed(2)
+    setFormRaw((f: any) => ({ ...f, ...recalcTotals(f, newItemSum, amountShape) }))
   }
 
   // ── Remove item — recalculate totals ─────────────────────────────────────────
   const removeItem = (i: number) => {
     setItems((prev: LineItem[]) => {
       const next = prev.filter((_, j) => j !== i)
-      const newSubtotal = +next.reduce((s, it) => s + (it.amount ?? 0), 0).toFixed(2)
-      setFormRaw((f: any) => {
-        const vatRate  = f.subtotal > 0 ? f.vat_amount / f.subtotal : 0.07
-        const newVat   = +(newSubtotal * vatRate).toFixed(2)
-        const newTotal = +(newSubtotal + newVat - (f.discount_amount ?? 0) + (f.delivery_fee ?? 0) - (f.wht_amount ?? 0)).toFixed(2)
-        return { ...f, subtotal: newSubtotal, vat_amount: newVat, total_amount: newTotal }
-      })
+      const newItemSum = +next.reduce((s, it) => s + (it.amount ?? 0), 0).toFixed(2)
+      setFormRaw((f: any) => ({ ...f, ...recalcTotals(f, newItemSum, amountShape) }))
       setIsDirty(true)
       return next
     })
@@ -2187,6 +2199,30 @@ function DocDataPanel({
           </div>
         </div>
       )}
+
+      {/* Machine verification is separate from human approval/status. */}
+      {doc.machine_verification_status && (() => {
+        const status = doc.machine_verification_status as "verified" | "needs_review" | "unverified"
+        const reconciliation = doc.reconciliation_details ?? {}
+        const label = status === "verified" ? "ระบบตรวจยอดแล้ว"
+          : status === "needs_review" ? "ควรตรวจสอบก่อนอนุมัติ" : "ยังยืนยันข้อมูลไม่ได้"
+        const detail = reconciliation.status === "balanced" ? "ยอดรวมและรายการที่ตรวจได้สมดุลกัน"
+          : reconciliation.status === "mismatch" ? "พบยอดรวม หรือผลรวมรายการไม่ตรงกัน"
+          : "ข้อมูลยังไม่เพียงพอสำหรับตรวจสมดุลยอด"
+        return (
+          <div className={`rounded-[10px] border px-3.5 py-3 ${
+            status === "verified" ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300"
+            : status === "needs_review" ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300"
+            : "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
+          }`}>
+            <div className="flex items-center gap-2 text-[12.5px] font-semibold">
+              {status === "verified" ? <BadgeCheck className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+              {label}
+            </div>
+            <p className="mt-1 pl-6 text-[11.5px] opacity-80">{detail}</p>
+          </div>
+        )
+      })()}
 
       {/* ── Classification banner ─────────────────────────────────────────── */}
       {docCategory && docCategory !== "other" && (

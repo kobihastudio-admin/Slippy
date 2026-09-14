@@ -28,7 +28,7 @@ export default async function SettingsPage() {
   const isAdmin = ["owner", "admin"].includes(role)
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="page space-y-6">
       <SettingsForm org={org} userRole={role} />
       <LineSection orgId={orgId} isAdmin={isAdmin} />
     </div>

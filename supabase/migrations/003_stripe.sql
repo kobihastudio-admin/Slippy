@@ -15,7 +15,6 @@ CREATE TABLE stripe_events (
   data         jsonb NOT NULL,
   processed_at timestamptz DEFAULT now()
 );
-
 -- ── Billing Invoices History ───────────────────────────────────
 CREATE TABLE billing_invoices (
   id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -31,16 +30,13 @@ CREATE TABLE billing_invoices (
   period_end          timestamptz,
   created_at          timestamptz DEFAULT now()
 );
-
 ALTER TABLE billing_invoices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE stripe_events    ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "invoice_select" ON billing_invoices FOR SELECT
   USING (
     organization_id = ANY(get_my_org_ids())
     AND get_my_role(organization_id) IN ('owner','admin')
   );
-
 -- ── Plan definitions (reference table) ────────────────────────
 CREATE TABLE plans (
   id           text PRIMARY KEY,  -- free | starter | pro | enterprise
@@ -52,7 +48,6 @@ CREATE TABLE plans (
   api_access   boolean DEFAULT false,
   features     jsonb DEFAULT '[]'
 );
-
 INSERT INTO plans (id, name_en, name_th, price_thb, doc_quota, connectors, api_access, features) VALUES
 ('free',       'Free',       'ฟรี',       0,      50,  1, false,
  '["50 docs/month","1 accounting connector","Email support"]'),
@@ -62,7 +57,6 @@ INSERT INTO plans (id, name_en, name_th, price_thb, doc_quota, connectors, api_a
  '["Unlimited docs","5 connectors","API access","Line Bot","Tax export","Dedicated support"]'),
 ('enterprise', 'Enterprise', 'Enterprise',0,   99999, 99, true,
  '["Everything in Pro","On-premise option","Custom connectors","SLA","Account manager"]');
-
 -- ── Function: sync plan quota from Stripe subscription ────────
 CREATE OR REPLACE FUNCTION sync_subscription(
   p_org_id              uuid,
@@ -88,7 +82,6 @@ BEGIN
   WHERE id = p_org_id;
 END;
 $$;
-
 -- ── Function: increment doc_used + enforce quota ───────────────
 CREATE OR REPLACE FUNCTION increment_doc_used(p_org_id uuid)
 RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER AS $$
@@ -113,7 +106,6 @@ BEGIN
   RETURN true;
 END;
 $$;
-
 -- ── Reset doc_used on 1st of each month ────────────────────────
 CREATE OR REPLACE FUNCTION reset_monthly_quota()
 RETURNS void LANGUAGE sql SECURITY DEFINER AS $$

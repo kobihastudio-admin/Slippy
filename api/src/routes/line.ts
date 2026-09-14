@@ -1,9 +1,10 @@
 import type { FastifyInstance } from "fastify"
 import crypto from "node:crypto"
+import { getAppUrl } from "../lib/app-url"
 import { supabase } from "../lib/supabase"
-import { queueExtraction } from "../queue/setup"
+import { ingestDocument } from "../services/ingest"
 import { handleSplitCommand, handleClaimCommand, handleSplitStatus } from "../services/line-split"
-import { handleCreateSportGroup, handleSportStatus, handleSportPay, handleSportToggle, handleLinkGroupCommand, handleLinkGroupList, handleLinkGroupAsk, handleSetLineGroup, handleSportInviteCommand } from "../services/line-sport"
+import { handleCreateSportGroup, handleSportStatus, handleSportPay, handleSportToggle, handleLinkGroupCommand, handleLinkGroupList, handleLinkGroupAsk, handleSetLineGroup, handleSportInviteCommand, handleCreateSportClub, handleSetClubConcept, handleSetClubMap, handleCreateSportSession, handleSportRoster } from "../services/line-sport"
 import { handleCreateTripGroup, handleTripStatus, handleTripPay } from "../services/line-trip"
 import {
   docResultCard, summaryCard, statusListCard,
@@ -128,7 +129,7 @@ async function handleEvent(event: any) {
     const liffId  = process.env.LIFF_ID ?? process.env.NEXT_PUBLIC_LIFF_ID ?? ""
     const mapUrl  = liffId
       ? `https://liff.line.me/${liffId}/liff/places?lat=${lat}&lng=${lng}`
-      : `https://slippy.ai/places?lat=${lat}&lng=${lng}`
+      : `${getAppUrl()}/places?lat=${lat}&lng=${lng}`
 
     // Search nearby places (internal first)
     try {
@@ -214,9 +215,15 @@ async function handleEvent(event: any) {
         .eq("line_user_id", lineUserId)
         .maybeSingle()
       const displayName = (conn as any)?.display_name ?? "เพื่อน"
+      const sourceType = event.source?.type as "group" | "room" | "user" | undefined
+      const sourceId = event.source?.groupId ?? event.source?.roomId ?? null
 
-      const result = await handleSportToggle(billId, action, lineUserId, displayName)
-      if (result.text) await replyMsg(replyToken, [txt(result.text)])
+      const result = await handleSportToggle(billId, action, lineUserId, displayName,
+        sourceType ? { type: sourceType, id: sourceId } : undefined)
+      const msgs: object[] = []
+      if (result.text) msgs.push(txt(result.text))
+      if (result.card) msgs.push(result.card)
+      if (msgs.length) await replyMsg(replyToken, msgs)
       return
     }
 
@@ -267,6 +274,13 @@ async function handleEvent(event: any) {
 
   const displayName = (conn as any)?.display_name ?? "ผู้ใช้"
 
+  // ── Receipt/document processing only applies to 1:1 chats with Slippy —
+  // images/files sent into a group/room chat are ignored (e.g. sport invite
+  // photos shared with friends shouldn't trigger OCR for everyone in the group)
+  if ((event.message.type === "image" || event.message.type === "file") && event.source?.type !== "user") {
+    return
+  }
+
   // ── File message (HEIC/PDF/etc from iOS share) ───────────────
   if (event.message.type === "file") {
     const mimeType = (event.message as any).fileName?.toLowerCase() ?? ""
@@ -300,7 +314,7 @@ async function handleEvent(event: any) {
     if (!planRow?.feature_line_bot) {
       await replyMsg(replyToken, [txt(
         "⚠️ แผนปัจจุบันไม่รองรับการรับเอกสารผ่าน LINE Bot\n" +
-        "กรุณาอัปเกรดเป็นแผน Starter ขึ้นไปที่ slippy.ai/billing"
+        "กรุณาอัปเกรดเป็นแผน Starter ขึ้นไปที่ dev.slippyai.app/billing"
       )])
       return
     }
@@ -330,7 +344,7 @@ async function handleEvent(event: any) {
         throw new Error(`LINE CDN download failed: ${imgRes.status} ${imgRes.statusText}`)
       }
 
-      let rawBuffer = Buffer.from(await imgRes.arrayBuffer())
+      let rawBuffer: Buffer = Buffer.from(await imgRes.arrayBuffer())
 
       if (rawBuffer.length === 0) {
         throw new Error("Downloaded image is empty — LINE CDN returned 0 bytes")
@@ -355,13 +369,13 @@ async function handleEvent(event: any) {
       }
 
       // ── Compress image to save storage (max 1200px, 80% quality) ─
-      let finalBuffer = rawBuffer
+      let finalBuffer: Buffer = rawBuffer
       try {
         const sharp = (await import("sharp")).default
-        finalBuffer = await sharp(rawBuffer)
+        finalBuffer = Buffer.from(await sharp(rawBuffer)
           .resize({ width: 1200, height: 1600, fit: "inside", withoutEnlargement: true })
           .jpeg({ quality: 80, progressive: true })
-          .toBuffer()
+          .toBuffer())
         console.log(`[line] Compressed: ${rawBuffer.length} → ${finalBuffer.length} bytes (${Math.round(finalBuffer.length/rawBuffer.length*100)}%)`)
       } catch (e: any) {
         console.warn("[line] Compression failed, using original:", e.message)
@@ -411,7 +425,7 @@ async function handleEvent(event: any) {
 
           await pushMsg(lineUserId, [txt(
             "⚠️ โควต้าเอกสารเดือนนี้เต็มแล้วครับ\n" +
-            "กรุณาอัปเกรดแผนหรือซื้อ Add-on เพิ่มที่ slippy.ai/billing\n\n" +
+            "กรุณาอัปเกรดแผนหรือซื้อ Add-on เพิ่มที่ dev.slippyai.app/billing\n\n" +
             "(ระบบจะแจ้งเตือนสัปดาห์ละครั้งเท่านั้น)"
           )])
         }
@@ -440,15 +454,24 @@ async function handleEvent(event: any) {
       }
       console.log(`[line] Document inserted: ${doc.id}`)
 
-      // Reply ack immediately, then queue OCR (worker will notify LINE when done)
+      // Reply ack immediately, then hand off through the shared ingestion
+      // contract (services/ingest.ts). Using ingestDocument instead of enqueuing
+      // directly means a LINE receipt still gets read even when Redis/the worker
+      // is unavailable — previously those uploads were queued into a void.
       await replyMsg(replyToken, [uploadAckCard(fileName, doc.id)])
-      await queueExtraction({
-        documentId:  doc.id,
-        filePath,
-        fileType:    "image/jpeg",
-        orgId:       conn.organization_id,
-        lineUserId,  // pass through so worker can notify without re-querying DB
+      const ingest = await ingestDocument(doc.id, conn.organization_id, {
+        lineUserId,  // pass through so the worker can notify without re-querying DB
       })
+      if (!ingest.ok) {
+        console.error(`[line] ingest failed for ${doc.id} (${ingest.mode}):`, ingest.error)
+        await pushMsg(lineUserId, [txt("❌ อ่านเอกสารไม่สำเร็จ กรุณาลองส่งใหม่อีกครั้งครับ")])
+      } else if (ingest.mode === "inline") {
+        // Inline path already finished, so the worker's completion hook never
+        // fires — notify here instead so the user isn't left waiting.
+        await notifyLineAfterExtraction(
+          doc.id, conn.organization_id, { success: true }, lineUserId,
+        ).catch(() => {})
+      }
     } catch (err: any) {
       console.error("[line] image error:", err.message)
       await pushMsg(lineUserId, [txt("❌ เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้งครับ")])
@@ -739,13 +762,18 @@ async function handleEvent(event: any) {
       .update({ status: "pending", notes: null, updated_at: new Date().toISOString() })
       .eq("id", doc.id)
 
-    await queueExtraction({
-      documentId: doc.id,
-      filePath:   doc.file_path,
-      fileType:   doc.file_type ?? "image/jpeg",
-      orgId:      conn.organization_id,
-      lineUserId,   // ← pass through so worker can notify LINE when done
+    // force: this document already has a finished job under its normal id, and
+    // BullMQ would silently de-duplicate the retry against it.
+    const retryIngest = await ingestDocument(doc.id, conn.organization_id, {
+      lineUserId,   // ← pass through so the worker can notify LINE when done
+      force: true,
     })
+    if (retryIngest.mode === "inline") {
+      await notifyLineAfterExtraction(
+        doc.id, conn.organization_id,
+        { success: retryIngest.ok, error: retryIngest.error }, lineUserId,
+      ).catch(() => {})
+    }
 
     const name = doc.vendor_name ?? `ID: ${doc.id.slice(0, 8)}`
     await replyMsg(replyToken, [txt(
@@ -854,7 +882,7 @@ async function handleEvent(event: any) {
 
   // /meds — ดูรายการยาวันนี้
   if (cmd === "/meds" || cmd === "ยาวันนี้") {
-    const APP_URL = process.env.APP_URL ?? "https://slippy.ai"
+    const APP_URL = getAppUrl()
     await replyMsg(replyToken, [txt(
       `💊 รายการยาของคุณ\n\n` +
       `ดูและจัดการยาทั้งหมดได้ที่:\n${APP_URL}/health/medications\n\n` +
@@ -911,6 +939,56 @@ async function handleEvent(event: any) {
     return
   }
 
+  // /sportclub ชื่อก๊วน | ชนิดกีฬา | สนาม | จำนวนคนสูงสุด — สร้างก๊วนแบบ recurring
+  // เก็บแค่ข้อมูลหลัก ส่วนวันที่/จำนวนคอร์ดของแต่ละนัดเปิดผ่าน /sportsession
+  if (cmd === "/sportclub") {
+    const result = await handleCreateSportClub(parts.slice(1), conn.organization_id, lineUserId, displayName)
+    if (result.card) await replyMsg(replyToken, [result.card])
+    else if (result.text) await replyMsg(replyToken, [txt(result.text)])
+    return
+  }
+
+  // /sportclubconcept <code> <Concept/กฎของก๊วน...> — ตั้ง/แก้ Concept ทีหลังได้
+  if (cmd === "/sportclubconcept") {
+    const m = text.match(/^\S+\s+(\S+)\s+([\s\S]+)$/)
+    if (!m) {
+      await replyMsg(replyToken, [txt("⚠️ รูปแบบ: /sportclubconcept <โค้ดก๊วน> <Concept/กฎของก๊วน>")])
+      return
+    }
+    const result = await handleSetClubConcept(m[1].toLowerCase(), m[2].trim())
+    if (result.text) await replyMsg(replyToken, [txt(result.text)])
+    return
+  }
+
+  // /sportclubmap <code> <ลิงก์ Google Maps> — ตั้ง/แก้ลิงก์แผนที่ทีหลังได้
+  if (cmd === "/sportclubmap" && parts[1] && parts[2]) {
+    const result = await handleSetClubMap(parts[1].toLowerCase(), parts[2])
+    if (result.text) await replyMsg(replyToken, [txt(result.text)])
+    return
+  }
+
+  // /sportsession <code> <วันที่> <เวลาxจำนวนคอร์ด,...> [รายละเอียดเพิ่มเติม]
+  // เปิดนัดใหม่ภายใต้ก๊วน แล้วส่งการ์ดเชิญเข้ากลุ่ม LINE ที่ผูกไว้ทันที
+  if (cmd === "/sportsession") {
+    const code = parts[1]?.toLowerCase()
+    const dateStr = parts[2]
+    const slotsStr = parts[3]
+    if (!code || !dateStr || !slotsStr) {
+      await replyMsg(replyToken, [txt(
+        "⚠️ รูปแบบ: /sportsession <โค้ดก๊วน> <วันที่> <เวลาxจำนวนคอร์ด,...> [รายละเอียดเพิ่มเติม]\n" +
+        "ตัวอย่าง: /sportsession ab12cd34 11/6/69 19:00x1,20:00x3,21:00x4 ลูกแบด CHAO PA"
+      )])
+      return
+    }
+    const extraNotes = parts.slice(4).join(" ").trim() || null
+    const result = await handleCreateSportSession(code, dateStr, slotsStr, extraNotes, lineUserId)
+    const msgs: object[] = []
+    if (result.text) msgs.push(txt(result.text))
+    if (result.card) msgs.push(result.card)
+    if (msgs.length) await replyMsg(replyToken, msgs)
+    return
+  }
+
   // /sportstatus รหัสกลุ่ม — ดูยอดต่อหัว + ใครจ่ายแล้ว
   if (cmd === "/sportstatus" && parts[1]) {
     const result = await handleSportStatus(parts[1], conn.organization_id, false)
@@ -935,10 +1013,19 @@ async function handleEvent(event: any) {
     return
   }
 
+  // /sportroster รหัสกลุ่ม — เรียกดูรายชื่อผู้เข้าร่วมล่าสุด (ใครอยู่บ้าง ใครเพิ่มใคร)
+  // ซ้ำได้ทุกเมื่อ ไม่ต้องเลื่อนหาการ์ดที่ส่งไปก่อนหน้านี้ในแชท
+  if (cmd === "/sportroster" && parts[1]) {
+    const result = await handleSportRoster(parts[1], conn.organization_id)
+    if (result.card) await replyMsg(replyToken, [result.card])
+    else if (result.text) await replyMsg(replyToken, [txt(result.text)])
+    return
+  }
+
   // /food [ร้าน] — สร้างบิลอาหาร
   if (cmd === "/food" && parts[1]) {
     const restaurant = parts.slice(1).join(" ").trim()
-    const APP_URL    = process.env.APP_URL ?? "https://slippy.ai"
+    const APP_URL    = getAppUrl()
     await replyMsg(replyToken, [txt(
       `🍽️ บิลอาหาร "${restaurant}"\n\n` +
       `สร้างรายการและระบุว่าใครสั่งอะไร:\n${APP_URL}/trips/new?type=food_order&venue=${encodeURIComponent(restaurant)}\n\n` +
@@ -972,6 +1059,25 @@ async function handleEvent(event: any) {
           { label: "📊 สรุปค่าใช้จ่าย",       text: "/summary" },
           { label: "📱 ดูเมนูทั้งหมด",        text: "/menu" },
         ]
+      )
+    ])
+    return
+  }
+
+  // 📸 ส่งสลิป — Rich Menu button. LINE ไม่สามารถเปิดกล้อง/อัลบั้มจากปุ่มเมนูได้
+  // โดยตรง ปุ่มนี้จึงทำหน้าที่เป็น "คำแนะนำ" ให้ผู้ใช้แนบรูปสลิป/ใบเสร็จเอง
+  if (text === "📸 ส่งสลิป" || cmd === "/slip") {
+    await replyMsg(replyToken, [
+      withQuickReply(
+        txt(
+          "📸 ส่งสลิป/ใบเสร็จมาได้เลยครับ\n\n" +
+          "วิธีส่ง:\n" +
+          "1. แตะไอคอน 📎 หรือ 🖼️ ที่ช่องแชท\n" +
+          "2. เลือก \"ถ่ายภาพ\" หรือ \"เลือกรูปจากอัลบั้ม\"\n" +
+          "3. ส่งรูปสลิป/ใบเสร็จเข้ามาในแชทนี้\n\n" +
+          "AI จะอ่านรายละเอียดและบันทึกให้อัตโนมัติครับ ✨"
+        ),
+        mainQuickReply()
       )
     ])
     return

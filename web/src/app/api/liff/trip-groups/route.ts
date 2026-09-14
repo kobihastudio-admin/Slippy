@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { getVerifiedLineUserId, liffUnauthorized } from "@/lib/liff-auth"
 
 const TRIP_EMOJI: Record<string, string> = {
   "เที่ยวทะเล": "🏖️", "ทะเล": "🏖️", "beach": "🏖️",
@@ -72,15 +73,18 @@ export async function GET(req: NextRequest) {
 
 // POST /api/liff/trip-groups — create a new trip group (creator auto-joins)
 export async function POST(req: NextRequest) {
-  const { lineUserId, displayName, tripType, fee, destination } = await req.json() as {
+  const body = await req.json() as {
     lineUserId:   string
     displayName:  string
     tripType:     string
     fee:          number
     destination?: string
   }
+  const lineUserId = getVerifiedLineUserId(req, body.lineUserId)
+  if (!lineUserId) return liffUnauthorized("LINE identity mismatch")
+  const { displayName, tripType, fee, destination } = body
 
-  if (!lineUserId || !tripType || !fee || fee <= 0) {
+  if (!tripType || !fee || fee <= 0) {
     return NextResponse.json({ error: "lineUserId, tripType, fee required" }, { status: 400 })
   }
 

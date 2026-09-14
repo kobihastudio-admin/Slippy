@@ -16,19 +16,25 @@ import { DashboardUploadZone }    from "@/components/documents/dashboard-upload-
 export default async function DocumentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ vendor?: string }>
+  searchParams: Promise<{ vendor?: string; status?: string; type?: string; category?: string }>
 }) {
   const t = await getTranslations("documents")
   const { organization_id: orgId, role } = await getMembership()
   const supabase = await createClient()
-  const { vendor: vendorFilter } = await searchParams
+  const {
+    vendor:   vendorFilter,
+    status:   statusFilter,
+    type:     typeFilter,
+    category: categoryFilter,
+  } = await searchParams
 
   const [{ data: documents, error: docsErr }, { data: org }] = await Promise.all([
     supabase
       .from("documents")
       .select(`
         id, vendor_name, total_amount, vat_amount, status, doc_date, doc_type,
-        doc_category, overall_confidence, is_duplicate, source, created_at, doc_number
+        doc_category, expense_category, overall_confidence, is_duplicate, source,
+        created_at, doc_number
       `)
       .eq("organization_id", orgId)
       .order("created_at", { ascending: false })
@@ -46,7 +52,7 @@ export default async function DocumentsPage({
   const vendorDecoded = vendorFilter ? decodeURIComponent(vendorFilter) : undefined
 
   return (
-    <div className="p-6 lg:p-7 space-y-5 max-w-[1600px] animate-fade-in">
+    <div className="page-wide space-y-5 animate-fade-in">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-[20px] font-bold">{t("title")}</h2>
@@ -66,6 +72,9 @@ export default async function DocumentsPage({
         documents={documents ?? []}
         orgId={orgId}
         initialVendorFilter={vendorDecoded}
+        initialStatus={statusFilter}
+        initialType={typeFilter}
+        initialCategory={categoryFilter ? decodeURIComponent(categoryFilter) : undefined}
       />
     </div>
   )

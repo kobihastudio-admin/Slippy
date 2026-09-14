@@ -131,11 +131,72 @@ function levenshtein(a: string, b: string): number {
  * @param organizationId  Target org (null = mine global patterns across all orgs)
  * @param since           Only mine corrections newer than this date
  */
+
+/** A correction only becomes a pattern once this many DISTINCT documents show it. */
+const MIN_DISTINCT_DOCUMENTS = 2
+
+/**
+ * Groups corrections into candidate patterns and keeps only the significant ones.
+ *
+ * Pure, and separated out because the counting was quietly wrong in a way no
+ * runtime error could reveal: `occurrence_count` incremented per correction
+ * ROW while only `example_doc_ids` de-duplicated by document. Saving one
+ * receipt's edits twice — fourteen seconds apart, which is exactly what
+ * happened in production — pushed a one-off to a count of 4 and promoted it to
+ * a standing rule injected into every future prompt. All six patterns in the
+ * production table came from a single document.
+ *
+ * The count now means what its name says: how many different documents showed
+ * this mistake.
+ */
+export function minePatterns(corrections: CorrectionRow[]): ErrorPattern[] {
+  const patternMap = new Map<string, ErrorPattern>()
+
+  for (const row of corrections) {
+    const wrong   = (row.ai_value        ?? "").trim()
+    const correct = (row.corrected_value ?? "").trim()
+    if (!wrong || !correct || wrong === correct) continue
+
+    const patternType = detectPatternType(row.field_name, wrong, correct)
+    if (!patternType) continue
+
+    const key = `${row.field_name}::${wrong}::${correct}`
+    const existing = patternMap.get(key)
+    if (existing) {
+      if (!existing.example_doc_ids.includes(row.document_id)) {
+        existing.example_doc_ids.push(row.document_id)
+      }
+    } else {
+      patternMap.set(key, {
+        field_name:       row.field_name,
+        wrong_value:      wrong,
+        correct_value:    correct,
+        pattern_type:     patternType,
+        occurrence_count: 0,
+        example_doc_ids:  [row.document_id],
+      })
+    }
+  }
+
+  return Array.from(patternMap.values())
+    .map(p => ({ ...p, occurrence_count: p.example_doc_ids.length }))
+    .filter(p => p.example_doc_ids.length >= MIN_DISTINCT_DOCUMENTS)
+}
+
 export async function mineErrorPatterns(
   organizationId: string | null,
   since?: Date,
 ): Promise<{ mined: number; upserted: number }> {
   const supabase = createClient()
+
+  // A null org means "global" to the reader (see the RLS policy in migration
+  // 034) and cannot be de-duplicated by the upsert below, because Postgres
+  // treats every NULL in a unique constraint as distinct. Mining is always
+  // per-organisation; a global pattern is a deliberate act, not a side effect.
+  if (!organizationId) {
+    console.warn("[pattern-miner] refusing to mine without an organisation id")
+    return { mined: 0, upserted: 0 }
+  }
 
   // ── Fetch recent corrections ──────────────────────────────────────────────
   let query = supabase
@@ -143,6 +204,9 @@ export async function mineErrorPatterns(
     .select("id, document_id, field_name, ai_value, corrected_value, vendor_name, doc_category")
     .not("ai_value", "is", null)
     .not("corrected_value", "is", null)
+    // Newest first, so the 500-row cap keeps the most relevant corrections
+    // rather than an arbitrary slice.
+    .order("created_at", { ascending: false })
     .limit(500)
 
   if (organizationId) {
@@ -155,39 +219,7 @@ export async function mineErrorPatterns(
   const { data: corrections, error } = await query
   if (error || !corrections?.length) return { mined: 0, upserted: 0 }
 
-  // ── Group and count ───────────────────────────────────────────────────────
-  const patternMap = new Map<string, ErrorPattern>()
-
-  for (const row of corrections as CorrectionRow[]) {
-    const wrong   = (row.ai_value        ?? "").trim()
-    const correct = (row.corrected_value ?? "").trim()
-    if (!wrong || !correct || wrong === correct) continue
-
-    const patternType = detectPatternType(row.field_name, wrong, correct)
-    if (!patternType) continue
-
-    const key = `${row.field_name}::${wrong}::${correct}`
-    const existing = patternMap.get(key)
-    if (existing) {
-      existing.occurrence_count++
-      if (!existing.example_doc_ids.includes(row.document_id)) {
-        existing.example_doc_ids.push(row.document_id)
-      }
-    } else {
-      patternMap.set(key, {
-        field_name:       row.field_name,
-        wrong_value:      wrong,
-        correct_value:    correct,
-        pattern_type:     patternType,
-        occurrence_count: 1,
-        example_doc_ids:  [row.document_id],
-      })
-    }
-  }
-
-  // ── Only persist patterns seen 2+ times (reduce noise) ────────────────────
-  const significant = Array.from(patternMap.values())
-    .filter(p => p.occurrence_count >= 2)
+  const significant = minePatterns(corrections as CorrectionRow[])
 
   if (!significant.length) return { mined: corrections.length, upserted: 0 }
 
@@ -260,18 +292,20 @@ export function formatErrorPatternBlock(patterns: ErrorPattern[]): string {
 
   const sections: string[] = []
 
-  // Amount/digit errors
-  const amountPatterns = [
-    ...byField.get("total_amount") ?? [],
-    ...byField.get("subtotal")     ?? [],
-    ...byField.get("vat_amount")   ?? [],
-  ]
-  if (amountPatterns.length) {
-    const examples = amountPatterns
-      .slice(0, 5)
-      .map(p => `"${p.wrong_value}" was misread — correct is "${p.correct_value}" (${p.occurrence_count}× error)`)
-    sections.push(`Numbers: ${examples.join("; ")}`)
-  }
+  // Amounts are deliberately NOT fed back.
+  //
+  // A corrected amount says something true about ONE receipt and nothing about
+  // any other. Production had mined three of them — subtotal 579.44→620,
+  // vat 40.56→0, total 620→663.4 — which are not misreadings at all: a reviewer
+  // had reconciled a VAT-inclusive receipt. Telling the model "620 was misread,
+  // the correct value is 663.4" would make it rewrite an unrelated ฿620 receipt
+  // to ฿663.4, turning a learning loop into a corruption loop. The damage would
+  // be silent, and in the one place — money — where it is least acceptable.
+  //
+  // Text confusions are the opposite: ไฟแรงได้รุ่ง→ไฟแรงโต้รุ่ง is a property of
+  // the glyphs, so it generalises to every future receipt from that shop.
+  // Reconciliation is already handled by reconcileAmounts(), which reasons from
+  // the arithmetic on the page rather than from remembered numbers.
 
   // Vendor name errors
   const vendorPatterns = byField.get("vendor_name") ?? []

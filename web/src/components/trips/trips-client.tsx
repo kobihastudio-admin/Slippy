@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import {
-  Plus, Plane, Utensils, Trophy, DollarSign,
-  Users, ChevronRight, X, Loader2, QrCode,
+  Plus, Users, ChevronRight, X, Loader2, QrCode,
   CheckCircle2, Clock, MapPin, Calendar,
+  Map, Wallet, ListChecks, LayoutGrid,
 } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
+import { activityCategory, tripTypeCategory } from "@/lib/activity-taxonomy"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Participant = {
@@ -27,13 +29,42 @@ type Trip = {
 const fmtTHB  = (n: number) => "฿" + n.toLocaleString("th-TH", { maximumFractionDigits: 0 })
 const fmtDate = (d: string) => new Date(d).toLocaleDateString("th-TH", { day: "numeric", month: "short" })
 
+/**
+ * Trip types, and the icon each one wears everywhere it appears.
+ *
+ * These used to be emoji (✈️ 🍽️ 🏸 💰) while the rest of the app draws lucide
+ * glyphs in a tinted tile — see the dashboard's quick actions. Emoji are the one
+ * thing on a page a design system cannot reach: they ignore the theme, they
+ * render as a different picture on every OS, and on Windows several of these are
+ * flat monochrome. So the type owns a lucide icon and a tone, and every surface
+ * below — picker, filter, card, stats — reads them from here rather than
+ * inventing its own.
+ */
 const TRIP_TYPES = [
-  { id: "travel",     emoji: "✈️", label: "ทริปท่องเที่ยว",   icon: Plane },
-  { id: "food_order", emoji: "🍽️", label: "บิลอาหาร",        icon: Utensils },
-  { id: "sport",      emoji: "🏸", label: "กิจกรรมกีฬา",      icon: Trophy },
-  { id: "general",    emoji: "💰", label: "หารบิลทั่วไป",     icon: DollarSign },
-]
+  { id: "travel",     label: "ทริปท่องเที่ยว", category: "transport" },
+  { id: "food_order", label: "บิลอาหาร",       category: "food" },
+  { id: "sport",      label: "กิจกรรมกีฬา",     category: "sightseeing" },
+  { id: "general",    label: "หารบิลทั่วไป",    category: "money" },
+] as const
 
+type TripTone = "sky" | "violet" | "amber" | "emerald" | "rose" | "indigo" | "brand" | "slate"
+
+/**
+ * Tone → tile classes. Written out in full because Tailwind scans source text
+ * for class names: a template like `bg-${tone}-500/10` compiles to nothing.
+ */
+const TONE: Record<TripTone, { tile: string; icon: string }> = {
+  sky:     { tile: "bg-sky-500/10",     icon: "text-sky-600 dark:text-sky-400"         },
+  amber:   { tile: "bg-amber-500/10",   icon: "text-amber-600 dark:text-amber-400"     },
+  violet:  { tile: "bg-violet-500/10",  icon: "text-violet-600 dark:text-violet-400"   },
+  emerald: { tile: "bg-emerald-500/10", icon: "text-emerald-600 dark:text-emerald-400" },
+  rose:    { tile: "bg-rose-500/10",    icon: "text-rose-600 dark:text-rose-400"       },
+  indigo:  { tile: "bg-indigo-500/10",  icon: "text-indigo-600 dark:text-indigo-400"   },
+  brand:   { tile: "bg-brand-500/10",   icon: "text-brand-600 dark:text-brand-300"     },
+  slate:   { tile: "bg-muted",          icon: "text-muted-foreground"                  },
+}
+
+/** The type record for a trip, falling back to the generic split-a-bill type. */
 const SPORTS = ["แบดมินตัน","บาสเกตบอล","ฟุตบอล","เทนนิส","ว่ายน้ำ","กอล์ฟ","วอลเลย์บอล","ปิงปอง"]
 
 /* ─── Create Trip Modal ─────────────────────────────────────────────────────── */
@@ -76,7 +107,7 @@ function CreateTripModal({ orgId, onClose, onCreate }: {
         }),
       })
       const { tripId } = await res.json()
-      toast.success("สร้างกิจกรรมแล้ว 🎉")
+      toast.success("สร้างกิจกรรมแล้ว")
       // Redirect to trip detail
       window.location.href = `/trips/${tripId}`
     } catch { toast.error("เกิดข้อผิดพลาด") } finally { setSaving(false) }
@@ -98,14 +129,20 @@ function CreateTripModal({ orgId, onClose, onCreate }: {
               <div>
                 <label className="text-[11.5px] font-medium text-muted-foreground block mb-2">ประเภทกิจกรรม *</label>
                 <div className="grid grid-cols-2 gap-2">
-                  {TRIP_TYPES.map(t => (
-                    <button key={t.id} type="button" onClick={() => setTripType(t.id)}
+                  {TRIP_TYPES.map(({ id, label, category: categoryKey }) => {
+                    const category = activityCategory(categoryKey)
+                    const Icon = category.icon
+                    return (
+                    <button key={id} type="button" onClick={() => setTripType(id)}
                       className={cn("flex items-center gap-2.5 p-3 rounded-[10px] border text-left transition-colors",
-                        tripType === t.id ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10" : "border-border hover:bg-muted/50")}>
-                      <span className="text-xl">{t.emoji}</span>
-                      <span className="text-sm font-medium">{t.label}</span>
+                        tripType === id ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10" : "border-border hover:bg-muted/50")}>
+                      <span className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", TONE[category.tone].tile)}>
+                        <Icon className={cn("w-4 h-4", TONE[category.tone].icon)} />
+                      </span>
+                      <span className="text-sm font-medium">{label}</span>
                     </button>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
 
@@ -240,14 +277,18 @@ function TripCard({ trip }: { trip: Trip }) {
   const totalPaid  = trip.trip_participants.reduce((s, p) => s + Number(p.amount_paid), 0)
   const settled    = totalOwed > 0 && totalPaid >= totalOwed
   const pct        = totalOwed > 0 ? Math.min((totalPaid / totalOwed) * 100, 100) : 0
+  const category   = tripTypeCategory(trip.trip_type)
+  const TypeIcon   = category.icon
 
   return (
     <button onClick={() => router.push(`/trips/${trip.id}`)}
       className="w-full text-left rounded-xl border bg-card hover:shadow-sm transition-all overflow-hidden">
       <div className="flex items-center gap-4 p-5">
-        <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0",
-          trip.status === "settled" ? "bg-emerald-500/10" : "bg-muted")}>
-          {trip.cover_emoji}
+        {/* The trip's own type icon — a settled trip goes green, so the state is
+            readable from the icon alone without reading the badge on the right. */}
+        <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center shrink-0",
+          settled ? TONE.emerald.tile : TONE[category.tone].tile)}>
+          <TypeIcon className={cn("w-[22px] h-[22px]", settled ? TONE.emerald.icon : TONE[category.tone].icon)} />
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold truncate">{trip.title}</p>
@@ -273,7 +314,7 @@ function TripCard({ trip }: { trip: Trip }) {
         <div className="text-right shrink-0">
           {totalOwed > 0 && <p className="font-bold">{fmtTHB(totalOwed)}</p>}
           {settled
-            ? <span className="text-[10px] text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded-full font-medium">✓ เคลียร์แล้ว</span>
+            ? <span className="text-[10px] text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded-full font-medium inline-flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />เคลียร์แล้ว</span>
             : totalOwed - totalPaid > 0
             ? <span className="text-[10px] text-amber-600 bg-amber-50 dark:bg-amber-500/10 px-1.5 py-0.5 rounded-full font-medium">ค้าง {fmtTHB(totalOwed - totalPaid)}</span>
             : null}
@@ -286,6 +327,7 @@ function TripCard({ trip }: { trip: Trip }) {
 
 /* ─── Main ────────────────────────────────────────────────────────────────────── */
 export function TripsClient({ orgId, trips: initial }: { orgId: string; trips: Trip[] }) {
+  const router = useRouter()
   const [trips,     setTrips]     = useState(initial)
   const [showModal, setShowModal] = useState(false)
   const [typeFilter, setTypeFilter] = useState<string>("all")
@@ -295,31 +337,38 @@ export function TripsClient({ orgId, trips: initial }: { orgId: string; trips: T
   const totalOwed   = trips.flatMap(t => t.trip_participants).reduce((s, p) => s + Number(p.amount_owed) - Number(p.amount_paid), 0)
 
   return (
-    <div className="p-6 lg:p-7 max-w-[900px] animate-fade-in">
+    <div className="page animate-fade-in">
       {/* Header */}
       <div className="mb-6 flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-xl font-bold">ทริป & กิจกรรม</h2>
           <p className="text-sm text-muted-foreground">จัดการค่าใช้จ่ายและหารบิลกับเพื่อน</p>
         </div>
-        <button onClick={() => setShowModal(true)}
-          className="h-9 px-4 rounded-[10px] bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition-colors inline-flex items-center gap-1.5">
-          <Plus className="w-3.5 h-3.5" /> สร้างกิจกรรม
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowModal(true)}
+            className="h-9 px-4 rounded-[10px] bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition-colors inline-flex items-center gap-1.5">
+            <Plus className="w-3.5 h-3.5" /> สร้างกิจกรรม
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
       {trips.length > 0 && (
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          {[
-            { label: "กิจกรรมที่กำลังดำเนินการ", value: totalActive.toString(), emoji: "🗺️" },
-            { label: "ยอดรอจ่าย", value: totalOwed > 0 ? fmtTHB(totalOwed) : "เคลียร์หมดแล้ว", emoji: totalOwed > 0 ? "💰" : "✅" },
-            { label: "กิจกรรมทั้งหมด", value: trips.length.toString(), emoji: "📋" },
-          ].map(s => (
-            <div key={s.label} className="rounded-xl border bg-card p-4">
-              <p className="text-2xl mb-1">{s.emoji}</p>
-              <p className="text-xl font-bold">{s.value}</p>
-              <p className="text-xs text-muted-foreground">{s.label}</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          {([
+            { label: "กิจกรรมที่กำลังดำเนินการ", value: totalActive.toString(), icon: Map, tone: "sky" },
+            totalOwed > 0
+              ? { label: "ยอดรอจ่าย", value: fmtTHB(totalOwed),  icon: Wallet,       tone: "amber"   }
+              : { label: "ยอดรอจ่าย", value: "เคลียร์หมดแล้ว",     icon: CheckCircle2, tone: "emerald" },
+            { label: "กิจกรรมทั้งหมด", value: trips.length.toString(), icon: ListChecks, tone: "violet" },
+          ] satisfies { label: string; value: string; icon: LucideIcon; tone: TripTone }[])
+            .map(({ label, value, icon: Icon, tone }) => (
+            <div key={label} className="rounded-xl border bg-card p-4">
+              <span className={cn("w-9 h-9 rounded-lg flex items-center justify-center mb-2.5", TONE[tone].tile)}>
+                <Icon className={cn("w-[18px] h-[18px]", TONE[tone].icon)} />
+              </span>
+              <p className="text-xl font-bold tabular-nums truncate">{value}</p>
+              <p className="text-xs text-muted-foreground">{label}</p>
             </div>
           ))}
         </div>
@@ -327,19 +376,25 @@ export function TripsClient({ orgId, trips: initial }: { orgId: string; trips: T
 
       {/* Filter tabs */}
       <div className="flex gap-1.5 mb-4 flex-wrap">
-        {[{ id: "all", label: "ทั้งหมด" }, ...TRIP_TYPES.map(t => ({ id: t.id, label: `${t.emoji} ${t.label}` }))].map(f => (
-          <button key={f.id} onClick={() => setTypeFilter(f.id)}
-            className={cn("px-3 h-8 rounded-full text-xs font-medium transition-colors",
-              typeFilter === f.id ? "bg-brand-500 text-white" : "bg-muted text-muted-foreground hover:text-foreground")}>
-            {f.label}
-          </button>
-        ))}
+        {[{ id: "all", label: "ทั้งหมด", icon: LayoutGrid }, ...TRIP_TYPES.map(type => ({ ...type, icon: activityCategory(type.category).icon }))].map(({ id, label, icon: Icon }) => {
+          const on = typeFilter === id
+          return (
+            <button key={id} onClick={() => setTypeFilter(id)}
+              className={cn("px-3 h-8 rounded-full text-xs font-medium transition-colors inline-flex items-center gap-1.5",
+                on ? "bg-brand-500 text-white" : "bg-muted text-muted-foreground hover:text-foreground")}>
+              <Icon className="w-3.5 h-3.5" />
+              {label}
+            </button>
+          )
+        })}
       </div>
 
       {/* Trip list */}
       {filtered.length === 0 ? (
         <div className="rounded-xl border bg-card flex flex-col items-center py-16 text-center">
-          <div className="text-5xl mb-3">🗺️</div>
+          <span className={cn("w-14 h-14 rounded-2xl flex items-center justify-center mb-3", TONE.sky.tile)}>
+            <Map className={cn("w-7 h-7", TONE.sky.icon)} />
+          </span>
           <p className="font-medium text-lg">ยังไม่มีกิจกรรม</p>
           <p className="text-sm text-muted-foreground mt-1 mb-4">สร้างทริป บิลอาหาร หรือบิลกีฬากับเพื่อน</p>
           <button onClick={() => setShowModal(true)}
@@ -348,7 +403,7 @@ export function TripsClient({ orgId, trips: initial }: { orgId: string; trips: T
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
           {filtered.map(t => <TripCard key={t.id} trip={t} />)}
         </div>
       )}

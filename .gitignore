@@ -59,3 +59,4 @@ ios/DerivedData/
 ## Android sensitive
 android/local.properties
 android/app/release/
+web/tsconfig.tsbuildinfo

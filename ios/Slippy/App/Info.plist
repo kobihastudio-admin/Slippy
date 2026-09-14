@@ -18,9 +18,6 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0.0</string>
-	<key>CFBundleVersion</key>
-	<string>1</string>
-	<!-- OAuth callback deep link: slippy://auth/callback -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -31,11 +28,61 @@
 				<string>slippy</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.google.GIDSignIn</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.940654280425-19pvlqjqssgv3oe8sd7im9nm1an62jp9</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>facebook</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>fb998800032696110</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>line3rdp</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>line3rdp.app.slippy.ios</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>FacebookAppID</key>
+	<string>998800032696110</string>
+	<key>FacebookClientToken</key>
+	<string>2d7cf6af3befe5ff2412b70031943702</string>
+	<key>FacebookDisplayName</key>
+	<string>Slippy</string>
+	<key>GIDClientID</key>
+	<string>940654280425-19pvlqjqssgv3oe8sd7im9nm1an62jp9.apps.googleusercontent.com</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>lineauth2</string>
+		<string>line3rdp.app.slippy.ios</string>
+		<string>line</string>
+		<string>fbapi</string>
+		<string>fb-messenger-share-api</string>
+		<string>fbauth2</string>
+		<string>fbshareextension</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>ถ่ายภาพเอกสารเพื่ออัปโหลดเข้าระบบ Slippy</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>ใช้ Face ID เพื่อเข้าสู่ระบบ Slippy อย่างปลอดภัย</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Slippy ใช้ตำแหน่งของคุณเพื่อแชร์ให้เพื่อนร่วมทริปเห็นชั่วคราว เฉพาะตอนที่คุณเปิดแชร์เท่านั้น</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Slippy ใช้ไมโครโฟนสำหรับการโทรคุยกับเพื่อนร่วมทริป</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>บันทึกภาพใบเสร็จต้นฉบับลงในคลังภาพของคุณ</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>เลือกรูปเอกสารจากคลังภาพ</string>
 	<key>UIApplicationSceneManifest</key>

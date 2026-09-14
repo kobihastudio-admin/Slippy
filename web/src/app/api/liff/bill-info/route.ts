@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
 
   // Split bill (incl. sport groups — category='sport', trip groups — category='trip')
   const { data } = await admin.from("split_bills")
-    .select(`id, title, total_amount, category, sport_type, venue, trip_type, destination, status, booking_date, start_time, end_time, split_participants(id, name, is_host:line_user_id)`)
+    .select(`id, title, total_amount, category, sport_type, venue, trip_type, destination, status, booking_date, start_time, end_time, max_players, promptpay_id, sport_group_id, split_participants(id, name, is_host:line_user_id)`)
     .eq("share_token", token)
     .single()
 
@@ -51,6 +51,17 @@ export async function GET(req: NextRequest) {
   const registrationClosed = category === "sport" && (data as any).status !== "finalized"
     && isRegistrationClosed((data as any).booking_date, (data as any).start_time, (data as any).end_time)
 
+  // PromptPay ID — falls back to the recurring sport_groups default if this
+  // session doesn't have its own override.
+  let promptpayId: string | null = (data as any).promptpay_id ?? null
+  if (!promptpayId && (data as any).sport_group_id) {
+    const { data: sportGroup } = await admin.from("sport_groups")
+      .select("promptpay_id")
+      .eq("id", (data as any).sport_group_id)
+      .maybeSingle()
+    promptpayId = sportGroup?.promptpay_id ?? null
+  }
+
   return NextResponse.json({
     bill: {
       id:           data.id,
@@ -60,7 +71,10 @@ export async function GET(req: NextRequest) {
       host:         (data.split_participants as any[])[0]?.name ?? "—",
       participants: (data.split_participants as any[]).length,
       total:        Number(data.total_amount),
+      maxPlayers:   (data as any).max_players ?? null,
       registrationClosed,
+      promptpayId,
+      status:       (data as any).status,
     }
   })
 }

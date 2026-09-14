@@ -17,7 +17,8 @@
 -- ── 1. Flag demo orgs ────────────────────────────────────────────────────────
 ALTER TABLE organizations
   ADD COLUMN IF NOT EXISTS is_demo      boolean NOT NULL DEFAULT false,
-  ADD COLUMN IF NOT EXISTS demo_reset_at timestamptz;   -- last reset timestamp
+  ADD COLUMN IF NOT EXISTS demo_reset_at timestamptz;
+-- last reset timestamp
 
 -- ── 2. Helper: truncate demo org data ────────────────────────────────────────
 --   Called by the daily cron Edge Function. Does NOT touch auth.users,
@@ -121,11 +122,9 @@ BEGIN
 
 END;
 $$;
-
 -- ── 3. Grant execute to service_role only (called by Edge Function) ───────────
 REVOKE ALL ON FUNCTION reset_demo_org(uuid) FROM PUBLIC;
 GRANT  EXECUTE ON FUNCTION reset_demo_org(uuid) TO service_role;
-
 -- ── 4. Comments ───────────────────────────────────────────────────────────────
 COMMENT ON COLUMN organizations.is_demo IS
   'true = demo org — app shows demo banner, blocks billing/invite actions, daily data reset';

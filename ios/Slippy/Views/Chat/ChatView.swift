@@ -80,7 +80,7 @@ struct ChatView: View {
             Button {
                 hapticLight()
                 let orgId = authVM.org?.id
-                Task { await vm.send(orgId: orgId) }
+                Task { await vm.send(orgId: orgId, authVM: authVM) }
             } label: {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 15, weight: .bold))

@@ -44,10 +44,6 @@ export function startPushWorker() {
     {
       connection:  redisConnection,
       concurrency: 5,
-      defaultJobOptions: {
-        attempts: 3,
-        backoff:  { type: "exponential", delay: 10_000 },
-      },
     }
   )
 

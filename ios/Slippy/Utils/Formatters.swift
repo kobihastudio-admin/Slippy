@@ -1,13 +1,25 @@
 import Foundation
 
 // MARK: – Thai Baht Formatter
-func fmtTHB(_ amount: Double, decimals: Int = 0) -> String {
+/// Formats an amount as Thai Baht.
+///
+/// `decimals: nil` (the default) adapts to the value: satang are shown only when
+/// they exist, so ฿1,119.22 keeps its 22 while ฿259 stays clean. It used to
+/// default to 0 decimals, which silently ROUNDED — a ฿1,119.22 bill was
+/// displayed as ฿1,119 and the VAT of ฿73.22 as ฿73, so the figures on screen
+/// no longer added up and looked like extraction errors.
+func fmtTHB(_ amount: Double, decimals: Int? = nil) -> String {
+    // Round to satang first: 73.2199999 is 73.22, not a value "with decimals"
+    // that needs displaying to more places.
+    let rounded = (amount * 100).rounded() / 100
+    let places  = decimals ?? (rounded == rounded.rounded() ? 0 : 2)
+
     let fmt = NumberFormatter()
     fmt.numberStyle          = .decimal
-    fmt.minimumFractionDigits = decimals
-    fmt.maximumFractionDigits = decimals
+    fmt.minimumFractionDigits = places
+    fmt.maximumFractionDigits = places
     fmt.groupingSeparator    = ","
-    let formatted = fmt.string(from: NSNumber(value: amount)) ?? "0"
+    let formatted = fmt.string(from: NSNumber(value: rounded)) ?? "0"
     return "฿\(formatted)"
 }
 

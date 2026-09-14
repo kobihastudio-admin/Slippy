@@ -20,6 +20,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient }         from "@/lib/supabase/admin"
 import { resolveOrCreateLineUser, ensureLineLinkage } from "@/lib/line-identity"
+import { safeRedirectPath } from "@/lib/safe-redirect"
+import { getAppUrl } from "@/lib/app-url"
 
 const LINE_VERIFY_URL = "https://api.line.me/oauth2/v2.1/verify"
 
@@ -28,7 +30,7 @@ function log(step: string, data?: any) {
 }
 
 export async function POST(req: NextRequest) {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
+  const appUrl = getAppUrl()
 
   let body: { idToken?: string; next?: string }
   try { body = await req.json() } catch { return NextResponse.json({ error: "invalid_json" }, { status: 400 }) }
@@ -37,7 +39,7 @@ export async function POST(req: NextRequest) {
   if (!idToken) return NextResponse.json({ error: "id_token_required" }, { status: 400 })
 
   // Only same-origin relative paths are honoured for `next` (avoid open redirects)
-  const next = body.next && body.next.startsWith("/") && !body.next.startsWith("//") ? body.next : null
+  const next = body.next ? safeRedirectPath(body.next, "") || null : null
 
   const channelId = process.env.LINE_LOGIN_CHANNEL_ID ?? process.env.LINE_CHANNEL_ID
   if (!channelId) {

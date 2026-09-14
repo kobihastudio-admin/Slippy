@@ -17,8 +17,9 @@ struct TaxView: View {
         return (comps.year ?? 2026, comps.month ?? 1)
     }
 
+    // No NavigationStack here — always reached via a push from Dashboard,
+    // Profile, or the "เพิ่มเติม" hub, all of which already own one.
     var body: some View {
-        NavigationStack {
             ScrollView {
                 VStack(spacing: 18) {
                     Picker("", selection: $tab) {
@@ -29,7 +30,7 @@ struct TaxView: View {
                     .padding(.top, 12)
 
                     if vm.isLoading {
-                        ProgressView().padding(.top, 60)
+                        SlippyLoadingView(message: "กำลังโหลดภาษี...")
                     } else if tab == .vat {
                         vatSection
                     } else {
@@ -49,7 +50,6 @@ struct TaxView: View {
                 guard let orgId = authVM.org?.id else { return }
                 await vm.load(orgId: orgId, year: now.year, month: now.month)
             }
-        }
     }
 
     // MARK: – VAT

@@ -8,6 +8,5 @@ DO $$ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE documents;
   END IF;
 END $$;
-
 -- REPLICA IDENTITY FULL ensures UPDATE events carry ALL column values
 ALTER TABLE documents REPLICA IDENTITY FULL;

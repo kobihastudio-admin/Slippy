@@ -16,7 +16,7 @@ export async function syncFlowAccountData(integrationId: string, apiKey: string)
   // Sync accounts
   const accRes = await fetch(`${BASE}/chart-of-accounts?accountType=expense`, { headers: h })
   if (accRes.ok) {
-    const { data: accounts } = await accRes.json()
+    const { data: accounts } = await accRes.json() as { data?: any[] }
     if (accounts?.length) {
       await supabase.from("integration_accounts").upsert(
         accounts.map((a: any) => ({
@@ -34,7 +34,7 @@ export async function syncFlowAccountData(integrationId: string, apiKey: string)
   // Sync contacts (vendors)
   const conRes = await fetch(`${BASE}/contacts?type=vendor&limit=500`, { headers: h })
   if (conRes.ok) {
-    const { data: contacts } = await conRes.json()
+    const { data: contacts } = await conRes.json() as { data?: any[] }
     if (contacts?.length) {
       await supabase.from("integration_contacts").upsert(
         contacts.map((c: any) => ({

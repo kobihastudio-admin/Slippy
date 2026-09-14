@@ -21,10 +21,24 @@ import type { OrgOption } from "./app-shell"
 
 // ─── Phase 1 feature flags ────────────────────────────────────────────────────
 // Set to true when ready to enable
-const SHOW_PERSONAL_SPACE = true   // Phase 2: Longevity & Wealth, Vita Card ✅
-const SHOW_SOCIAL_SPACE   = true   // Phase 2: Vita Social, Discover, Shop ✅
+//
+// The four below are OFF because the features exist but are not in use yet, and
+// an unused entry in a sidebar is worse than a missing one — it costs a click to
+// find out it is empty. Every route, page and API still works; only the way in
+// is hidden, so turning one back on is a one-line change and nothing else.
+const SHOW_PERSONAL_SPACE = false  // group "พื้นที่ส่วนตัว" — ยังไม่ได้ใช้ (22 Aug 2026)
+const SHOW_SOCIAL_SPACE   = false  // group "Vita Social"   — ยังไม่ได้ใช้ (22 Aug 2026)
+const SHOW_LIFE_GRAPH     = false  // /life                 — ยังไม่ได้ใช้ (22 Aug 2026)
+const SHOW_BUDGET         = false  // /budget งบประมาณ       — ยังไม่ได้ใช้ (22 Aug 2026)
+const SHOW_CLAIMS         = false  // /claims เบิกค่าใช้จ่าย  — ยังไม่ได้ใช้ (22 Aug 2026)
+/**
+ * /tax renders corporate tax (VAT ภ.พ.30 + WHT) for an organization account and
+ * personal tax for a personal one — one route, two faces. Only the personal face
+ * is unused, so this hides the entry in personal mode and leaves ภาษีองค์กร,
+ * which is in active use, exactly where it was.
+ */
+const SHOW_PERSONAL_TAX   = false  // "ภาษีส่วนบุคคล"        — ยังไม่ได้ใช้ (22 Aug 2026)
 const SHOW_LINE_STUDIO    = true   // Phase 1: LINE Bot management
-const SHOW_MOBILE_PREVIEW = false  // internal dev tool
 
 // ─── Business / Organization (Phase 1) ───────────────────────────────────────
 // Tax here = VAT (ภ.พ.30) + WHT (ภ.ง.ด.3/53) — corporate tax only
@@ -32,25 +46,28 @@ const SHOW_MOBILE_PREVIEW = false  // internal dev tool
 // Group 1: ภาพรวม (Overview) — core, always-visible items
 const navItems = [
   { key: "dashboard",  href: "/dashboard",   icon: Icons.Dashboard },
-  { key: "life",       href: "/life",         icon: Icons.Brain     },  // Life Graph ← core
+  ...(SHOW_LIFE_GRAPH ? [{ key: "life", href: "/life", icon: Icons.Brain }] : []),
   { key: "documents",  href: "/documents",   icon: Icons.FileText  },
 ]
 
 // Group 2: การเงิน & ภาษี (Finance & Tax)
 const financeItems = [
   { key: "analytics",  href: "/analytics",   icon: Icons.BarChart  },
-  { key: "budget",     href: "/budget",       icon: Icons.Target    },
-  { key: "claims",     href: "/claims",       icon: Icons.Briefcase },  // Business Suite V4
+  ...(SHOW_BUDGET ? [{ key: "budget", href: "/budget",  icon: Icons.Target    }] : []),
+  ...(SHOW_CLAIMS ? [{ key: "claims", href: "/claims",  icon: Icons.Briefcase }] : []),  // Business Suite V4
   { key: "tax",        href: "/tax",          icon: Icons.Receipt   },
   { key: "vendors",    href: "/vendors",      icon: Icons.Building  },
 ]
 
 // Group 3: กิจกรรม & เครื่องมือ (Activities & Tools)
 const activityItems = [
-  { key: "trips",      href: "/trips",        icon: Icons.MapPin    },  // ทริป & กิจกรรม
-  { key: "split",      href: "/split",        icon: Icons.Split     },  // หารบิล (ใช้ร่วมกันทั้งโหมดองค์กร/ส่วนตัว)
-  ...(SHOW_LINE_STUDIO    ? [{ key: "lineStudio", href: "/line-studio", icon: Icons.LineBot  }] : []),
-  ...(SHOW_MOBILE_PREVIEW ? [{ key: "mobile",     href: "/mobile",      icon: Icons.Smartphone }] : []),
+  { key: "trips",      href: "/trips",        icon: Icons.MapPin,       label: undefined },  // ทริป & กิจกรรม
+  { key: "activities", href: "/activities",   icon: Icons.Calendar,     label: undefined },
+  { key: "split",      href: "/split",        icon: Icons.Split,        label: undefined },  // หารบิล (ใช้ร่วมกันทั้งโหมดองค์กร/ส่วนตัว)
+  { key: "incomeBills", href: "/split/income", icon: Icons.Wallet,      label: undefined },  // บิลรายรับ — สลิป + สถิติจากกลุ่มต่างๆ
+  { key: "messages",   href: "/messages",     icon: Icons.MessageSquare, label: "ข้อความ" },
+  { key: "friends",    href: "/social/friends", icon: Icons.Users2,     label: "เพื่อน" },
+  ...(SHOW_LINE_STUDIO    ? [{ key: "lineStudio", href: "/line-studio", icon: Icons.LineBot,    label: undefined }] : []),
 ]
 
 // ─── Personal Space (Phase 2) ─────────────────────────────────────────────────
@@ -142,6 +159,9 @@ export function Sidebar({ org, allOrgs, user, collapsed, mobileOpen, onToggle, o
 
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard"
+    if (href === "/trips") return pathname === "/trips" || pathname.startsWith("/trips/")
+    if (href === "/activities") return pathname === "/activities" || pathname.startsWith("/activities/")
+    if (href === "/split") return pathname === "/split" || (pathname.startsWith("/split/") && !pathname.startsWith("/split/income"))
     return pathname.startsWith(href)
   }
 
@@ -327,8 +347,10 @@ export function Sidebar({ org, allOrgs, user, collapsed, mobileOpen, onToggle, o
         {financeItems.map(({ key, href, icon: Icon }) => {
           const active = isActive(href)
           // Show tax label based on current account type
+          const isPersonalTax = key === "tax" && currentAccountType === "personal"
+          if (isPersonalTax && !SHOW_PERSONAL_TAX) return null
           const label = key === "tax"
-            ? (currentAccountType === "personal" ? "ภาษีส่วนบุคคล" : "ภาษีองค์กร")
+            ? (isPersonalTax ? "ภาษีส่วนบุคคล" : "ภาษีองค์กร")
             : t(key as any)
           return (
             <Link
@@ -357,13 +379,14 @@ export function Sidebar({ org, allOrgs, user, collapsed, mobileOpen, onToggle, o
             กิจกรรม & เครื่องมือ
           </p>
         </div>
-        {activityItems.map(({ key, href, icon: Icon }) => {
+        {activityItems.map(({ key, href, icon: Icon, label }) => {
           const active = isActive(href)
+          const displayLabel = label ?? t(key as any)
           return (
             <Link
               key={key}
               href={href}
-              title={collapsed ? t(key as any) : undefined}
+              title={collapsed ? displayLabel : undefined}
               className={cn(
                 "sidebar-item",
                 active && "active",
@@ -371,7 +394,7 @@ export function Sidebar({ org, allOrgs, user, collapsed, mobileOpen, onToggle, o
               )}
             >
               <Icon className={cn("w-[18px] h-[18px] shrink-0", active ? "text-brand-600 dark:text-brand-300" : "text-sidebar-muted")} />
-              <span className={cn("truncate", collapsed && "lg:hidden")}>{t(key as any)}</span>
+              <span className={cn("truncate", collapsed && "lg:hidden")}>{displayLabel}</span>
               {active && !collapsed && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-brand-500 shrink-0 lg:block hidden" />}
             </Link>
           )

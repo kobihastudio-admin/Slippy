@@ -20,6 +20,7 @@
  *      `/login` page — exactly the "redirects to the main login" symptom.
  *   3. Copy LIFF ID → NEXT_PUBLIC_LIFF_ID in .env.local
  */
+import { getAppUrl } from "@/lib/app-url"
 
 export interface LiffProfile {
   userId:      string
@@ -87,7 +88,7 @@ export function closeLiff(): void {
 /** Generate LIFF deep link for joining a bill/trip */
 export function makeLiffJoinUrl(token: string, type: "trip" | "split" = "trip"): string {
   const liffId  = process.env.NEXT_PUBLIC_LIFF_ID
-  const appUrl  = process.env.NEXT_PUBLIC_APP_URL ?? "https://slippy.ai"
+  const appUrl  = getAppUrl()
   const path    = `/liff/join/${token}?type=${type}`
 
   if (liffId) {
@@ -102,14 +103,14 @@ export function makeLiffJoinUrl(token: string, type: "trip" | "split" = "trip"):
 export function makeLiffSportUrl(): string {
   const liffId = process.env.NEXT_PUBLIC_LIFF_ID
   if (liffId) return `https://liff.line.me/${liffId}/liff/sport`
-  return `${process.env.NEXT_PUBLIC_APP_URL ?? "https://slippy.ai"}/liff/sport`
+  return `${getAppUrl()}/liff/sport`
 }
 
 /** Generate LIFF deep link for the trip-groups dashboard (à la KhunThong, travel-themed) */
 export function makeLiffTripUrl(): string {
   const liffId = process.env.NEXT_PUBLIC_LIFF_ID
   if (liffId) return `https://liff.line.me/${liffId}/liff/trip`
-  return `${process.env.NEXT_PUBLIC_APP_URL ?? "https://slippy.ai"}/liff/trip`
+  return `${getAppUrl()}/liff/trip`
 }
 
 /**
@@ -122,7 +123,7 @@ export function makeLiffTripUrl(): string {
  */
 export function makeLiffGateUrl(destPath: string): string {
   const liffId = process.env.NEXT_PUBLIC_LIFF_ID
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://slippy.ai"
+  const appUrl = getAppUrl()
   const qs     = `?next=${encodeURIComponent(destPath)}`
   if (liffId) return `https://liff.line.me/${liffId}/liff/home${qs}`
   // Outside LIFF context (no LIFF ID configured) — fall back to a direct link;

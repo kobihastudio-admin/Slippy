@@ -70,6 +70,9 @@ export interface JourneyDay {
 export interface JourneyParticipant {
   id: string
   display_name: string
+  avatar_url?: string | null
+  trip_role?: string | null
+  profile_shared_with_trip?: boolean
   is_host: boolean
   amount_owed: number
   amount_paid: number

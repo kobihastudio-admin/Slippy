@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient }       from "@/lib/supabase/server"
 import { createAdminClient }  from "@/lib/supabase/admin"
+import { isOrgMember }        from "@/lib/require-org-member"
 
 // GET — get or compute life score
 export async function GET(req: NextRequest) {
@@ -10,6 +11,9 @@ export async function GET(req: NextRequest) {
 
   const orgId = req.nextUrl.searchParams.get("orgId")
   if (!orgId) return NextResponse.json({ error: "orgId required" }, { status: 400 })
+  if (!(await isOrgMember(user.id, orgId))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
 
   // Try to get today's snapshot first
   const { data: snapshot } = await supabase
@@ -46,6 +50,9 @@ export async function POST(req: NextRequest) {
 
   const { orgId } = await req.json()
   if (!orgId) return NextResponse.json({ error: "orgId required" }, { status: 400 })
+  if (!(await isOrgMember(user.id, orgId))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
 
   const admin = createAdminClient()
   const { data } = await admin.rpc("compute_life_score", { p_org_id: orgId })

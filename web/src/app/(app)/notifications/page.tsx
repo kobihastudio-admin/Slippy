@@ -12,7 +12,7 @@
 import { useEffect, useState, useCallback } from "react"
 import {
   Bell, CheckCircle2, AlertCircle, FileText, Zap,
-  RefreshCw, CheckCheck, Inbox,
+  RefreshCw, CheckCheck, Inbox, CreditCard, XCircle,
 } from "lucide-react"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -33,8 +33,13 @@ function typeIcon(type: string) {
   switch (type) {
     case "document_approved":   return { Icon: CheckCircle2, color: "text-emerald-500", bg: "bg-emerald-500/10" }
     case "document_failed":     return { Icon: AlertCircle,  color: "text-rose-500",    bg: "bg-rose-500/10"    }
+    case "document_rejected":   return { Icon: XCircle,      color: "text-rose-500",    bg: "bg-rose-500/10"    }
     case "document_duplicate":  return { Icon: AlertCircle,  color: "text-amber-500",   bg: "bg-amber-500/10"   }
     case "quota_warning":       return { Icon: AlertCircle,  color: "text-amber-500",   bg: "bg-amber-500/10"   }
+    case "quota_exceeded":      return { Icon: AlertCircle,  color: "text-rose-500",    bg: "bg-rose-500/10"    }
+    case "payment_due":         return { Icon: CreditCard,   color: "text-amber-500",   bg: "bg-amber-500/10"   }
+    case "payment_failed":      return { Icon: CreditCard,   color: "text-rose-500",    bg: "bg-rose-500/10"    }
+    case "payment_success":     return { Icon: CreditCard,   color: "text-emerald-500", bg: "bg-emerald-500/10" }
     case "integration_sync":    return { Icon: Zap,          color: "text-purple-500",  bg: "bg-purple-500/10"  }
     case "line_received":
     case "email_received":      return { Icon: FileText,     color: "text-brand-500",   bg: "bg-brand-500/10"   }
@@ -116,7 +121,7 @@ export default function NotificationsPage() {
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="p-6 lg:p-7 max-w-[700px] animate-fade-in">
+    <div className="page-narrow animate-fade-in">
       {/* Header row */}
       <div className="mb-6 flex items-center justify-between">
         <div>

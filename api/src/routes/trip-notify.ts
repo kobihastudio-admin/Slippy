@@ -16,11 +16,12 @@
 import type { FastifyInstance } from "fastify"
 import { supabase } from "../lib/supabase"
 import { pushMsg } from "../services/line-push"
+import { getAppUrl } from "../lib/app-url"
 import {
   tripBillCreatedCard, tripPaymentConfirmText, tripFullyPaidCard,
 } from "../services/line-trip"
 
-const APP_URL = process.env.APP_URL ?? "https://slippy-solutionxteams-projects.vercel.app"
+const APP_URL = getAppUrl("https://slippy-solutionxteams-projects.vercel.app")
 
 function joinUrl(token: string): string {
   const liffId = process.env.LIFF_ID ?? process.env.NEXT_PUBLIC_LIFF_ID ?? ""

@@ -28,6 +28,8 @@ interface Document {
   created_at: string
   category: string | null
   overall_confidence: number | null
+  machine_verification_status?: 'unverified' | 'needs_review' | 'verified'
+  reconciliation_status?: 'not_checked' | 'balanced' | 'mismatch'
   file_path: string | null
   file_type: string | null
   notes: string | null
@@ -250,6 +252,24 @@ export default function DocumentDetailScreen() {
             </View>
           )}
         </View>
+
+        {doc.machine_verification_status && (
+          <View style={[det.card, { borderWidth: 1,
+            borderColor: doc.machine_verification_status === 'verified' ? '#a7f3d0' : '#fde68a' }]}>
+            <Text style={[det.cardTitle, {
+              color: doc.machine_verification_status === 'verified' ? '#047857' : '#b45309',
+            }]}>
+              {doc.machine_verification_status === 'verified' ? '✓ ระบบตรวจยอดแล้ว'
+                : doc.machine_verification_status === 'needs_review' ? '! ควรตรวจสอบก่อนอนุมัติ'
+                : 'ยังยืนยันข้อมูลไม่ได้'}
+            </Text>
+            <Text style={{ fontSize: 12, color: Light.mutedFg }}>
+              {doc.reconciliation_status === 'balanced' ? 'ยอดรวมและรายการที่ตรวจได้สมดุลกัน'
+                : doc.reconciliation_status === 'mismatch' ? 'พบยอดรวม หรือผลรวมรายการไม่ตรงกัน'
+                : 'ข้อมูลยังไม่เพียงพอสำหรับตรวจสมดุลยอด'}
+            </Text>
+          </View>
+        )}
 
         {/* ── Extracted Data Card ── */}
         <View style={det.card}>

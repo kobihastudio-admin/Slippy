@@ -13,33 +13,42 @@
 import type { FastifyInstance } from "fastify"
 import { supabase } from "../lib/supabase"
 import { pushMsg } from "../services/line-push"
+import { getAppUrl } from "../lib/app-url"
 import {
   sportBillCreatedCard, sportPaymentConfirmText, sportFullyPaidCard,
 } from "../services/line-sport"
+import { rosterUpdateCard } from "../services/line-bill-cards"
 
-const APP_URL = process.env.APP_URL ?? "https://slippy-solutionxteams-projects.vercel.app"
+const SPORT_THEME = "#6366f1"
 
-function joinUrl(token: string): string {
+const APP_URL = getAppUrl("https://slippy-solutionxteams-projects.vercel.app")
+
+// "ดูว่าใครจ่ายเงินแล้ว" — deep-links into this session's detail page on the
+// dashboard, scrolled to the roster section.
+function sessionStatusUrl(billId: string): string {
   const liffId = process.env.LIFF_ID ?? process.env.NEXT_PUBLIC_LIFF_ID ?? ""
-  const path = `/liff/join/${token}?type=split`
-  return liffId ? `https://liff.line.me/${liffId}${path}` : `${APP_URL}/split/join/${token}`
+  const path = `/liff/sport?session=${billId}&focus=roster`
+  return liffId ? `https://liff.line.me/${liffId}${path}` : `${APP_URL}${path}`
 }
 
-function dashboardUrl(): string {
+// "จ่ายเงิน" — opens the dedicated payment page (QR + pay button scoped to
+// the user who pressed it), instead of the full dashboard.
+function sessionPayUrl(billId: string): string {
   const liffId = process.env.LIFF_ID ?? process.env.NEXT_PUBLIC_LIFF_ID ?? ""
-  return liffId ? `https://liff.line.me/${liffId}/liff/sport` : `${APP_URL}/liff/sport`
+  const path = `/liff/sport/pay/${billId}`
+  return liffId ? `https://liff.line.me/${liffId}${path}` : `${APP_URL}${path}`
 }
 
 export async function sportNotifyRoutes(app: FastifyInstance) {
-  // POST /sport/notify { billId, event: "finalize" | "pay" | "unpay", lineUserId? }
+  // POST /sport/notify { billId, event: "finalize" | "pay" | "unpay" | "sendBill", lineUserId? }
   app.post<{
-    Body: { billId: string; event: "finalize" | "pay" | "unpay"; lineUserId?: string }
+    Body: { billId: string; event: "finalize" | "pay" | "unpay" | "sendBill" | "rosterUpdate"; lineUserId?: string; addedName?: string; removedName?: string; leftName?: string }
   }>("/sport/notify", async (req, reply) => {
-    const { billId, event, lineUserId } = req.body
+    const { billId, event, lineUserId, addedName, removedName, leftName } = req.body
 
     const { data: bill } = await supabase
       .from("split_bills")
-      .select("id, title, total_amount, status, share_token, line_group_id, booking_date, category, split_participants(id, name, amount, paid_at, line_user_id, created_at)")
+      .select("id, title, total_amount, status, share_token, line_group_id, booking_date, category, split_participants(id, name, amount, paid_at, line_user_id, created_at, added_by_participant_id)")
       .eq("id", billId)
       .eq("category", "sport")
       .maybeSingle()
@@ -63,14 +72,43 @@ export async function sportNotifyRoutes(app: FastifyInstance) {
 
     const messages: object[] = []
 
-    if (event === "finalize") {
+    if (event === "rosterUpdate") {
+      if (addedName) {
+        messages.push({ type: "text", text: `✅ เพิ่ม ${addedName} เข้าร่วม "${bill.title}" แล้วครับ` })
+      }
+      if (removedName) {
+        messages.push({ type: "text", text: `❌ ลบ ${removedName} ออกจาก "${bill.title}" แล้วครับ` })
+      }
+      if (leftName) {
+        messages.push({ type: "text", text: `🙅 ${leftName} ไม่เข้าร่วม "${bill.title}" ครับ` })
+      }
+      const guestsByParent = new Map<string, { name: string }[]>()
+      for (const p of parts) {
+        if (!p.added_by_participant_id) continue
+        const list = guestsByParent.get(p.added_by_participant_id) ?? []
+        list.push({ name: p.name })
+        guestsByParent.set(p.added_by_participant_id, list)
+      }
+      const topLevel = parts.filter(p => !p.added_by_participant_id)
+      messages.push(rosterUpdateCard({
+        title:     bill.title,
+        themeColor: SPORT_THEME,
+        statusUrl: sessionStatusUrl(bill.id),
+        participants: topLevel.map(p => ({
+          name: p.name as string,
+          guests: guestsByParent.get(p.id) ?? [],
+        })),
+      }))
+    }
+
+    if (event === "finalize" || event === "sendBill") {
       messages.push(sportBillCreatedCard({
         title:         bill.title,
         total:         Number(bill.total_amount ?? 0),
         collectorName,
         participants,
-        payUrl:        joinUrl(bill.share_token),
-        statusUrl:     dashboardUrl(),
+        payUrl:        sessionPayUrl(bill.id),
+        statusUrl:     sessionStatusUrl(bill.id),
       }))
     }
 

@@ -63,9 +63,18 @@ export default function AppLayout() {
         options={{ title: 'รายงาน', tabBarIcon: ({ focused }) => <TabIcon name="analytics" focused={focused} emoji="📊" /> }}
       />
       <Tabs.Screen
+        name="friends/index"
+        options={{ title: 'เพื่อน', tabBarIcon: ({ focused }) => <TabIcon name="friends" focused={focused} emoji="👥" /> }}
+      />
+      <Tabs.Screen
+        name="messages/index"
+        options={{ title: 'ข้อความ', tabBarIcon: ({ focused }) => <TabIcon name="messages" focused={focused} emoji="💬" /> }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{ title: 'โปรไฟล์', tabBarIcon: ({ focused }) => <TabIcon name="profile" focused={focused} emoji="👤" /> }}
       />
+      <Tabs.Screen name="journey-prototype" options={{ href: null }} />
     </Tabs>
   )
 }

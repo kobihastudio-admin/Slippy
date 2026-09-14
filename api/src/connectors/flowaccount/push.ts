@@ -1,6 +1,6 @@
 import { createClient }        from "../../lib/supabase"
 import { decrypt }             from "../../lib/crypto"
-import { FlowAccountClient }   from "./client"
+import { FlowAccountClient, type FlowAccountExpense } from "./client"
 import { resolveContact }      from "./contact-resolver"
 
 // Default expense account codes (configurable per org via account_mappings)
@@ -103,9 +103,10 @@ export async function pushToFlowAccount(
     })
   }
 
-  const vatType = doc.vat_amount > 0 ? "VAT_EXCLUDE" : "NO_VAT"
+  const vatType: FlowAccountExpense["vatType"] =
+    doc.vat_amount > 0 ? "VAT_EXCLUDE" : "NO_VAT"
 
-  const expense = {
+  const expense: FlowAccountExpense = {
     contactId,
     referenceNo: doc.doc_number ?? `SL-${documentId.slice(0, 8)}`,
     issueDate:   doc.doc_date   ?? toISODate(new Date()),

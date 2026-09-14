@@ -1,0 +1,8 @@
+.env
+web.env
+api.env
+supabase/
+data/
+logs/
+.DS_Store
+

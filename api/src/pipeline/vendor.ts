@@ -1,5 +1,6 @@
 import { createClient } from "../lib/supabase"
 import type { ExtractedDocument } from "./extractor"
+import { canonicalMerchantKey } from "./merchant-key"
 
 /**
  * Copyright © 2026 SolutionX Co., Ltd. (บริษัท โซลูชั่น เอ็กซ์ จำกัด)
@@ -51,16 +52,24 @@ export async function upsertVendor(
 
   const supabase = createClient()
 
+  // Canonical "same store" key — computed here (TS) so runtime and the backfill
+  // script share one normalization and can't drift. See merchant-key.ts.
+  const matchKey = canonicalMerchantKey({
+    name:  extracted.vendor_name,
+    taxId: extracted.vendor_tax_id,
+  })
+
   // Call DB function that handles dedup + stat increment
   const { data: vendorId, error } = await supabase.rpc("upsert_vendor", {
-    p_org_id:   organizationId,
-    p_name:     extracted.vendor_name.trim(),
-    p_tax_id:   extracted.vendor_tax_id  || null,
-    p_address:  extracted.vendor_address || null,
-    p_phone:    extracted.vendor_phone   || null,
-    p_amount:   extracted.total_amount   ?? 0,
-    p_vat:      extracted.vat_amount     ?? 0,
-    p_doc_date: extracted.doc_date       || null,
+    p_org_id:    organizationId,
+    p_name:      extracted.vendor_name.trim(),
+    p_tax_id:    extracted.vendor_tax_id  || null,
+    p_address:   extracted.vendor_address || null,
+    p_phone:     extracted.vendor_phone   || null,
+    p_amount:    extracted.total_amount   ?? 0,
+    p_vat:       extracted.vat_amount     ?? 0,
+    p_doc_date:  extracted.doc_date       || null,
+    p_match_key: matchKey || null,
   })
 
   if (error || !vendorId) {

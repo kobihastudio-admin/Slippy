@@ -4,6 +4,8 @@ struct DocumentsView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @StateObject private var vm   = DocumentsViewModel()
     @State private var showCamera = false
+    @State private var docToDelete: SlippyDocument?
+    var initialFilter: String? = nil
 
     private let filterChips = [
         ("ทั้งหมด", nil as String?),
@@ -16,12 +18,15 @@ struct DocumentsView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                periodSwitcher
+                if vm.period != .all { periodStepper }
+                summaryCard
                 searchBar
                 filterRow
                 Divider()
                 if vm.isLoading {
                     Spacer()
-                    ProgressView().tint(Color.brand500)
+                    SlippyLoadingView(message: "กำลังโหลดเอกสาร...")
                     Spacer()
                 } else if vm.documents.isEmpty {
                     emptyState
@@ -43,9 +48,42 @@ struct DocumentsView: View {
             }
             .task {
                 guard let orgId = authVM.org?.id else { return }
+                if let initialFilter { vm.filterStatus = initialFilter }
                 await vm.load(orgId: orgId)
             }
-            .sheet(isPresented: $showCamera) { CameraPickerView() }
+            .onChange(of: authVM.org?.id) { _, newOrgId in
+                guard let orgId = newOrgId else { return }
+                Task { await vm.load(orgId: orgId) }
+            }
+            .sheet(isPresented: $showCamera) {
+                CameraPickerView(onUploadSuccess: {
+                    if let orgId = authVM.org?.id {
+                        Task { await vm.load(orgId: orgId) }
+                    }
+                })
+            }
+            .alert("ลบเอกสารนี้?", isPresented: Binding(
+                get: { docToDelete != nil },
+                set: { if !$0 { docToDelete = nil } }
+            )) {
+                Button("ลบ", role: .destructive) {
+                    if let doc = docToDelete {
+                        Task { _ = await vm.deleteDocument(doc) }
+                    }
+                    docToDelete = nil
+                }
+                Button("ยกเลิก", role: .cancel) { docToDelete = nil }
+            } message: {
+                Text("ไม่สามารถกู้คืนได้หลังจากลบแล้ว")
+            }
+            .alert("ผิดพลาด", isPresented: Binding(
+                get: { vm.error != nil },
+                set: { if !$0 { vm.error = nil } }
+            )) {
+                Button("ตกลง", role: .cancel) { vm.error = nil }
+            } message: {
+                Text(vm.error ?? "")
+            }
         }
     }
 
@@ -95,20 +133,157 @@ struct DocumentsView: View {
         }
     }
 
-    // MARK: – List
+    // MARK: – List, grouped by the day each document belongs to
+
     private var docList: some View {
         List {
-            ForEach(vm.documents) { doc in
-                NavigationLink { DocumentDetailView(doc: doc) } label: {
-                    DocumentCard(doc: doc)
+            ForEach(vm.days, id: \.date) { group in
+                Section {
+                    ForEach(group.documents) { doc in
+                        NavigationLink { DocumentDetailView(doc: doc, documents: vm.documents) } label: {
+                            DocumentCard(doc: doc)
+                        }
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            // Same icon/color as the swipe-to-delete row on Dashboard
+                            // (SwipeActionsRow's deleteAction) — native .swipeActions
+                            // here since this row lives in a List, not a custom VStack.
+                            Button(role: .destructive) {
+                                hapticMedium()
+                                docToDelete = doc
+                            } label: {
+                                Label("ลบ", systemImage: "trash.fill")
+                            }
+                            .tint(Color.statusFailed)
+                        }
+                    }
+                } header: {
+                    dayHeader(date: group.date, documents: group.documents)
                 }
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
             }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+    }
+
+    /// Per-day header carrying that day's own total, so a month view answers
+    /// "which day did the money go?" without opening anything.
+    private func dayHeader(date: Date, documents docs: [SlippyDocument]) -> some View {
+        HStack {
+            Text(dayLabel(date))
+                .font(.system(size: 12.5, weight: .bold))
+                .foregroundColor(Color.textPrimary)
+            Text("\(docs.count) ฉบับ")
+                .font(.system(size: 11))
+                .foregroundColor(Color.textSecondary)
+            Spacer()
+            Text(fmtTHB(vm.dayTotal(docs)))
+                .font(.system(size: 12.5, weight: .bold))
+                .foregroundColor(Color.brand500)
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
+        .textCase(nil)
+    }
+
+    private func dayLabel(_ date: Date) -> String {
+        if Calendar.current.isDateInToday(date)     { return "วันนี้" }
+        if Calendar.current.isDateInYesterday(date) { return "เมื่อวาน" }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "th_TH")
+        f.setLocalizedDateFormatFromTemplate("EEEEdMMM")
+        return f.string(from: date)
+    }
+
+    // MARK: – Period controls
+
+    private var periodSwitcher: some View {
+        Picker("", selection: Binding(
+            get: { vm.period },
+            set: { vm.setPeriod($0) }
+        )) {
+            ForEach(DocumentPeriod.allCases, id: \.self) { p in
+                Text(p.label).tag(p)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+    }
+
+    private var periodStepper: some View {
+        HStack {
+            Button { hapticLight(); vm.step(-1) } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(Color.brand500)
+                    .frame(width: 40, height: 34)
+            }
+            Spacer()
+            Text(vm.periodLabel)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundColor(Color.textPrimary)
+            Spacer()
+            Button { hapticLight(); vm.step(1) } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .bold))
+                    // Paging into the future finds nothing; dim rather than hide
+                    // so the control does not jump around.
+                    .foregroundColor(vm.isCurrentPeriod ? Color.textSecondary.opacity(0.35) : Color.brand500)
+                    .frame(width: 40, height: 34)
+            }
+            .disabled(vm.isCurrentPeriod)
+        }
+        .padding(.horizontal, 12)
+    }
+
+    private var summaryCard: some View {
+        let s = vm.summary
+        return HStack(spacing: 0) {
+            summaryCell(label: "เอกสาร", value: "\(s.count)", tint: Color.textPrimary)
+            Divider().frame(height: 30)
+            summaryCell(label: "ยอดรวม", value: fmtTHB(s.total), tint: Color.brand500)
+            Divider().frame(height: 30)
+            summaryCell(label: "VAT", value: fmtTHB(s.vat), tint: Color.textPrimary)
+            if s.needsFix > 0 {
+                Divider().frame(height: 30)
+                summaryCell(label: "ต้องแก้", value: "\(s.needsFix)", tint: Color(hex: "#f59e0b"))
+            }
+            if s.duplicates > 0 {
+                Divider().frame(height: 30)
+                summaryCell(label: "ซ้ำ", value: "\(s.duplicates)", tint: Color.statusFailed)
+            }
+        }
+        .padding(.vertical, 10)
+        .background(Color.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.border))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+
+    private func summaryCell(label: String, value: String, tint: Color) -> some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(.system(size: 15, weight: .heavy))
+                .foregroundColor(tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Text(label)
+                .font(.system(size: 10.5))
+                .foregroundColor(Color.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var emptyStateDetail: String {
+        switch vm.period {
+        case .day:   return "ไม่มีเอกสารในวันนี้ — ลองเลื่อนไปวันก่อนหน้า หรือแตะ \"ทั้งหมด\" ด้านบนเพื่อดูทุกเอกสาร"
+        case .month: return "ไม่มีเอกสารในเดือนนี้ — ลองเลื่อนไปเดือนก่อนหน้า หรือแตะ \"ทั้งหมด\" ด้านบนเพื่อดูทุกเอกสาร"
+        case .all:   return "ยังไม่มีเอกสารในองค์กรนี้เลย — แตะ + เพื่อสแกนใบแรก"
+        }
     }
 
     private var emptyState: some View {
@@ -120,9 +295,11 @@ struct DocumentsView: View {
             Text("ไม่พบเอกสาร")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(Color.textSecondary)
-            Text("ลองเปลี่ยน filter หรือเพิ่มเอกสารใหม่")
+            Text(emptyStateDetail)
                 .font(.system(size: 13))
                 .foregroundColor(Color.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
             Spacer()
         }
     }
@@ -143,6 +320,19 @@ struct DocumentsView: View {
 struct DocumentCard: View {
     let doc: SlippyDocument
 
+    /// Small, specific, and always says WHAT is wrong — a bare "ตรวจสอบ" badge
+    /// makes the user open the document to find out whether it matters.
+    private func reviewBadge(_ text: String, _ icon: String, _ tint: Color) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: icon).font(.system(size: 8, weight: .bold))
+            Text(text).font(.system(size: 10, weight: .semibold)).lineLimit(1)
+        }
+        .foregroundColor(tint)
+        .padding(.horizontal, 6).padding(.vertical, 2)
+        .background(tint.opacity(0.12))
+        .clipShape(Capsule())
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
@@ -160,6 +350,21 @@ struct DocumentCard: View {
                         .font(.system(size: 14, weight: .bold))
                         .foregroundColor(Color.textPrimary)
                         .lineLimit(1)
+                    // Both signals were computed server-side and stored, and
+                    // neither had anywhere to appear until now — a duplicate
+                    // and a misread both looked exactly like a normal row.
+                    if doc.isDuplicateDocument || doc.needsCorrection {
+                        HStack(spacing: 5) {
+                            if doc.isDuplicateDocument {
+                                reviewBadge("ซ้ำ", "doc.on.doc.fill", Color.statusFailed)
+                            }
+                            if doc.needsCorrection {
+                                reviewBadge(doc.correctionSummary, "exclamationmark.triangle.fill",
+                                            Color(hex: "#f59e0b"))
+                            }
+                        }
+                        .padding(.top, 1)
+                    }
                     if let inv = doc.invoiceNumber {
                         Text(inv)
                             .font(.system(size: 12))

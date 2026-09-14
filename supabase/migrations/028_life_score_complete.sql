@@ -24,9 +24,7 @@ CREATE TABLE IF NOT EXISTS life_score_snapshots (
   created_at       timestamptz DEFAULT now(),
   UNIQUE (organization_id, snapshot_date)
 );
-
 CREATE INDEX idx_lss_org ON life_score_snapshots(organization_id, snapshot_date DESC);
-
 -- ─── Compute Life Score for an org ───────────────────────────────────────────
 CREATE OR REPLACE FUNCTION compute_life_score_new(p_org_id uuid)
 RETURNS jsonb LANGUAGE plpgsql AS $$
@@ -162,14 +160,11 @@ BEGIN
   );
 END;
 $$;
-
 -- RLS
 ALTER TABLE life_score_snapshots ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "lss_member" ON life_score_snapshots FOR ALL USING (
   organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid())
 );
-
-
 -- Drop old version if owned by us, then alias
 DROP FUNCTION IF EXISTS compute_life_score(uuid);
 ALTER FUNCTION compute_life_score_new(uuid) RENAME TO compute_life_score;

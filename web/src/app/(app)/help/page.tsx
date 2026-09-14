@@ -20,7 +20,7 @@ const topics = [
 
 export default function HelpPage() {
   return (
-    <div className="p-6 lg:p-7 max-w-[900px] animate-fade-in">
+    <div className="page-narrow animate-fade-in">
       <div className="mb-8">
         <h2 className="text-2xl font-bold">ช่วยเหลือ & คำถามที่พบบ่อย</h2>
         <p className="text-muted-foreground mt-1">ค้นหาคำตอบหรือติดต่อทีมงาน</p>

@@ -20,6 +20,7 @@ import {
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { logClientError } from "@/lib/log-error"
+import { ImageCropStep } from "./image-crop-step"
 
 // ─── Image compression constants ─────────────────────────────────────────────
 const MAX_IMAGE_PX    = 1920           // longest side in pixels (sufficient for Claude vision)
@@ -583,6 +584,9 @@ export function DashboardUploadZone({ orgId, orgSlug, compact = false }: Props) 
   const [progress, setProgress] = useState(0)
   const [fileName, setFileName] = useState("")
   const [isDrag,   setIsDrag]   = useState(false)
+  // Image (not PDF) that's passed validation/normalization and is waiting on
+  // the optional manual-crop step before upload — see image-crop-step.tsx.
+  const [pendingCropFile, setPendingCropFile] = useState<File | null>(null)
 
   // Email popover
   const [emailOpen, setEmailOpen] = useState(false)
@@ -602,11 +606,13 @@ export function DashboardUploadZone({ orgId, orgSlug, compact = false }: Props) 
 
   const uploadEmail = orgSlug ? `${orgSlug}@docs.slippy.app` : ""
 
-  // ── Core upload logic ──────────────────────────────────────────────────────
-  const processFile = useCallback(async (raw: File) => {
+  // ── Validate + normalize (size check, document-likeness, HEIC/compression) ──
+  // Split out from the actual upload so the manual crop step (image-crop-step.tsx)
+  // can sit between the two — only for raster images, PDFs skip straight through.
+  const prepareFile = useCallback(async (raw: File): Promise<File | null> => {
     if (raw.size > MAX_BYTES) {
       toast.error(`ไฟล์ใหญ่เกิน 20MB (${(raw.size / 1024 / 1024).toFixed(1)} MB)`)
-      return
+      return null
     }
 
     // ── Validate before uploading ───────────────────────────────────────────
@@ -619,7 +625,7 @@ export function DashboardUploadZone({ orgId, orgSlug, compact = false }: Props) 
         description: "ระบบรับเฉพาะใบเสร็จ, ใบกำกับภาษี, บิล, สลิปโอนเงิน และเอกสารทางการเงินเท่านั้น",
       })
       setStatus("idle")
-      return
+      return null
     }
 
     setStatus("converting")
@@ -633,10 +639,15 @@ export function DashboardUploadZone({ orgId, orgSlug, compact = false }: Props) 
       })
       toast.error("แปลงไฟล์ไม่สำเร็จ กรุณาลองใหม่")
       setStatus("idle")
-      return
+      return null
     }
-    setFileName(file.name)
+    return file
+  }, [])
 
+  // ── Core upload logic — runs after prepareFile (and, for images, after the
+  //    optional crop step) has produced the final file to send. ──────────────
+  const uploadFile = useCallback(async (file: File) => {
+    setFileName(file.name)
     setStatus("uploading")
     setProgress(10)
 
@@ -707,6 +718,20 @@ export function DashboardUploadZone({ orgId, orgSlug, compact = false }: Props) 
       router.push(`/documents/${doc.id}/review`)
     }
   }, [orgId, router])
+
+  // ── Entry point for every file source (drop, picker, paste, camera) ────────
+  // Validates/normalizes first; raster images then pause on the manual crop
+  // step (image-crop-step.tsx) before uploading — PDFs go straight through.
+  const handleIncomingFile = useCallback(async (raw: File) => {
+    const file = await prepareFile(raw)
+    if (!file) return
+    if (file.type.startsWith("image/")) {
+      setStatus("idle")
+      setPendingCropFile(file)
+    } else {
+      await uploadFile(file)
+    }
+  }, [prepareFile, uploadFile])
 
   // ── Camera: stop stream helper ─────────────────────────────────────────────
   const stopStream = useCallback(() => {
@@ -832,10 +857,10 @@ export function DashboardUploadZone({ orgId, orgSlug, compact = false }: Props) 
       const file = new File([blob], `photo_${Date.now()}.jpg`, { type: "image/jpeg" })
       // Close camera first so user sees feedback immediately
       closeCamera()
-      // processFile handles validation internally
-      await processFile(file)
+      // handleIncomingFile re-validates + offers the crop step
+      await handleIncomingFile(file)
     }, "image/jpeg", 0.92)
-  }, [closeCamera, processFile])
+  }, [closeCamera, handleIncomingFile])
 
   // ── Drag-and-drop handlers ─────────────────────────────────────────────────
   const onDragOver  = (e: React.DragEvent) => { e.preventDefault(); setIsDrag(true)  }
@@ -843,12 +868,12 @@ export function DashboardUploadZone({ orgId, orgSlug, compact = false }: Props) 
   const onDrop      = (e: React.DragEvent) => {
     e.preventDefault(); setIsDrag(false)
     const file = e.dataTransfer.files[0]
-    if (file) processFile(file)
+    if (file) handleIncomingFile(file)
   }
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) processFile(file)
+    if (file) handleIncomingFile(file)
     e.target.value = ""
   }
 
@@ -868,7 +893,7 @@ export function DashboardUploadZone({ orgId, orgSlug, compact = false }: Props) 
       if (blob) {
         const ext  = imageItem.type === "image/png" ? "png" : "jpg"
         const file = new File([blob], `paste_${Date.now()}.${ext}`, { type: imageItem.type })
-        processFile(file)
+        handleIncomingFile(file)
         return
       }
     }
@@ -877,9 +902,9 @@ export function DashboardUploadZone({ orgId, orgSlug, compact = false }: Props) 
     const fileItem = items.find(i => i.kind === "file" && !i.type.startsWith("text/"))
     if (fileItem) {
       const file = fileItem.getAsFile()
-      if (file) { processFile(file); return }
+      if (file) { handleIncomingFile(file); return }
     }
-  }, [status, processFile])
+  }, [status, handleIncomingFile])
 
   // Listen for global paste event
   useEffect(() => {
@@ -912,6 +937,18 @@ export function DashboardUploadZone({ orgId, orgSlug, compact = false }: Props) 
     document.addEventListener("keydown", handler)
     return () => document.removeEventListener("keydown", handler)
   }, [cameraOpen, closeCamera])
+
+  // ── Manual crop step (images only) — see image-crop-step.tsx ───────────────
+  if (pendingCropFile) {
+    return (
+      <ImageCropStep
+        file={pendingCropFile}
+        onConfirm={(cropped) => { setPendingCropFile(null); uploadFile(cropped) }}
+        onSkip={() => { const f = pendingCropFile; setPendingCropFile(null); uploadFile(f) }}
+        onCancel={() => setPendingCropFile(null)}
+      />
+    )
+  }
 
   // ── Uploading / processing state ───────────────────────────────────────────
   if (status !== "idle") {

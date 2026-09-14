@@ -59,7 +59,7 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const body = await req.json() as {
-    action: "mark_paid" | "mark_unpaid" | "assign_item" | "finalize" | "remove_participant"
+    action: "mark_paid" | "mark_unpaid" | "assign_item" | "finalize" | "remove_participant" | "reject_proof"
     participantId?: string
     lineItemId?:    string
   }
@@ -69,6 +69,46 @@ export async function PATCH(
     await admin.from("split_participants").update({
       paid_at: body.action === "mark_paid" ? new Date().toISOString() : null,
     }).eq("id", body.participantId!).eq("split_bill_id", id)
+
+    // Push LINE notification to participant's LINE account if available
+    if (body.action === "mark_paid") {
+      try {
+        const { data: p } = await admin.from("split_participants")
+          .select("name, line_user_id, amount")
+          .eq("id", body.participantId!).single()
+        const { data: bill } = await admin.from("split_bills")
+          .select("title, line_group_id").eq("id", id).single()
+        if (p?.line_user_id) {
+          const apiBase    = process.env.API_BASE_URL ?? "https://slippy-api.vercel.app"
+          const internalKey = process.env.INTERNAL_API_KEY ?? ""
+          await fetch(`${apiBase}/split/notify`, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json", "x-internal-key": internalKey },
+            body:    JSON.stringify({
+              billId:        id,
+              event:         "paid",
+              lineUserId:    p.line_user_id,
+              participantName: p.name,
+              amount:        p.amount,
+              billTitle:     bill?.title,
+            }),
+          }).catch(() => { /* non-critical */ })
+        }
+      } catch { /* non-critical */ }
+    }
+
+    return NextResponse.json({ ok: true })
+  }
+
+  // reject_proof — clear a participant's uploaded slip so they can re-upload,
+  // without marking them as paid.
+  if (body.action === "reject_proof") {
+    if (!body.participantId) return NextResponse.json({ error: "Missing participantId" }, { status: 400 })
+    const admin = createAdminClient()
+    await admin.from("split_participants").update({
+      payment_proof_url: null,
+      paid_at:           null,
+    }).eq("id", body.participantId).eq("split_bill_id", id)
     return NextResponse.json({ ok: true })
   }
 
@@ -84,6 +124,19 @@ export async function PATCH(
 
   if (body.action === "finalize") {
     await supabase.from("split_bills").update({ status: "finalized" }).eq("id", id)
+
+    // Was previously silent — closing a bill never told the group at all,
+    // unlike the equivalent sport-session finalize action which already
+    // pushes a closure card. Same fire-and-forget pattern used elsewhere in
+    // this file (see mark_paid above).
+    if (process.env.API_BASE_URL && process.env.INTERNAL_API_KEY) {
+      fetch(`${process.env.API_BASE_URL}/split/notify`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", "x-internal-key": process.env.INTERNAL_API_KEY },
+        body:    JSON.stringify({ billId: id, event: "finalize" }),
+      }).catch(() => { /* non-critical */ })
+    }
+
     return NextResponse.json({ ok: true })
   }
 

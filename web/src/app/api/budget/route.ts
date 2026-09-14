@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient }       from "@/lib/supabase/server"
 import { createAdminClient }  from "@/lib/supabase/admin"
+import { isOrgMember }        from "@/lib/require-org-member"
 
 // Budgets stored in organizations.metadata->budgets as JSON
 // Format: { "2026-06": { total: 50000, categories: { "consumer_receipt": 15000, ... } } }
@@ -58,6 +59,9 @@ export async function POST(req: NextRequest) {
     month:      string   // "YYYY-MM"
     total:      number
     categories: Record<string, number>
+  }
+  if (!(await isOrgMember(user.id, orgId))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
   const admin = createAdminClient()

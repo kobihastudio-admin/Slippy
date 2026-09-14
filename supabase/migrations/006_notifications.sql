@@ -19,15 +19,12 @@ CREATE TABLE IF NOT EXISTS notifications (
   read_at         timestamptz,
   created_at      timestamptz NOT NULL DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS notifications_org_unread
   ON notifications (organization_id, created_at DESC)
   WHERE read_at IS NULL;
-
 CREATE INDEX IF NOT EXISTS notifications_user_unread
   ON notifications (user_id, created_at DESC)
   WHERE read_at IS NULL;
-
 -- ── Client Error Logs (browser-side errors: HEIC, camera, upload) ─────────────
 CREATE TABLE IF NOT EXISTS client_error_logs (
   id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -45,24 +42,19 @@ CREATE TABLE IF NOT EXISTS client_error_logs (
   resolved_note   text,
   created_at      timestamptz NOT NULL DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS client_error_logs_type_unresolved
   ON client_error_logs (error_type, created_at DESC)
   WHERE resolved = false;
-
 CREATE INDEX IF NOT EXISTS client_error_logs_user
   ON client_error_logs (user_id, created_at DESC);
-
 -- ── GRANTS ───────────────────────────────────────────────────────────────────
 GRANT SELECT, INSERT, UPDATE ON TABLE notifications     TO authenticated;
 GRANT SELECT, INSERT          ON TABLE client_error_logs TO authenticated;
 -- anon can also INSERT errors (user might not be logged in when error occurs)
 GRANT INSERT                  ON TABLE client_error_logs TO anon;
-
 -- ── RLS ──────────────────────────────────────────────────────────────────────
 ALTER TABLE notifications       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE client_error_logs   ENABLE ROW LEVEL SECURITY;
-
 -- notifications: users see their own org's notifications
 CREATE POLICY "notifications_org_select" ON notifications
   FOR SELECT USING (
@@ -72,7 +64,6 @@ CREATE POLICY "notifications_org_select" ON notifications
     )
     OR user_id = auth.uid()
   );
-
 CREATE POLICY "notifications_update_own" ON notifications
   FOR UPDATE USING (
     organization_id IN (
@@ -81,10 +72,8 @@ CREATE POLICY "notifications_update_own" ON notifications
     )
     OR user_id = auth.uid()
   );
-
 -- client_error_logs: anyone can INSERT (for logging), only service_role reads
 CREATE POLICY "error_logs_insert" ON client_error_logs
   FOR INSERT WITH CHECK (true);
-
 CREATE POLICY "error_logs_own_select" ON client_error_logs
   FOR SELECT USING (user_id = auth.uid());

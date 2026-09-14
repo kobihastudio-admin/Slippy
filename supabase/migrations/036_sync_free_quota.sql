@@ -8,19 +8,16 @@ UPDATE organizations
 SET    doc_quota = 15
 WHERE  plan      = 'free'
   AND  doc_quota = 10;
-
 -- 2. Also handle orgs on 'starter' plan (same haiku tier, was also 10 in old schema)
 UPDATE organizations
 SET    doc_quota = 15
 WHERE  plan      = 'starter'
   AND  doc_quota = 10;
-
 -- 3. Update pricing_plans table to stay in sync (idempotent)
 UPDATE pricing_plans
 SET    doc_quota = 15
 WHERE  id = 'free'
   AND  doc_quota != 15;
-
 -- Verify
 DO $$
 DECLARE

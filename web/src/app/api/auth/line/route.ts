@@ -11,6 +11,7 @@
  *     LINE_LOGIN_CHANNEL_SECRET = channel secret
  */
 import { NextRequest, NextResponse } from "next/server"
+import { getAppUrl } from "@/lib/app-url"
 import crypto from "node:crypto"
 import { cookies } from "next/headers"
 
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
   // the `slippy://auth/callback` custom URL scheme instead of redirecting to
   // a web page (see `line/callback/route.ts`).
   const platform = searchParams.get("platform") === "ios" ? "ios" : "web"
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
+  const appUrl = getAppUrl()
 
   // CSRF protection: random state stored in cookie
   const state = crypto.randomBytes(16).toString("hex")

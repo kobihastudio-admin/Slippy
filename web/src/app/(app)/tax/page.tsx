@@ -26,7 +26,7 @@ export default async function TaxPage() {
   // Org tax — no extra data needed (fetched client-side)
   if (accountType === "business") {
     return (
-      <div className="p-6 lg:p-7 max-w-[1600px]">
+      <div className="page-wide">
         <TaxPageClient orgId={orgId} />
       </div>
     )

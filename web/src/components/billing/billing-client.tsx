@@ -121,7 +121,7 @@ export function BillingClient({ org, invoices: dbInvoices, userRole }: Props) {
   }
 
   return (
-    <div className="p-6 lg:p-7 space-y-6 max-w-[1200px] animate-fade-in">
+    <div className="page space-y-6 animate-fade-in">
 
       {/* ── Success banner ─────────────────────────────────────────────────── */}
       {successBanner && (
@@ -342,7 +342,9 @@ export function BillingClient({ org, invoices: dbInvoices, userRole }: Props) {
                 <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full
                   bg-muted text-[11px] text-muted-foreground">
                   <FileText className="w-3 h-3" />
-                  {plan.docQuota === 0 ? "ไม่จำกัด" : `${plan.docQuota.toLocaleString()} ใบ/เดือน`}
+                  {plan.docQuota === 0
+                    ? `ไม่จำกัด${plan.fairUseCapDocs ? ` (Fair use ~${plan.fairUseCapDocs.toLocaleString()}/เดือน)` : ""}`
+                    : `${plan.docQuota.toLocaleString()} ใบ/เดือน`}
                 </div>
               </div>
 

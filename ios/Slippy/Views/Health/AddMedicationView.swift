@@ -24,6 +24,14 @@ struct AddMedicationView: View {
     @State private var strength: String
     @State private var purpose: String
     @State private var notes = ""
+    @State private var selectedProvider: MedicalProvider?
+    @State private var doctorName: String
+    @State private var doctorInstructions: String
+    @State private var locCode: String
+    @State private var lotNo: String
+    @State private var qtyPerPack: String
+    @State private var alreadyTaken = ""
+    @State private var showProviderPicker = false
     @State private var isSaving = false
     @State private var errorMsg: String?
 
@@ -34,7 +42,7 @@ struct AddMedicationView: View {
     @State private var doseQty: String
     @State private var mealRelation: String
     @State private var reminderEnabled = true
-    @State private var qtyTotal: String
+    @State private var isBedtime = false
     @State private var lowStockAlert = "7"
     @State private var hasExpiry: Bool
     @State private var expiryDate: Date
@@ -52,13 +60,24 @@ struct AddMedicationView: View {
         _strength    = State(initialValue: editing?.strength ?? scanned?.strength ?? "")
         _purpose     = State(initialValue: editing?.purpose ?? scanned?.purpose ?? "")
         _notes       = State(initialValue: editing?.notes ?? "")
+        _doctorName         = State(initialValue: editing?.doctorName ?? scanned?.prescribingDoctor ?? "")
+        _doctorInstructions = State(initialValue: editing?.doctorInstructions ?? scanned?.instructionsVerbatim ?? "")
+        _locCode            = State(initialValue: inv?.locCode ?? "")
+        _lotNo              = State(initialValue: inv?.lotNo ?? scanned?.lotNo ?? "")
+        // Editing must reproduce the CURRENT stock by default, not silently
+        // reset it to a full pack — packSizeSeed falls back to qtyRemaining
+        // (never blank when there's an existing inventory row), and
+        // alreadyTaken is derived so computedRemaining == qtyRemaining
+        // unless the user actually touches the calculator.
+        let packSizeSeed = inv?.qtyPerPack ?? scanned?.qtyTotal ?? inv?.qtyRemaining
+        _qtyPerPack         = State(initialValue: packSizeSeed.map { String(Int($0)) } ?? "")
+        _alreadyTaken       = State(initialValue: inv.map { String(Int(max((packSizeSeed ?? $0.qtyRemaining) - $0.qtyRemaining, 0))) } ?? "")
         _times       = State(initialValue: (sched?.times.isEmpty == false ? sched?.times
                               : (scanned?.times.isEmpty == false ? scanned?.times : nil)) ?? ["08:00"])
         _doseQty     = State(initialValue: String(sched?.doseQty ?? scanned?.doseQty ?? 1))
         _mealRelation = State(initialValue: sched?.mealRelation ?? scanned?.mealRelation ?? "after")
         _reminderEnabled = State(initialValue: sched?.reminderEnabled ?? true)
-        _qtyTotal    = State(initialValue: inv?.qtyRemaining.map { String(Int($0)) }
-                              ?? scanned?.qtyTotal.map { String(Int($0)) } ?? "")
+        _isBedtime = State(initialValue: sched?.isBedtime ?? false)
         _lowStockAlert = State(initialValue: inv.map { String(Int($0.lowStockAlert)) } ?? "7")
         let expiry = (inv?.expiryDate ?? scanned?.expiryDate).flatMap(Self.date(fromISODate:))
         _hasExpiry   = State(initialValue: expiry != nil)
@@ -79,6 +98,25 @@ struct AddMedicationView: View {
         ("cream",     "🧴 ครีม"),
         ("other",     "💊 อื่นๆ"),
     ]
+
+    /// Clamped to 0 — a negative remaining count from a plausible input
+    /// mistake (already-taken typed larger than the pack) degrades to "none
+    /// left" rather than persisting a negative stock figure.
+    private var computedRemaining: Double {
+        max((Double(qtyPerPack) ?? 0) - (Double(alreadyTaken) ?? 0), 0)
+    }
+
+    /// Broken out of the schedule `VStack` — inlining it there pushed the
+    /// surrounding ViewBuilder closure (ForEach + Toggle + Button) past
+    /// what the type-checker will resolve in reasonable time.
+    @ViewBuilder
+    private var bedtimeToggle: some View {
+        Toggle(isOn: $isBedtime) {
+            Text("🌙 ยาก่อนนอน — ไม่ต้องระบุเวลาแม่นยำ")
+                .font(.system(size: 12, weight: .medium))
+        }
+        .tint(healthGreen)
+    }
 
     var body: some View {
         NavigationStack {
@@ -123,6 +161,70 @@ struct AddMedicationView: View {
                         }
                     }
 
+                    // Source
+                    fieldSection(title: "โรงพยาบาล/ร้านยา") {
+                        Button {
+                            showProviderPicker = true
+                        } label: {
+                            HStack {
+                                Text(selectedProvider?.name ?? "ไม่ระบุ")
+                                    .foregroundColor(selectedProvider == nil ? .textSecondary : .textPrimary)
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.system(size: 12)).foregroundColor(.textSecondary)
+                            }
+                            .font(.system(size: 15))
+                            .padding(12)
+                            .background(Color.background)
+                            .cornerRadius(10)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    HStack(spacing: 12) {
+                        fieldSection(title: "ชื่อแพทย์") {
+                            TextField("เช่น นพ.สมชาย", text: $doctorName)
+                                .font(.system(size: 15))
+                                .padding(12)
+                                .background(Color.background)
+                                .cornerRadius(10)
+                        }
+                        fieldSection(title: "HN") {
+                            Text(selectedProvider?.hn ?? "—")
+                                .font(.system(size: 15))
+                                .foregroundColor(.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(12)
+                                .background(Color.background)
+                                .cornerRadius(10)
+                        }
+                    }
+
+                    fieldSection(title: "รายละเอียดที่หมอกำหนด") {
+                        TextField("เช่น ทาน 1 เม็ด เช้า-เย็น หลังอาหาร", text: $doctorInstructions, axis: .vertical)
+                            .font(.system(size: 15))
+                            .lineLimit(2, reservesSpace: true)
+                            .padding(12)
+                            .background(Color.background)
+                            .cornerRadius(10)
+                    }
+
+                    HStack(spacing: 12) {
+                        fieldSection(title: "LOC") {
+                            TextField("รหัสบนซอง", text: $locCode)
+                                .font(.system(size: 15))
+                                .padding(12)
+                                .background(Color.background)
+                                .cornerRadius(10)
+                        }
+                        fieldSection(title: "LOT") {
+                            TextField("เลขล็อต", text: $lotNo)
+                                .font(.system(size: 15))
+                                .padding(12)
+                                .background(Color.background)
+                                .cornerRadius(10)
+                        }
+                    }
+
                     // Dosage form picker
                     fieldSection(title: "รูปแบบยา") {
                         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
@@ -150,31 +252,46 @@ struct AddMedicationView: View {
                     // Reminder schedule
                     fieldSection(title: "เวลาแจ้งเตือน") {
                         VStack(spacing: 8) {
-                            ForEach(times.indices, id: \.self) { i in
-                                HStack(spacing: 8) {
-                                    DatePicker("", selection: Binding(
-                                        get: { Self.time(from: times[i]) },
-                                        set: { times[i] = Self.timeString(from: $0) }
-                                    ), displayedComponents: .hourAndMinute)
-                                    .labelsHidden()
-                                    Spacer()
-                                    if times.count > 1 {
-                                        Button {
-                                            times.remove(at: i)
-                                        } label: {
-                                            Image(systemName: "xmark.circle.fill")
-                                                .foregroundColor(.textSecondary)
+                            // Bedtime hides the picker rather than merely
+                            // labeling it — "ไม่ต้องระบุเวลาแม่นยำ" means the
+                            // user isn't asked to touch a clock at all. A real
+                            // HH:mm is still stored (LINE reminders still fire
+                            // on it); toggling on seeds a 22:00 default only
+                            // if times is still at its untouched default, so
+                            // an already-customized time survives the toggle.
+                            if !isBedtime {
+                                ForEach(times.indices, id: \.self) { i in
+                                    HStack(spacing: 8) {
+                                        DatePicker("", selection: Binding(
+                                            get: { Self.time(from: times[i]) },
+                                            set: { times[i] = Self.timeString(from: $0) }
+                                        ), displayedComponents: .hourAndMinute)
+                                        .labelsHidden()
+                                        Spacer()
+                                        if times.count > 1 {
+                                            Button {
+                                                times.remove(at: i)
+                                            } label: {
+                                                Image(systemName: "xmark.circle.fill")
+                                                    .foregroundColor(.textSecondary)
+                                            }
                                         }
                                     }
                                 }
                             }
-                            Button {
-                                hapticLight()
-                                times.append("12:00")
-                            } label: {
-                                Label("เพิ่มเวลา", systemImage: "plus.circle")
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundColor(healthGreen)
+                            bedtimeToggle
+                                .onChange(of: isBedtime) { newValue in
+                                    if newValue && times == ["08:00"] { times = ["22:00"] }
+                                }
+                            if !isBedtime {
+                                Button {
+                                    hapticLight()
+                                    times.append("12:00")
+                                } label: {
+                                    Label("เพิ่มเวลา", systemImage: "plus.circle")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(healthGreen)
+                                }
                             }
                         }
                         .padding(12)
@@ -210,24 +327,50 @@ struct AddMedicationView: View {
                     }
                     .tint(healthGreen)
 
-                    // Inventory
+                    // Inventory — pack size minus already-taken gives the
+                    // remaining count. init() seeds both fields so opening
+                    // this on an existing medication starts computedRemaining
+                    // at the current qtyRemaining — saving without touching
+                    // either field must never silently reset stock to a full
+                    // pack.
                     HStack(spacing: 12) {
-                        fieldSection(title: "จำนวนที่มี") {
-                            TextField("30", text: $qtyTotal)
+                        fieldSection(title: "จำนวนต่อกล่อง") {
+                            TextField("30", text: $qtyPerPack)
                                 .keyboardType(.decimalPad)
                                 .font(.system(size: 15))
                                 .padding(12)
                                 .background(Color.background)
                                 .cornerRadius(10)
                         }
-                        fieldSection(title: "แจ้งเตือนเมื่อเหลือ") {
-                            TextField("7", text: $lowStockAlert)
+                        fieldSection(title: "ทานไปแล้ว") {
+                            TextField("0", text: $alreadyTaken)
                                 .keyboardType(.decimalPad)
                                 .font(.system(size: 15))
                                 .padding(12)
                                 .background(Color.background)
                                 .cornerRadius(10)
                         }
+                    }
+                    HStack {
+                        Text("คงเหลือ")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.textSecondary)
+                        Spacer()
+                        Text(computedRemaining.clean)
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(healthGreen)
+                    }
+                    .padding(12)
+                    .background(Color.background)
+                    .cornerRadius(10)
+
+                    fieldSection(title: "แจ้งเตือนเมื่อเหลือ") {
+                        TextField("7", text: $lowStockAlert)
+                            .keyboardType(.decimalPad)
+                            .font(.system(size: 15))
+                            .padding(12)
+                            .background(Color.background)
+                            .cornerRadius(10)
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
@@ -244,13 +387,18 @@ struct AddMedicationView: View {
                     }
 
                     // Notes field
-                    fieldSection(title: "หมายเหตุ (ไม่บังคับ)") {
+                    fieldSection(title: scanned == nil ? "หมายเหตุ (ไม่บังคับ)" : "หมายเหตุจากฉลาก") {
                         TextField("เช่น ทานหลังอาหาร, ทาน 1 เม็ด เช้า-เย็น", text: $notes, axis: .vertical)
                             .font(.system(size: 15))
                             .lineLimit(3, reservesSpace: true)
                             .padding(12)
                             .background(Color.background)
                             .cornerRadius(10)
+                        if scanned != nil {
+                            Label("สแกนจากฉลาก · ตรวจสอบก่อนบันทึก", systemImage: "text.viewfinder")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(healthGreen)
+                        }
                     }
 
                     if let err = errorMsg {
@@ -292,6 +440,21 @@ struct AddMedicationView: View {
                         .foregroundColor(.textSecondary)
                 }
             }
+            .sheet(isPresented: $showProviderPicker) {
+                if let userId = authVM.session?.user.id.uuidString {
+                    ProviderPickerView(vm: vm, userId: userId, selected: $selectedProvider)
+                }
+            }
+            .task {
+                guard selectedProvider == nil else { return }
+                if let providerId = editing?.provider?.id {
+                    selectedProvider = vm.providers.first { $0.id == providerId }
+                } else if let hospitalName = scanned?.hospitalName, !hospitalName.isEmpty {
+                    selectedProvider = vm.providers.first {
+                        $0.name.caseInsensitiveCompare(hospitalName) == .orderedSame
+                    }
+                }
+            }
         }
     }
 
@@ -326,14 +489,21 @@ struct AddMedicationView: View {
                     notes: notes.trimmingCharacters(in: .whitespaces),
                     strength: strength.trimmingCharacters(in: .whitespaces),
                     purpose: purpose.trimmingCharacters(in: .whitespaces),
+                    providerId: selectedProvider?.id,
+                    doctorName: doctorName.trimmingCharacters(in: .whitespaces),
+                    doctorInstructions: doctorInstructions.trimmingCharacters(in: .whitespaces),
                     times: times,
                     doseQty: Double(doseQty) ?? 1,
                     mealRelation: mealRelation,
                     reminderEnabled: reminderEnabled,
-                    qtyRemaining: Double(qtyTotal) ?? 0,
+                    isBedtime: isBedtime,
+                    qtyRemaining: computedRemaining,
                     qtyUnit: "เม็ด",
+                    qtyPerPack: Double(qtyPerPack),
                     lowStockAlert: Double(lowStockAlert) ?? 7,
-                    expiryDate: hasExpiry ? Self.isoDateString(from: expiryDate) : nil
+                    expiryDate: hasExpiry ? Self.isoDateString(from: expiryDate) : nil,
+                    locCode: locCode.trimmingCharacters(in: .whitespaces),
+                    lotNo: lotNo.trimmingCharacters(in: .whitespaces)
                 )
             } else {
                 try await vm.addMedication(
@@ -344,14 +514,22 @@ struct AddMedicationView: View {
                     notes: notes.trimmingCharacters(in: .whitespaces),
                     strength: strength.trimmingCharacters(in: .whitespaces),
                     purpose: purpose.trimmingCharacters(in: .whitespaces),
+                    providerId: selectedProvider?.id,
+                    doctorName: doctorName.trimmingCharacters(in: .whitespaces),
+                    doctorInstructions: doctorInstructions.trimmingCharacters(in: .whitespaces),
+                    instructionSource: scanned?.instructionsVerbatim == nil ? "user" : "label",
                     times: times,
                     doseQty: Double(doseQty) ?? 1,
                     mealRelation: mealRelation,
                     reminderEnabled: reminderEnabled,
-                    qtyTotal: Double(qtyTotal) ?? 0,
+                    isBedtime: isBedtime,
+                    qtyTotal: computedRemaining,
                     qtyUnit: "เม็ด",
+                    qtyPerPack: Double(qtyPerPack),
                     lowStockAlert: Double(lowStockAlert) ?? 7,
-                    expiryDate: hasExpiry ? Self.isoDateString(from: expiryDate) : nil
+                    expiryDate: hasExpiry ? Self.isoDateString(from: expiryDate) : nil,
+                    locCode: locCode.trimmingCharacters(in: .whitespaces),
+                    lotNo: lotNo.trimmingCharacters(in: .whitespaces)
                 )
             }
             if reminderEnabled {

@@ -10,6 +10,7 @@
 import { NextResponse }      from "next/server"
 import { createClient }      from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { canSeedDemoData }   from "@/lib/demo/demo-access"
 
 /* ─── VAT helper ─────────────────────────────────────────────────────────── */
 const $ = (t: number) => ({
@@ -552,6 +553,10 @@ const ALL_DOCS = [...JUN25,...JUL25,...AUG25,...SEP25,...OCT25,...NOV25,...DEC25
 
 /* ─── Handler ────────────────────────────────────────────────────────────── */
 export async function POST() {
+  if (!canSeedDemoData(process.env.NODE_ENV)) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

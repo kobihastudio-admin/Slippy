@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient }        from "@/lib/supabase/client"
 import { LogoMark }            from "@/components/ui/logo"
+import { safeRedirectPath }    from "@/lib/safe-redirect"
 
 export default function LineCallbackPage() {
   const router   = useRouter()
@@ -14,8 +15,8 @@ export default function LineCallbackPage() {
   // `next` — optional deep-link destination (e.g. from a LIFF Rich-Menu tap,
   // such as "/personal/health"). Falls back to the usual dashboard/onboarding
   // routing when absent. Only same-origin relative paths are honoured.
-  const next = params.get("next")
-  const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : null
+  const rawNext = params.get("next")
+  const safeNext = rawNext ? safeRedirectPath(rawNext, "") || null : null
 
   useEffect(() => {
     async function handleSession() {
@@ -59,7 +60,7 @@ export default function LineCallbackPage() {
         if (error || !session) {
           console.error("[line-callback] setSession error:", error?.message)
           setStatus("สร้าง session ไม่สำเร็จ")
-          setTimeout(() => router.replace(`/login?error=line_session&detail=${encodeURIComponent(error?.message ?? "")}`), 1500)
+          setTimeout(() => router.replace("/login?error=line_session"), 1500)
           return
         }
 

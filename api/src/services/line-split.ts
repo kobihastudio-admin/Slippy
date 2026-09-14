@@ -4,8 +4,9 @@
  */
 
 import { supabase } from "../lib/supabase"
+import { getAppUrl } from "../lib/app-url"
 
-const APP_URL = process.env.APP_URL ?? "https://slippy.ai"
+const APP_URL = getAppUrl()
 
 function fmtTHB(n: number | null | undefined): string {
   if (!n) return "฿0.00"

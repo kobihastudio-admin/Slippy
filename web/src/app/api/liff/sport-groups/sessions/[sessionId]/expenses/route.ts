@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { rebalance } from "../../../_lib"
-import { loadDetail } from "../route"
+import { loadSessionDetail, rebalance, resolveConnection } from "../../../_lib"
+import { getVerifiedLineUserId, liffUnauthorized } from "@/lib/liff-auth"
 
 async function recomputeTotal(admin: ReturnType<typeof createAdminClient>, sessionId: string) {
   const { data: expenses } = await admin.from("session_expenses")
@@ -31,20 +31,27 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ sess
 //   recomputes split_bills.total_amount and rebalances participants
 export async function POST(req: NextRequest, { params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params
-  const { lineUserId, category, label, amount } = await req.json() as {
+  const body = await req.json() as {
     lineUserId: string
     category: string
     label?: string
     amount: number
   }
-  if (!lineUserId || !category || !amount || amount <= 0) {
+  const lineUserId = getVerifiedLineUserId(req, body.lineUserId)
+  if (!lineUserId) return liffUnauthorized("LINE identity mismatch")
+  const { category, label, amount } = body
+  if (!category || !amount || amount <= 0) {
     return NextResponse.json({ error: "lineUserId, category, amount required" }, { status: 400 })
   }
 
   const admin = createAdminClient()
   const { data: bill } = await admin.from("split_bills")
-    .select("id").eq("id", sessionId).eq("category", "sport").maybeSingle()
+    .select("id, creator_id").eq("id", sessionId).eq("category", "sport").maybeSingle()
   if (!bill) return NextResponse.json({ error: "ไม่พบกลุ่ม" }, { status: 404 })
+  const conn = await resolveConnection(admin, lineUserId)
+  if (!conn || conn.user_id !== bill.creator_id) {
+    return NextResponse.json({ error: "เฉพาะผู้สร้างกลุ่มเท่านั้นที่เพิ่มค่าใช้จ่ายได้" }, { status: 403 })
+  }
 
   const { error } = await admin.from("session_expenses").insert({
     split_bill_id: sessionId, category, label: label || null, amount,
@@ -53,7 +60,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ses
 
   await recomputeTotal(admin, sessionId)
 
-  const detail = await loadDetail(admin, sessionId, lineUserId)
+  const detail = await loadSessionDetail(admin, sessionId, lineUserId)
   return NextResponse.json({ ok: true, expenses: detail?.expenses, total: detail?.expensesTotal, group: detail })
 }
 
@@ -65,12 +72,19 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ s
   if (!expenseId || !lineUserId) return NextResponse.json({ error: "id and lineUserId required" }, { status: 400 })
 
   const admin = createAdminClient()
+  const { data: bill } = await admin.from("split_bills")
+    .select("creator_id").eq("id", sessionId).eq("category", "sport").maybeSingle()
+  if (!bill) return NextResponse.json({ error: "ไม่พบกลุ่ม" }, { status: 404 })
+  const conn = await resolveConnection(admin, lineUserId)
+  if (!conn || conn.user_id !== bill.creator_id) {
+    return NextResponse.json({ error: "เฉพาะผู้สร้างกลุ่มเท่านั้นที่ลบค่าใช้จ่ายได้" }, { status: 403 })
+  }
   const { error } = await admin.from("session_expenses")
     .delete().eq("id", expenseId).eq("split_bill_id", sessionId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   await recomputeTotal(admin, sessionId)
 
-  const detail = await loadDetail(admin, sessionId, lineUserId)
+  const detail = await loadSessionDetail(admin, sessionId, lineUserId)
   return NextResponse.json({ ok: true, expenses: detail?.expenses, total: detail?.expensesTotal, group: detail })
 }

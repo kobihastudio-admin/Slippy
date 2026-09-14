@@ -1,7 +1,7 @@
 import SwiftUI
 import PhotosUI
 
-private let healthGreen = Color(hex: "#10b981")
+private let healthCategory = ActivityCategoryStyle.medication
 
 struct HealthView: View {
     @EnvironmentObject var authVM: AuthViewModel
@@ -13,6 +13,9 @@ struct HealthView: View {
     /// Non-nil while the "ลบยานี้?" confirmation is up — set on swipe, only
     /// actually deleted once the alert's destructive button is tapped.
     @State private var deleteTarget: Medication? = nil
+    @State private var selectedView = 0
+    @State private var courseFilter = "active"
+    @State private var pendingTransition: (course: MedicationCourse, action: String)?
 
     // MARK: – Scan-a-label flow: pick a photo → OCR (read-only) → the SAME
     // add-medication form, pre-filled — nothing is ever written until it goes
@@ -41,21 +44,27 @@ struct HealthView: View {
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
 
+                    Picker("มุมมองยา", selection: $selectedView) {
+                        Text("วันนี้").tag(0)
+                        Text("ยาทั้งหมด").tag(1)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, 16)
+
                     if !vm.notificationsAuthorized && vm.medications.contains(where: { $0.primarySchedule?.reminderEnabled == true }) {
                         notificationBanner
                             .padding(.horizontal, 16)
                     }
 
-                    medicationsSection
-                        .padding(.horizontal, 16)
-
-                    healthTipsSection
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 32)
+                    if selectedView == 0 {
+                        todayTimelineSection.padding(.horizontal, 16)
+                    } else {
+                        medicationsSection.padding(.horizontal, 16)
+                    }
                 }
             }
             .background(Color.background.ignoresSafeArea())
-            .navigationTitle("สุขภาพ")
+            .navigationTitle(healthCategory.label)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -65,7 +74,7 @@ struct HealthView: View {
                     } label: {
                         Image(systemName: "plus")
                             .fontWeight(.semibold)
-                            .foregroundColor(healthGreen)
+                            .foregroundColor(healthCategory.color)
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -75,7 +84,7 @@ struct HealthView: View {
                     } label: {
                         Image(systemName: "text.viewfinder")
                             .fontWeight(.semibold)
-                            .foregroundColor(healthGreen)
+                            .foregroundColor(healthCategory.color)
                     }
                 }
             }
@@ -122,6 +131,20 @@ struct HealthView: View {
                 Button("ยกเลิก", role: .cancel) { deleteTarget = nil }
             } message: {
                 Text("จะซ่อนยานี้จากรายการ — ประวัติการทานยาที่ผ่านมายังเก็บไว้เหมือนเดิม")
+            }
+            .confirmationDialog(
+                transitionTitle,
+                isPresented: Binding(get: { pendingTransition != nil }, set: { if !$0 { pendingTransition = nil } }),
+                titleVisibility: .visible
+            ) {
+                Button("ยืนยัน") {
+                    guard let transition = pendingTransition else { return }
+                    Task { try? await vm.transitionCourse(courseId: transition.course.id, action: transition.action) }
+                    pendingTransition = nil
+                }
+                Button("ยกเลิก", role: .cancel) { pendingTransition = nil }
+            } message: {
+                Text("Slippy จะบันทึกสิ่งที่คุณยืนยันและไม่เปลี่ยนยาแทนแพทย์")
             }
             // MARK: – Scan-a-label
             .confirmationDialog("สแกนฉลากยา", isPresented: $showScanSource, titleVisibility: .visible) {
@@ -190,6 +213,16 @@ struct HealthView: View {
             }
     }
 
+    private var transitionTitle: String {
+        switch pendingTransition?.action {
+        case "pause": return "ยืนยันพักยาชั่วคราว?"
+        case "resume": return "ยืนยันกลับมาใช้ยา?"
+        case "stop": return "ยืนยันหยุดยาถาวร?"
+        case "complete": return "ยืนยันจบคอร์สยา?"
+        default: return "ยืนยันการเปลี่ยนสถานะ?"
+        }
+    }
+
     private func scanLabel(data: Data) async {
         scanning = true
         defer { scanning = false }
@@ -214,18 +247,18 @@ struct HealthView: View {
 
     // MARK: – Summary card
     private var summaryCard: some View {
-        let total = vm.medications.count
+        let total = vm.todayLogs.count
         let taken = vm.takenCountToday
         let progress = total > 0 ? Double(taken) / Double(total) : 0
 
         return ZStack {
             RoundedRectangle(cornerRadius: 18)
                 .fill(LinearGradient(
-                    colors: [Color(hex: "#059669"), healthGreen],
+                    colors: [Color(hex: "#059669"), healthCategory.color],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 ))
-                .shadow(color: healthGreen.opacity(0.3), radius: 12, x: 0, y: 6)
+                .shadow(color: healthCategory.color.opacity(0.3), radius: 12, x: 0, y: 6)
 
             HStack(spacing: 20) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -236,7 +269,7 @@ struct HealthView: View {
                         Text("\(taken)")
                             .font(.system(size: 36, weight: .heavy))
                             .foregroundColor(.white)
-                        Text("/ \(total) รายการ")
+                        Text("/ \(total) โดส")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(.white.opacity(0.8))
                     }
@@ -262,6 +295,67 @@ struct HealthView: View {
             }
             .padding(20)
         }
+    }
+
+    private var todayTimelineSection: some View {
+        let groups = Dictionary(grouping: vm.todayLogs) { log in
+            let formatter = ISO8601DateFormatter()
+            guard let date = formatter.date(from: log.scheduledAt) else { return log.scheduledAt }
+            let output = DateFormatter(); output.dateFormat = "HH:mm"
+            return output.string(from: date)
+        }
+        return VStack(spacing: 12) {
+            if groups.isEmpty {
+                ContentUnavailableView("วันนี้ยังไม่มีรอบยา", systemImage: "pills", description: Text("ยาที่พักอยู่จะไม่ถูกนับเป็นขาดยา"))
+            } else {
+                ForEach(groups.keys.sorted(), id: \.self) { time in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(time).font(.system(size: 18, weight: .bold)).foregroundColor(.textPrimary)
+                            Text(roundLabel(time)).font(.system(size: 11)).foregroundColor(.textSecondary)
+                            Spacer()
+                            let logs = groups[time] ?? []
+                            let resolved = logs.filter { ["taken", "late", "skipped"].contains($0.status) }.count
+                            Text(resolved == logs.count ? "ครบ \(resolved)/\(logs.count)" : "รอยืนยัน \(logs.count - resolved)")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(resolved == logs.count ? .green : .orange)
+                        }
+                        Divider()
+                        ForEach(groups[time] ?? []) { log in
+                            if let med = vm.medications.first(where: { $0.id == log.medicationId }) {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "pills.fill").foregroundColor(healthCategory.color).frame(width: 28, height: 28).background(healthCategory.color.opacity(0.1)).cornerRadius(8)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(med.name + (med.strength.map { " \($0)" } ?? "")).font(.system(size: 13, weight: .semibold))
+                                        Text("\(med.primarySchedule?.doseQty.clean ?? "1") เม็ด").font(.system(size: 11)).foregroundColor(.textSecondary)
+                                        if let instruction = med.currentCourse?.doctorInstructions {
+                                            Text("สแกนจากฉลาก · \(instruction)").lineLimit(1).font(.system(size: 10)).foregroundColor(healthCategory.color)
+                                        }
+                                    }
+                                    Spacer()
+                                    if ["taken", "late"].contains(log.status) {
+                                        Label("ทานแล้ว", systemImage: "checkmark.circle.fill").font(.system(size: 11, weight: .medium)).foregroundColor(.green)
+                                    } else if log.status == "skipped" {
+                                        Text("ข้ามรอบ").font(.system(size: 11)).foregroundColor(.textSecondary)
+                                    } else {
+                                        Button("ทานแล้ว") { Task { try? await vm.updateDose(logId: log.id, status: "taken") } }
+                                            .font(.system(size: 11, weight: .semibold)).buttonStyle(.borderedProminent).tint(healthCategory.color)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(14).background(Color.surface).cornerRadius(15)
+                    .overlay(RoundedRectangle(cornerRadius: 15).stroke(Color.border, lineWidth: 1))
+                }
+            }
+        }
+    }
+
+    private func roundLabel(_ time: String) -> String {
+        guard let hour = Int(time.prefix(2)) else { return "รอบยา" }
+        if hour < 11 { return "รอบเช้า" }; if hour < 16 { return "รอบกลางวัน" }
+        if hour < 21 { return "รอบเย็น" }; return "ก่อนนอน"
     }
 
     // MARK: – Notification permission banner
@@ -301,9 +395,15 @@ struct HealthView: View {
     // MARK: – Medications section
     private var medicationsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("ยาของฉัน")
+            Text("จัดการคอร์สยา")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(.textPrimary)
+
+            Picker("สถานะคอร์ส", selection: $courseFilter) {
+                Text("กำลังใช้").tag("active")
+                Text("พักยา").tag("paused")
+                Text("ประวัติ").tag("history")
+            }.pickerStyle(.segmented)
 
             if vm.isLoading {
                 HStack { Spacer(); ProgressView(); Spacer() }
@@ -311,13 +411,10 @@ struct HealthView: View {
             } else if vm.medications.isEmpty {
                 emptyState
             } else {
-                ForEach(vm.medications) { med in
-                    MedicationCard(med: med, status: vm.todayStatus(for: med.id))
-                        .onTapGesture {
-                            hapticLight()
-                            actionTarget = med
-                            showLogSheet = true
-                        }
+                ForEach(filteredMedications) { med in
+                    MedicationCourseManagementCard(med: med) { course, action in
+                        pendingTransition = (course, action)
+                    }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
                                 hapticLight()
@@ -328,6 +425,14 @@ struct HealthView: View {
                         }
                 }
             }
+        }
+    }
+
+    private var filteredMedications: [Medication] {
+        vm.medications.filter { med in
+            guard let status = med.currentCourse?.status else { return courseFilter == "active" }
+            if courseFilter == "history" { return status == .stopped || status == .completed }
+            return status.rawValue == courseFilter
         }
     }
 
@@ -344,10 +449,10 @@ struct HealthView: View {
             } label: {
                 Text("เพิ่มยา")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(healthGreen)
+                    .foregroundColor(healthCategory.color)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
-                    .background(healthGreen.opacity(0.12))
+                    .background(healthCategory.color.opacity(0.12))
                     .clipShape(Capsule())
             }
         }
@@ -399,6 +504,47 @@ struct HealthView: View {
     }
 }
 
+private struct MedicationCourseManagementCard: View {
+    let med: Medication
+    let transition: (MedicationCourse, String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "cross.case.fill").foregroundColor(healthCategory.color).frame(width: 38, height: 38).background(healthCategory.color.opacity(0.1)).cornerRadius(10)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack {
+                        Text(med.name + (med.strength.map { " \($0)" } ?? "")).font(.system(size: 14, weight: .semibold))
+                        if let course = med.currentCourse {
+                            Text(statusLabel(course)).font(.system(size: 9, weight: .semibold)).padding(.horizontal, 7).padding(.vertical, 3).background(statusColor(course).opacity(0.12)).foregroundColor(statusColor(course)).clipShape(Capsule())
+                        }
+                    }
+                    if let course = med.currentCourse {
+                        Text("เริ่ม \(course.startDate)" + (course.plannedEndDate.map { " · ถึง \($0)" } ?? "")).font(.system(size: 10)).foregroundColor(.textSecondary)
+                        if let instruction = course.doctorInstructions {
+                            Text("สแกนจากฉลาก · \(instruction)").font(.system(size: 10)).foregroundColor(healthCategory.color).lineLimit(2)
+                        }
+                    }
+                    if let inventory = med.inventory { Text("เหลือ \(inventory.qtyRemaining.clean) \(inventory.qtyUnit)").font(.system(size: 10)).foregroundColor(.textSecondary) }
+                }
+                Spacer()
+            }
+            if let course = med.currentCourse, course.status == .active {
+                HStack { Spacer(); Button("พักยา") { transition(course, "pause") }.buttonStyle(.bordered).font(.system(size: 11)); Button("จบคอร์ส") { transition(course, "complete") }.buttonStyle(.bordered).font(.system(size: 11)); Button("หยุดยา") { transition(course, "stop") }.buttonStyle(.bordered).tint(.red).font(.system(size: 11)) }
+            } else if let course = med.currentCourse, course.status == .paused {
+                HStack { Spacer(); Button("กลับมาใช้") { transition(course, "resume") }.buttonStyle(.borderedProminent).tint(healthCategory.color).font(.system(size: 11)); Button("หยุดถาวร") { transition(course, "stop") }.buttonStyle(.bordered).tint(.red).font(.system(size: 11)) }
+            }
+        }.padding(14).background(Color.surface).cornerRadius(15).overlay(RoundedRectangle(cornerRadius: 15).stroke(Color.border, lineWidth: 1))
+    }
+
+    private func statusLabel(_ course: MedicationCourse) -> String {
+        if course.status == .active, let end = course.plannedEndDate, end <= Self.today { return "ครบกำหนด — รอยืนยัน" }
+        return [.active: "กำลังใช้", .paused: "พักยา", .stopped: "หยุดแล้ว", .completed: "จบคอร์ส"][course.status] ?? ""
+    }
+    private func statusColor(_ course: MedicationCourse) -> Color { course.status == .active ? .green : course.status == .paused ? .orange : .gray }
+    private static var today: String { let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f.string(from: Date()) }
+}
+
 // MARK: – Medication card
 private struct MedicationCard: View {
     let med: Medication
@@ -448,7 +594,7 @@ private struct MedicationCard: View {
                             .foregroundColor(.textSecondary)
                     }
                     if let sched = med.primarySchedule, !sched.times.isEmpty {
-                        Text("· ⏰ \(sched.times.joined(separator: ", "))")
+                        Text(sched.isBedtime ? "· 🌙 ก่อนนอน" : "· ⏰ \(sched.times.joined(separator: ", "))")
                             .font(.system(size: 11))
                             .foregroundColor(.textSecondary)
                     }
@@ -466,6 +612,12 @@ private struct MedicationCard: View {
                             .font(.system(size: 10, weight: lowStock ? .semibold : .regular))
                     }
                     .foregroundColor(lowStock ? .red : .textSecondary)
+                }
+                if let notes = med.notes, !notes.isEmpty {
+                    Label(notes, systemImage: "doc.text")
+                        .font(.system(size: 10.5))
+                        .foregroundColor(.textSecondary)
+                        .lineLimit(1)
                 }
             }
 

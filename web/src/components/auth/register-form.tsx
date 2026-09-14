@@ -11,18 +11,22 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { useTranslations } from "next-intl"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
-import { slugify } from "@/lib/utils"
-import { getDocQuota } from "@/lib/plans"
+import { TurnstileWidget } from "@/components/auth/turnstile-widget"
 
 export function RegisterForm() {
   const t        = useTranslations("auth")
-  const router   = useRouter()
   const supabase = createClient()
+  // Plan picked on the pricing table (/register?plan=pro&yearly=1) — read
+  // here and sent to Stripe checkout right after signup completes, so the
+  // choice isn't silently dropped in favor of the Free plan.
+  const searchParams = useSearchParams()
+  const planId        = searchParams.get("plan")
+  const yearly         = searchParams.get("yearly") === "1"
 
   const [form, setForm] = useState({
     fullName: "",
@@ -32,6 +36,7 @@ export function RegisterForm() {
     orgName:  "",
   })
   const [loading, setLoading] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState("")
 
   const set = (k: keyof typeof form) =>
     (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -51,49 +56,54 @@ export function RegisterForm() {
 
     setLoading(true)
 
-    // 1. Sign up
-    const { data: authData, error: signUpError } = await supabase.auth.signUp({
-      email:    form.email,
-      password: form.password,
-      options:  { data: { full_name: form.fullName } },
+    // Goes through /api/auth/register (not supabase.auth.signUp directly)
+    // so the server can actually enforce the CAPTCHA check and a per-IP
+    // signup rate limit — both meaningless if the browser can skip them by
+    // calling Supabase directly.
+    const res = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fullName: form.fullName,
+        email:    form.email,
+        password: form.password,
+        orgName:  form.orgName,
+        captchaToken,
+      }),
     })
+    const json = await res.json().catch(() => ({}))
 
-    if (signUpError) {
-      toast.error(signUpError.message)
+    if (!res.ok) {
+      toast.error(json.error ?? "สมัครสมาชิกไม่สำเร็จ")
       setLoading(false)
       return
     }
-
-    // 2. Create organization — Free plan, no expiry, upgrade anytime
-    const slug = slugify(form.orgName || form.fullName) + "-" + Date.now().toString(36)
-
-    const { data: org, error: orgError } = await supabase
-      .from("organizations")
-      .insert({
-        name:                form.orgName || `${form.fullName}'s Company`,
-        slug,
-        plan:                "free",
-        subscription_status: "active",
-        doc_quota:           getDocQuota("free"),  // 15 docs/month
-      })
-      .select("id")
-      .single()
-
-    if (orgError || !org) {
-      toast.error("สร้างองค์กรไม่สำเร็จ")
-      setLoading(false)
-      return
-    }
-
-    // 3. Add user as owner
-    await supabase.from("organization_members").insert({
-      organization_id: org.id,
-      user_id:         authData.user!.id,
-      role:            "owner",
-    })
 
     toast.success("สมัครสมาชิกสำเร็จ! กำลังเข้าสู่ระบบ...")
-    router.push("/dashboard")
+
+    // If they picked a paid plan on the pricing table, send them straight to
+    // Stripe checkout for it instead of dropping them on the Free dashboard.
+    if (planId && planId !== "free" && json.orgId) {
+      try {
+        const checkoutRes = await fetch("/api/stripe/create-checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ planId, orgId: json.orgId, yearly }),
+        })
+        const checkoutJson = await checkoutRes.json().catch(() => ({}))
+        if (checkoutRes.ok && checkoutJson.url) {
+          window.location.href = checkoutJson.url
+          return
+        }
+      } catch {
+        // Fall through to dashboard — account was created successfully
+        // either way, checkout can still be started from /billing later.
+      }
+    }
+
+    // Full reload so the browser Supabase client re-initializes its session
+    // from the cookies the server route just set (same reasoning as login).
+    window.location.href = "/dashboard"
   }
 
   const signInWith = async (provider: "google" | "facebook") => {
@@ -186,8 +196,10 @@ export function RegisterForm() {
         {t("termsAgreement")}{" "}
         <Link href="/terms" className="text-brand-500 hover:underline whitespace-nowrap">{t("terms")}</Link>
         {" และ "}
-        <Link href="/privacy" className="text-brand-500 hover:underline whitespace-nowrap">{t("privacy")}</Link>
+        <Link href="/privacy-policy" className="text-brand-500 hover:underline whitespace-nowrap">{t("privacy")}</Link>
       </p>
+
+      <TurnstileWidget onVerify={setCaptchaToken} />
 
       <button
         type="submit"

@@ -14,11 +14,15 @@ const token    = () => process.env.LINE_CHANNEL_ACCESS_TOKEN!
 // ─── Push reminder via LINE ───────────────────────────────────────────────────
 async function pushReminder(lineUserId: string, reminder: {
   med_name:     string
+  med_purpose:  string | null
+  med_strength: string | null
+  med_color:    string | null
   dose_qty:     number
   meal_relation: string
   meal_note:    string | null
   scheduled_at: string
   log_id:       string
+  is_bedtime:   boolean
 }) {
   const mealText: Record<string, string> = {
     before: "ก่อนอาหาร",
@@ -27,7 +31,14 @@ async function pushReminder(lineUserId: string, reminder: {
     any:    "",
   }
   const meal = reminder.meal_note || mealText[reminder.meal_relation] || ""
-  const time = new Date(reminder.scheduled_at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })
+  const time = reminder.is_bedtime
+    ? "ก่อนนอน"
+    : new Date(reminder.scheduled_at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })
+  // "ตัวยาคืออะไร" — what this pill actually is, not just its name, so a
+  // reminder also answers "why am I taking this" and gives something to
+  // check a pill's appearance against before swallowing it.
+  const idLine = [reminder.med_strength, reminder.med_color ? `สี${reminder.med_color}` : null]
+    .filter(Boolean).join(" · ")
 
   const msg = {
     type: "flex",
@@ -64,8 +75,10 @@ async function pushReminder(lineUserId: string, reminder: {
             backgroundColor: "#f9fafb", cornerRadius: "10px",
             contents: [
               { type: "text", text: reminder.med_name, size: "xl", color: "#111827", weight: "bold" },
+              ...(idLine ? [{ type: "text", text: idLine, size: "xs", color: "#9ca3af", margin: "xxs" } as object] : []),
               { type: "text", text: `${reminder.dose_qty} ${reminder.dose_qty === 1 ? "เม็ด" : "เม็ด/ครั้ง"}${meal ? ` · ${meal}` : ""}`, size: "sm", color: "#6b7280", margin: "xs" },
-              { type: "text", text: `⏰ ${time} น.`, size: "xs", color: "#9ca3af", margin: "sm" },
+              ...(reminder.med_purpose ? [{ type: "text", text: `🎯 ${reminder.med_purpose}`, size: "xs", color: "#6b7280", margin: "xs", wrap: true } as object] : []),
+              { type: "text", text: reminder.is_bedtime ? `🌙 ${time}` : `⏰ ${time} น.`, size: "xs", color: "#9ca3af", margin: "sm" },
             ]
           }
         ]
@@ -170,11 +183,15 @@ export async function checkAndSendReminders(): Promise<void> {
 
     await pushReminder(conn.line_user_id, {
       med_name:     r.med_name,
+      med_purpose:  r.med_purpose,
+      med_strength: r.med_strength,
+      med_color:    r.med_color,
       dose_qty:     r.dose_qty,
       meal_relation: r.meal_relation,
       meal_note:    r.meal_note,
       scheduled_at: r.scheduled_at,
       log_id:       r.log_id,
+      is_bedtime:   r.is_bedtime,
     })
   }
 }

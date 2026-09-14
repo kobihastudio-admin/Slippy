@@ -20,6 +20,7 @@
  */
 
 import { config } from "dotenv"
+import { getAppUrl } from "../lib/app-url"
 config({ override: true, path: new URL("../../.env", import.meta.url).pathname })
 
 import sharp from "sharp"
@@ -41,24 +42,12 @@ const headers = { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application
 // NOTE: the กลุ่มกีฬา/กลุ่มทริป LIFF dashboards (formerly tap-areas on v3) now
 // live inside the "/menu" command-menu carousel (see "More" card below) —
 // freeing up the grid for the broader "Slippy Universe" pillar navigation.
-const APP_URL = process.env.APP_URL ?? "https://slippy.ai"
+const APP_URL = getAppUrl()
 const LIFF_ID = process.env.NEXT_PUBLIC_LIFF_ID
 
-// Pillar cards (Health/Wealth/Lifestyle/Dashboard/Community/...) open through
-// the LINE-only login gate at `/liff/home` instead of a bare web URL — inside
-// LIFF the user is ALREADY signed into LINE, so the gate mints a Slippy
-// session in one tap (no desktop-style email/password form on a phone) and
-// then forwards into `destPath`. See web/src/app/liff/home/page.tsx +
-// web/src/lib/liff.ts → makeLiffGateUrl() (same logic, kept in sync here
-// since the Rich Menu is generated server-side, outside the Next.js bundle).
-function liffGate(destPath: string): string {
-  const qs = `?next=${encodeURIComponent(destPath)}`
-  if (LIFF_ID) return `https://liff.line.me/${LIFF_ID}/liff/home${qs}`
-  return `${APP_URL}${destPath}`   // fallback if LIFF isn't configured
-}
-
-// Group-creation LIFF pages (sport/split/trip/places) handle their own LINE
-// login (liff.login()) — open them directly instead of via liffGate.
+// All Rich Menu destinations are standalone LIFF pages (sport/split/trip/
+// places/health/dashboard) that handle their own LINE login (liff.login()) —
+// open them directly instead of routing through the `/liff/home` gate.
 function liffUrl(destPath: string): string {
   if (LIFF_ID) return `https://liff.line.me/${LIFF_ID}${destPath}`
   return `${APP_URL}${destPath}`   // fallback if LIFF isn't configured
@@ -85,8 +74,8 @@ const RICH_MENU_BODY = {
   chatBarText: "📱 เมนู Slippy",
   areas: [
     // ── Row 1 ──────────────────────────────────────────────────────────────
-    // 📸 ส่งสลิป → triggers the upload flow
-    { bounds: { x: 0,          y: 0,           width: CW, height: CH }, action: { type: "message", text: "📸 ส่งสลิป" } },
+    // 📸 ส่งสลิป → Document Scanner LIFF (camera + multi-upload)
+    { bounds: { x: 0,          y: 0,           width: CW, height: CH }, action: { type: "uri", uri: liffUrl("/liff/scan") } },
     // 🏸 นัดกีฬา → open/create sport-meetup groups (LIFF handles its own login)
     { bounds: { x: CW,         y: 0,           width: CW, height: CH }, action: { type: "uri", uri: liffUrl("/liff/sport") } },
     // 🤝 หารบิล → create a generic split-bill group
@@ -95,17 +84,17 @@ const RICH_MENU_BODY = {
     { bounds: { x: CW * 3,     y: 0,           width: W - CW * 3, height: CH }, action: { type: "uri", uri: liffUrl("/liff/trip") } },
 
     // ── Row 2 ──────────────────────────────────────────────────────────────
-    // 💊 สุขภาพ/ยา → LINE-only login gate → Health pillar (mobile-optimized, no password form)
-    { bounds: { x: 0,          y: CH,          width: CW, height: GRID_H - CH }, action: { type: "uri", uri: liffGate("/personal/health") } },
-    // 📊 Dashboard → LINE-only login gate → life overview / insight summary
-    { bounds: { x: CW,         y: CH,          width: CW, height: GRID_H - CH }, action: { type: "uri", uri: liffGate("/dashboard") } },
-    // ⋯ เมนูอื่นๆ → opens the full in-chat command menu carousel
-    { bounds: { x: CW * 2,     y: CH,          width: CW, height: GRID_H - CH }, action: { type: "message", text: "/menu" } },
-    // 🆕 สร้างกลุ่ม (อื่นๆ) → places/activity picker → start a general group from a place
-    { bounds: { x: CW * 3,     y: CH,          width: W - CW * 3, height: GRID_H - CH }, action: { type: "uri", uri: liffUrl("/liff/places") } },
+    // 💊 สุขภาพ/ยา → standalone LIFF health dashboard (own login flow)
+    { bounds: { x: 0,          y: CH,          width: CW, height: GRID_H - CH }, action: { type: "uri", uri: liffUrl("/liff/health") } },
+    // 👥 สร้างกลุ่ม (อื่นๆ) [NEW] → Community Groups LIFF  (ตำแหน่ง 6 ในรูป)
+    { bounds: { x: CW,         y: CH,          width: CW, height: GRID_H - CH }, action: { type: "uri", uri: liffUrl("/liff/community") } },
+    // ⋯ เมนูอื่นๆ → Profile & Package LIFF  (ตำแหน่ง 7 ในรูป)
+    { bounds: { x: CW * 2,     y: CH,          width: CW, height: GRID_H - CH }, action: { type: "uri", uri: liffUrl("/liff/profile") } },
+    // 📊 Dashboard → standalone LIFF dashboard  (ตำแหน่ง 8 ในรูป)
+    { bounds: { x: CW * 3,     y: CH,          width: W - CW * 3, height: GRID_H - CH }, action: { type: "uri", uri: liffUrl("/liff/dashboard") } },
 
-    // ── Footer branding bar → LINE-only login gate → dashboard ────────────
-    { bounds: { x: 0,          y: GRID_H,      width: W, height: FOOTER }, action: { type: "uri", uri: liffGate("/dashboard") } },
+    // ── Footer branding bar → standalone LIFF dashboard (own login flow) ──
+    { bounds: { x: 0,          y: GRID_H,      width: W, height: FOOTER }, action: { type: "uri", uri: liffUrl("/liff/dashboard") } },
   ],
 }
 

@@ -102,6 +102,27 @@
     background-color: rgb(99 102 241 / 0.12);
     @apply text-brand-600 dark:text-brand-300;
   }
+
+  /* ── Page containers ────────────────────────────────────────────────────────
+   * Every app page had invented its own width: 1600, 1500, 1200, 1100, 960,
+   * 900, 700, 680 — and none of them set `mx-auto`. A cap without centering
+   * pins the content to the left edge and dumps ALL the leftover space in one
+   * gap on the right, so on a wide monitor a 680px profile page looked like the
+   * layout had failed rather than like a deliberately narrow column.
+   *
+   * Three widths, chosen by what the page holds rather than by page:
+   *   .page-wide   tables, grids, side-by-side comparisons — wants every pixel
+   *   .page        cards, lists, mixed dashboards — the default
+   *   .page-narrow one column of prose or form fields — a long line of text is
+   *                harder to read, not easier, so this one stays deliberately
+   *                capped and is NOT a candidate for widening
+   */
+  .page-wide, .page, .page-narrow {
+    @apply p-6 lg:p-7 mx-auto w-full;
+  }
+  .page-wide   { max-width: 1600px; }
+  .page        { max-width: 1400px; }
+  .page-narrow { max-width: 820px;  }
 }
 
 .glow-radial {
@@ -111,6 +132,81 @@
 .glow-dotgrid {
   background-image: radial-gradient(rgba(99,102,241,0.18) 1px, transparent 1px);
   background-size: 22px 22px;
+}
+
+/* Dashboard redesign — intentionally scoped so no other web page, native app,
+   or shared icon component inherits this visual treatment. */
+.dashboard-violet {
+  position: relative;
+  isolation: isolate;
+}
+.dashboard-violet::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -2rem -2rem auto;
+  height: 22rem;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 0%, rgb(99 102 241 / 0.10), transparent 42%),
+    radial-gradient(circle at 72% 3%, rgb(168 85 247 / 0.08), transparent 38%);
+  mask-image: linear-gradient(to bottom, black, transparent);
+}
+.dashboard-violet-panel {
+  border-color: rgb(99 102 241 / 0.14);
+  box-shadow: 0 8px 30px rgb(55 48 163 / 0.045);
+}
+.dashboard-violet .rounded-xl.border.bg-card,
+.dashboard-violet .rounded-\[12px\].border.bg-card,
+.dashboard-violet .rounded-\[14px\].border.bg-card {
+  border-color: rgb(99 102 241 / 0.14);
+  box-shadow: 0 8px 30px rgb(55 48 163 / 0.045);
+}
+.dashboard-violet-action {
+  border-color: rgb(99 102 241 / 0.13);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+.dashboard-violet-action:hover {
+  border-color: rgb(99 102 241 / 0.42);
+  box-shadow: 0 12px 26px rgb(79 70 229 / 0.11);
+  transform: translateY(-2px);
+}
+.dashboard-violet-action:focus-visible {
+  outline: 2px solid rgb(99 102 241 / 0.75);
+  outline-offset: 2px;
+}
+.dashboard-violet-action-icon--violet { background: rgb(139 92 246 / 0.12); color: rgb(124 58 237); }
+.dashboard-violet-action-icon--indigo { background: rgb(99 102 241 / 0.12); color: rgb(79 70 229); }
+.dashboard-violet-action-icon--blue   { background: rgb(59 130 246 / 0.11); color: rgb(37 99 235); }
+.dashboard-violet-action-icon--amber  { background: rgb(245 158 11 / 0.12); color: rgb(217 119 6); }
+.dashboard-violet-action-icon--purple { background: rgb(168 85 247 / 0.12); color: rgb(147 51 234); }
+.dashboard-violet-action-icon--slate  { background: rgb(100 116 139 / 0.11); color: rgb(71 85 105); }
+.dark .dashboard-violet-action-icon--violet { color: rgb(196 181 253); }
+.dark .dashboard-violet-action-icon--indigo { color: rgb(165 180 252); }
+.dark .dashboard-violet-action-icon--blue   { color: rgb(147 197 253); }
+.dark .dashboard-violet-action-icon--amber  { color: rgb(252 211 77); }
+.dark .dashboard-violet-action-icon--purple { color: rgb(216 180 254); }
+.dark .dashboard-violet-action-icon--slate  { color: rgb(203 213 225); }
+
+/* Native <input type="date"> / <input type="time"> — iOS Safari/LINE webview
+   renders the value in an oversized, centered font by default, which overflows
+   compact LIFF layouts. Force it to match the surrounding text size and align
+   left. */
+input[type="date"],
+input[type="time"] {
+  -webkit-appearance: none;
+  appearance: none;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value {
+  text-align: left;
+  min-height: 1.25rem;
+}
+input[type="date"]::-webkit-datetime-edit,
+input[type="time"]::-webkit-datetime-edit {
+  display: block;
 }
 
 /* Landing page animations */

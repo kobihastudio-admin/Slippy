@@ -19,9 +19,7 @@ ALTER TABLE life_journeys
   ADD COLUMN IF NOT EXISTS line_group_id text,          -- LINE group ที่สร้างทริปนี้
   ADD COLUMN IF NOT EXISTS base_fee      numeric(14,2) DEFAULT 0,  -- ค่าสนาม/ค่าจองเบื้องต้น
   ADD COLUMN IF NOT EXISTS notes         text;
-
 CREATE INDEX IF NOT EXISTS idx_lj_share ON life_journeys(share_token) WHERE share_token IS NOT NULL;
-
 -- ─── Trip Participants ────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS trip_participants (
   id               uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -45,10 +43,8 @@ CREATE TABLE IF NOT EXISTS trip_participants (
   created_at       timestamptz DEFAULT now(),
   UNIQUE (journey_id, line_user_id)
 );
-
 CREATE INDEX IF NOT EXISTS idx_tp_journey ON trip_participants(journey_id);
 CREATE INDEX IF NOT EXISTS idx_tp_line    ON trip_participants(line_user_id);
-
 -- ─── Trip Expenses ────────────────────────────────────────────────────────────
 -- แต่ละรายจ่ายในทริป — เชื่อมกับ document (ใบเสร็จ) หรือ manual entry
 CREATE TABLE IF NOT EXISTS trip_expenses (
@@ -66,9 +62,7 @@ CREATE TABLE IF NOT EXISTS trip_expenses (
   expense_date     date    DEFAULT CURRENT_DATE,
   created_at       timestamptz DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS idx_te_journey ON trip_expenses(journey_id);
-
 -- ─── Expense Splits (individual line) ────────────────────────────────────────
 -- ใครต้องจ่ายเท่าไรในแต่ละ expense
 CREATE TABLE IF NOT EXISTS expense_splits (
@@ -79,7 +73,6 @@ CREATE TABLE IF NOT EXISTS expense_splits (
   is_paid          bool    NOT NULL DEFAULT false,
   UNIQUE (expense_id, participant_id)
 );
-
 -- ─── Payment Confirmations ────────────────────────────────────────────────────
 -- หลักฐานการโอนเงิน (รูปสลิป/หลักฐาน)
 CREATE TABLE IF NOT EXISTS trip_payments (
@@ -96,15 +89,12 @@ CREATE TABLE IF NOT EXISTS trip_payments (
   confirmed_at     timestamptz,
   created_at       timestamptz DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS idx_tpay_journey ON trip_payments(journey_id);
-
 -- ─── RLS ──────────────────────────────────────────────────────────────────────
 ALTER TABLE trip_participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE trip_expenses     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE expense_splits    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE trip_payments     ENABLE ROW LEVEL SECURITY;
-
 -- Org members + public share token access
 CREATE POLICY "tp_org_member" ON trip_participants FOR ALL USING (
   journey_id IN (
@@ -139,7 +129,6 @@ CREATE POLICY "tpay_org_member" ON trip_payments FOR ALL USING (
     )
   )
 );
-
 -- ─── Settlement calculation function ─────────────────────────────────────────
 -- Computes who owes whom (minimum transactions algorithm)
 CREATE OR REPLACE FUNCTION calculate_trip_settlement(p_journey_id uuid)

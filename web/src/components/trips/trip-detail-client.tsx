@@ -1,16 +1,18 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { COMMON_CURRENCIES } from "@/lib/exchange-rates"
+import { expenseCategory, ACTIVITY_CATEGORIES } from "@/lib/activity-taxonomy"
 import { TripMembersPanel } from "./trip-members-panel"
 import {
   ArrowLeft, Plus, Check, X, Copy, ExternalLink,
   Receipt, Users, ChevronDown, ChevronUp, Loader2,
   QrCode, AlertCircle, DollarSign, Clock, CheckCircle2,
   MapPin, Utensils, Car, Hotel, Ticket, Pin, Calendar, ShoppingBag, Lock,
+  ScanLine, Trash2, AlertTriangle,
 } from "lucide-react"
 
 type Participant = {
@@ -26,6 +28,11 @@ type Expense = {
   trip_participants: { id: string; display_name: string }
   expense_splits: Array<{ participant_id: string; amount: number; is_paid: boolean }>
   currency?: string; exchange_rate?: number; amount_base_currency?: number; rate_is_manual?: boolean
+  /** Per-item breakdown, in the expense's own currency. */
+  trip_expense_items?: Array<{
+    id: string; sort_order: number; description: string
+    quantity: number | null; unit_price: number | null; amount: number
+  }>
 }
 const SPLIT_MODE_DISPLAY: Record<string, string> = {
   equal: "เท่ากัน", individual: "ตามจำนวนที่ระบุ", percent: "ตามเปอร์เซ็นต์", shares: "ตามจำนวนหุ้น", exclude: "เท่ากัน (บางคน)",
@@ -39,7 +46,8 @@ type Settlement = { from_name: string; to_name: string; amount: number; from_id:
 
 const fmtTHB  = (n: number) => "฿" + Number(n).toLocaleString("th-TH", { maximumFractionDigits: 0 })
 const fmtDate = (d: string) => new Date(d).toLocaleDateString("th-TH", { day: "numeric", month: "short" })
-const CAT_EMOJI: Record<string, string> = { food: "🍽️", transport: "🚗", accommodation: "🏨", activity: "🎯", other: "💰" }
+const MONEY_CATEGORY = expenseCategory()
+const MoneyIcon = MONEY_CATEGORY.icon
 /** Formats an amount in an arbitrary currency (not just THB) — used for a
  * trip expense's original entered amount before conversion. */
 const fmtCcy = (n: number, ccy: string) =>
@@ -67,6 +75,27 @@ function addIntervalClient(dateStr: string, unit: IntervalUnit): string {
   return d.toISOString().slice(0, 10)
 }
 
+/**
+ * Keep a line's total consistent with quantity × unit price.
+ *
+ * Only when BOTH are present — a line that has just a total (the common case on
+ * a Thai receipt, which prints one figure per row) keeps whatever was typed.
+ * Recomputing from a blank quantity would zero it.
+ */
+function recalcLine(line: ExpenseLine): ExpenseLine {
+  const q = Number(line.quantity), u = Number(line.unit_price)
+  if (!line.quantity || !line.unit_price || !Number.isFinite(q) || !Number.isFinite(u)) return line
+  return { ...line, amount: String(Math.round(q * u * 100) / 100) }
+}
+
+/** One line of a receipt. `amount` is in the expense's currency. */
+interface ExpenseLine {
+  description: string
+  quantity: string
+  unit_price: string
+  amount: string
+}
+
 function AddExpenseModal({ tripId, baseCurrency, participants, onClose, onAdd }: {
   tripId: string; baseCurrency: string; participants: Participant[]
   onClose: () => void; onAdd: (e: Expense) => void
@@ -76,6 +105,15 @@ function AddExpenseModal({ tripId, baseCurrency, participants, onClose, onAdd }:
   const [paidBy,   setPaidBy]   = useState(participants.find(p => p.is_host)?.id ?? participants[0]?.id ?? "")
   const [category, setCategory] = useState("food")
   const [note,     setNote]     = useState("")
+  /**
+   * The per-item breakdown. Amounts are in `currency` — the receipt's own —
+   * never the trip base; there is one conversion, on the expense.
+   */
+  const [items,    setItems]    = useState<ExpenseLine[]>([])
+  const [scanning, setScanning] = useState(false)
+  const [scanIssues, setScanIssues] = useState<string[]>([])
+  const [documentId, setDocumentId] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
   const [splitMode, setSplitMode] = useState<SplitMode>("equal")
   const [included,  setIncluded] = useState<Set<string>>(new Set(participants.map(p => p.id)))
   // Raw per-person input for individual/percent/shares — keyed by participant id
@@ -108,9 +146,64 @@ function AddExpenseModal({ tripId, baseCurrency, participants, onClose, onAdd }:
     return () => { cancelled = true }
   }, [currency, expenseDate, isForeign, baseCurrency])
 
+  const itemsTotal = items.reduce((sum, i) => sum + (Number(i.amount) || 0), 0)
+  const hasItems = items.some(i => i.description.trim() || Number(i.amount))
+  /**
+   * Whether the lines add up to the amount charged.
+   *
+   * Reported, never enforced. A receipt legitimately has a service charge, a
+   * discount or a rounding line that the itemised part does not include — and
+   * silently rewriting the total to match the lines is exactly the bug that put
+   * ฿915.92 on an ฿856 bill. The user is told, and decides.
+   */
+  const itemsMismatch = hasItems && Math.abs(itemsTotal - (Number(amount) || 0)) > 0.01
+
   const includedList = participants.filter(p => included.has(p.id))
   const amountNum = Number(amount) || 0
   const amountInBase = effectiveRate ? Math.round(amountNum * effectiveRate * 100) / 100 : amountNum
+
+  /**
+   * Read a receipt into the form.
+   *
+   * Fills in — it does not submit. Everything here came from a machine reading
+   * small print, and this codebase's recurring failure is a machine-read number
+   * that nobody compared to the paper and that then reconciles perfectly against
+   * itself forever. The user sees the total, the lines and whatever the reader
+   * was unsure about, and presses save themselves.
+   */
+  const scanReceipt = async (file: File) => {
+    setScanning(true)
+    setScanIssues([])
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res = await fetch(`/api/trips/${tripId}/expenses/scan`, { method: "POST", body: fd })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? "อ่านใบเสร็จไม่สำเร็จ")
+
+      setDocumentId(json.documentId ?? null)
+      if (json.vendorName && !title) setTitle(json.vendorName)
+      if (json.total != null) setAmount(String(json.total))
+      if (json.currency) setCurrency(json.currency)
+      if (json.date) setExpenseDate(String(json.date).slice(0, 10))
+      setItems((json.items ?? []).map((i: {
+        description: string; quantity: number | null; unit_price: number | null; amount: number
+      }) => ({
+        description: i.description ?? "",
+        quantity:   i.quantity   == null ? "" : String(i.quantity),
+        unit_price: i.unit_price == null ? "" : String(i.unit_price),
+        amount:     String(i.amount ?? 0),
+      })))
+      setScanIssues(json.issues ?? [])
+
+      const n = json.items?.length ?? 0
+      toast.success(n ? `อ่านได้ ${n} รายการ — ตรวจกับใบเสร็จก่อนบันทึก` : "อ่านยอดได้แล้ว — ตรวจก่อนบันทึก")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "อ่านใบเสร็จไม่สำเร็จ")
+    } finally {
+      setScanning(false)
+    }
+  }
 
   const toggleIncluded = (pid: string) => {
     setIncluded(prev => {
@@ -155,9 +248,22 @@ function AddExpenseModal({ tripId, baseCurrency, participants, onClose, onAdd }:
           split_mode: splitMode, split_with: includedList.map(p => p.id), split_values,
           expense_date: expenseDate, currency,
           exchange_rate: manualRate ? Number(manualRate) : undefined,
+          document_id: documentId ?? undefined,
+          items: items
+            .filter(i => i.description.trim())
+            .map(i => ({
+              description: i.description.trim(),
+              quantity:   i.quantity   ? Number(i.quantity)   : null,
+              unit_price: i.unit_price ? Number(i.unit_price) : null,
+              amount:     Number(i.amount) || 0,
+            })),
         }),
       })
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error) }
+      // The expense saved but its lines did not — say so rather than let the
+      // breakdown vanish without a word.
+      const saved = await res.clone().json().catch(() => ({} as { itemsError?: string }))
+      if (saved.itemsError) toast.error(`บันทึกรายจ่ายแล้ว แต่รายการย่อยไม่ถูกบันทึก: ${saved.itemsError}`)
 
       // Recurring: this call created the FIRST occurrence above (so the
       // user sees it immediately, same as a one-off expense) — the
@@ -196,6 +302,39 @@ function AddExpenseModal({ tripId, baseCurrency, participants, onClose, onAdd }:
             <h3 className="text-[17px] font-semibold">เพิ่มค่าใช้จ่าย</h3>
             <button onClick={onClose} className="h-8 w-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground"><X className="w-4 h-4" /></button>
           </div>
+          {/* ── Scan a receipt ── */}
+          <div className="rounded-[10px] border border-dashed p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[12.5px] font-semibold">สแกนใบเสร็จ</p>
+                <p className="text-[11px] text-muted-foreground">
+                  อ่านยอดและรายการย่อยให้อัตโนมัติ · ตรวจก่อนบันทึกได้
+                </p>
+              </div>
+              <button type="button" onClick={() => fileRef.current?.click()} disabled={scanning}
+                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[8px] border bg-card px-3 text-xs font-semibold hover:bg-muted/50 disabled:opacity-60">
+                {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ScanLine className="h-3.5 w-3.5" />}
+                {scanning ? "กำลังอ่าน…" : "เลือกรูป"}
+              </button>
+            </div>
+            <input ref={fileRef} type="file" className="hidden"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              onChange={e => { const f = e.target.files?.[0]; if (f) scanReceipt(f); e.target.value = "" }} />
+
+            {documentId && (
+              <p className="mt-2 text-[11px] text-emerald-600 dark:text-emerald-400">
+                แนบใบเสร็จแล้ว — จะผูกกับรายจ่ายนี้และเปิดดูภาพต้นฉบับได้ภายหลัง
+              </p>
+            )}
+            {scanIssues.length > 0 && (
+              <ul className="mt-2 space-y-0.5">
+                {scanIssues.slice(0, 4).map((iss, k) => (
+                  <li key={k} className="text-[10.5px] text-amber-600 dark:text-amber-400">· {iss}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           <div>
             <label className="text-[11.5px] font-medium text-muted-foreground block mb-1">รายการ *</label>
             <input value={title} onChange={e => setTitle(e.target.value)} placeholder="ค่าอาหาร, ค่าโรงแรม, ..."
@@ -217,7 +356,7 @@ function AddExpenseModal({ tripId, baseCurrency, participants, onClose, onAdd }:
               <label className="text-[11.5px] font-medium text-muted-foreground block mb-1">หมวด</label>
               <select value={category} onChange={e => setCategory(e.target.value)}
                 className="w-full h-9 rounded-[8px] border bg-background px-2 text-sm outline-none focus:border-brand-500">
-                {Object.entries(CAT_EMOJI).map(([k]) => <option key={k} value={k}>{k}</option>)}
+                {ACTIVITY_CATEGORIES.map(c => <option key={c.key} value={c.key}>{c.labelTh}</option>)}
               </select>
             </div>
           </div>
@@ -302,9 +441,80 @@ function AddExpenseModal({ tripId, baseCurrency, participants, onClose, onAdd }:
             </div>
           </div>
 
+          {/* ── Per-item breakdown ── */}
           <div>
-            <label className="text-[11.5px] font-medium text-muted-foreground block mb-1">หมายเหตุ (ไม่บังคับ)</label>
-            <input value={note} onChange={e => setNote(e.target.value)} placeholder="..."
+            <div className="mb-1 flex items-center justify-between">
+              <label className="text-[11.5px] font-medium text-muted-foreground">
+                รายการย่อย (ไม่บังคับ)
+              </label>
+              <button type="button"
+                onClick={() => setItems(v => [...v, { description: "", quantity: "", unit_price: "", amount: "" }])}
+                className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-brand-600">
+                <Plus className="h-3 w-3" />เพิ่มรายการ
+              </button>
+            </div>
+
+            {items.length === 0 ? (
+              <p className="rounded-[10px] border border-dashed px-3 py-2.5 text-[11px] text-muted-foreground">
+                แยกได้ว่าอะไรเท่าไหร่ — สแกนใบเสร็จแล้วระบบจะเติมให้ หรือกดเพิ่มเอง
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                {items.map((it, k) => (
+                  <div key={k} className="flex items-center gap-1.5">
+                    <input value={it.description}
+                      onChange={e => setItems(v => v.map((x, j) => j === k ? { ...x, description: e.target.value } : x))}
+                      placeholder="ชื่อรายการ"
+                      className="h-9 min-w-0 flex-1 rounded-[8px] border bg-background px-2 text-[13px] outline-none focus:border-brand-500" />
+                    <input value={it.quantity} inputMode="decimal"
+                      onChange={e => setItems(v => v.map((x, j) => j === k ? recalcLine({ ...x, quantity: e.target.value }) : x))}
+                      placeholder="จน."
+                      className="h-9 w-[52px] shrink-0 rounded-[8px] border bg-background px-1.5 text-center text-[12.5px] outline-none focus:border-brand-500" />
+                    <input value={it.unit_price} inputMode="decimal"
+                      onChange={e => setItems(v => v.map((x, j) => j === k ? recalcLine({ ...x, unit_price: e.target.value }) : x))}
+                      placeholder="ราคา/หน่วย"
+                      className="h-9 w-[84px] shrink-0 rounded-[8px] border bg-background px-1.5 text-right text-[12.5px] outline-none focus:border-brand-500" />
+                    <input value={it.amount} inputMode="decimal"
+                      onChange={e => setItems(v => v.map((x, j) => j === k ? { ...x, amount: e.target.value } : x))}
+                      placeholder="รวม"
+                      className="h-9 w-[84px] shrink-0 rounded-[8px] border bg-background px-1.5 text-right text-[12.5px] font-semibold outline-none focus:border-brand-500" />
+                    <button type="button" aria-label="ลบรายการ"
+                      onClick={() => setItems(v => v.filter((_, j) => j !== k))}
+                      className="shrink-0 rounded-[8px] p-1.5 text-muted-foreground hover:bg-muted">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+
+                <div className="flex items-center justify-between px-1 pt-1 text-[11.5px]">
+                  <span className="text-muted-foreground">
+                    รวมรายการย่อย {items.length} รายการ
+                  </span>
+                  <span className={cn("font-semibold tabular-nums",
+                    itemsMismatch ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground")}>
+                    {itemsTotal.toLocaleString("th-TH", { minimumFractionDigits: 2 })} {currency}
+                  </span>
+                </div>
+
+                {itemsMismatch && (
+                  <div className="flex items-start gap-2 rounded-[8px] bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>
+                      รายการย่อยรวมได้ {itemsTotal.toLocaleString("th-TH", { minimumFractionDigits: 2 })} แต่ยอดที่จ่ายคือ{" "}
+                      {(Number(amount) || 0).toLocaleString("th-TH", { minimumFractionDigits: 2 })} {currency} —
+                      อาจมีค่าบริการหรือส่วนลดที่ไม่ได้แยกไว้ ระบบจะเก็บทั้งสองค่าตามที่กรอก
+                      <button type="button" onClick={() => setAmount(String(itemsTotal))}
+                        className="ml-1 font-semibold underline">ใช้ยอดรวมรายการย่อย</button>
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="text-[11.5px] font-medium text-muted-foreground block mb-1">รายละเอียด (ไม่บังคับ)</label>
+            <input value={note} onChange={e => setNote(e.target.value)} placeholder="เช่น มื้อเย็นวันแรก รวมค่าบริการแล้ว"
               className="w-full h-9 rounded-[8px] border bg-background px-2 text-sm outline-none focus:border-brand-500" />
           </div>
 
@@ -1053,7 +1263,7 @@ function RecurringPanel({ tripId }: { tripId: string }) {
     <div className="space-y-2">
       {templates.map(t => (
         <div key={t.id} className={cn("rounded-xl border bg-card p-4 flex items-center gap-3", !t.is_active && "opacity-50")}>
-          <span className="text-lg">{CAT_EMOJI[t.category ?? "other"] ?? "💰"}</span>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10"><MoneyIcon className="h-4 w-4 text-amber-600 dark:text-amber-400" aria-label={MONEY_CATEGORY.labelTh} /></span>
           <div className="flex-1 min-w-0">
             <p className="font-medium text-sm truncate">{t.title}</p>
             <p className="text-[11.5px] text-muted-foreground">
@@ -1117,7 +1327,7 @@ export function TripDetailClient({ trip, expenses, payments, settlement, orgId }
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-7 max-w-[900px] animate-fade-in">
+    <div className="p-4 sm:page animate-fade-in">
       {/* Back + Header */}
       <button onClick={() => router.push("/trips")} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors">
         <ArrowLeft className="w-4 h-4" /> กลับ
@@ -1203,7 +1413,7 @@ export function TripDetailClient({ trip, expenses, payments, settlement, orgId }
             <div key={e.id} className="rounded-xl border bg-card overflow-hidden">
               <button onClick={() => setExpandedExp(expandedExp === e.id ? null : e.id)}
                 className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-muted/20">
-                <span className="text-lg">{CAT_EMOJI[e.category ?? "other"] ?? "💰"}</span>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10"><MoneyIcon className="h-4 w-4 text-amber-600 dark:text-amber-400" aria-label={MONEY_CATEGORY.labelTh} /></span>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm">{e.title}</p>
                   <p className="text-xs text-muted-foreground">{(e.trip_participants as any)?.display_name} จ่าย · {fmtDate(e.expense_date)}</p>
@@ -1226,6 +1436,44 @@ export function TripDetailClient({ trip, expenses, payments, settlement, orgId }
                 <div className="border-t px-4 py-3 bg-muted/10">
                   <p className="text-xs text-muted-foreground mb-2">แบ่งกัน {SPLIT_MODE_DISPLAY[e.split_mode] ?? e.split_mode}</p>
                   <div className="space-y-1">
+                    {(e.trip_expense_items ?? []).length > 0 && (
+                      <div className="mb-3">
+                        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          รายการย่อย
+                        </p>
+                        <div className="rounded-lg border">
+                          {[...(e.trip_expense_items ?? [])]
+                            .sort((a, b) => a.sort_order - b.sort_order)
+                            .map(li => (
+                              <div key={li.id}
+                                className="flex items-baseline gap-2 border-b px-2.5 py-1.5 last:border-0">
+                                <span className="min-w-0 flex-1 truncate text-xs">{li.description}</span>
+                                {li.quantity != null && li.unit_price != null && (
+                                  <span className="shrink-0 text-[10.5px] tabular-nums text-muted-foreground">
+                                    {li.quantity} × {li.unit_price.toLocaleString("th-TH")}
+                                  </span>
+                                )}
+                                <span className="shrink-0 text-xs font-semibold tabular-nums">
+                                  {fmtCcy(li.amount, e.currency ?? baseCurrency)}
+                                </span>
+                              </div>
+                            ))}
+                        </div>
+                        {/* Reported, not enforced — a service charge or discount
+                            legitimately sits outside the itemised lines. */}
+                        {(() => {
+                          const sum = (e.trip_expense_items ?? []).reduce((t, li) => t + Number(li.amount || 0), 0)
+                          if (Math.abs(sum - e.amount) <= 0.01) return null
+                          return (
+                            <p className="mt-1 text-[10.5px] text-amber-600 dark:text-amber-400">
+                              รายการย่อยรวม {fmtCcy(sum, e.currency ?? baseCurrency)} · ยอดที่จ่าย {fmtCcy(e.amount, e.currency ?? baseCurrency)}
+                              {" "}(ส่วนต่างอาจเป็นค่าบริการหรือส่วนลด)
+                            </p>
+                          )
+                        })()}
+                      </div>
+                    )}
+
                     {(e.expense_splits ?? []).map(s => {
                       const p = pMap[s.participant_id]
                       return (

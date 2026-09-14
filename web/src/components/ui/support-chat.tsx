@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
+import Image from "next/image"
 import { cn } from "@/lib/utils"
 
 interface Msg { role: "user" | "assistant"; content: string; id: string }
@@ -90,7 +91,12 @@ export function SupportChat({ orgId }: { orgId?: string }) {
         body: JSON.stringify({ messages: history, orgId }),  // pass orgId for Life Graph context
       })
       const data = await res.json()
-      const reply: Msg = { role: "assistant", content: data.message, id: Date.now().toString() }
+      const content = res.ok
+        ? data.message
+        : data.upgradeRequired
+        ? `${data.error} — ไปที่หน้า Billing เพื่ออัปเกรดได้เลยครับ`
+        : (data.error ?? "ขอโทษครับ เกิดข้อผิดพลาด กรุณาลองใหม่")
+      const reply: Msg = { role: "assistant", content, id: Date.now().toString() }
       setMsgs(prev => [...prev, reply])
       if (!open) setUnread(n => n + 1)
     } catch {
@@ -112,8 +118,8 @@ export function SupportChat({ orgId }: { orgId?: string }) {
 
           {/* Header */}
           <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-3.5 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-              <span className="text-white font-black text-sm">S</span>
+            <div className="w-8 h-8 rounded-full overflow-hidden shrink-0">
+              <Image src="/images/slippy-assistant.png" alt="Slippy Assistant" width={32} height={32} className="w-full h-full object-cover" />
             </div>
             <div className="flex-1">
               <p className="text-white font-semibold text-[13.5px]">Slippy Assistant</p>
@@ -133,8 +139,8 @@ export function SupportChat({ orgId }: { orgId?: string }) {
             {msgs.map(m => <MsgBubble key={m.id} msg={m} />)}
             {loading && (
               <div className="flex gap-2">
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0">
-                  <span className="text-white text-[11px] font-black">S</span>
+                <div className="w-7 h-7 rounded-full overflow-hidden shrink-0">
+                  <Image src="/images/slippy-assistant.png" alt="Slippy Assistant" width={28} height={28} className="w-full h-full object-cover" />
                 </div>
                 <div className="bg-muted rounded-2xl rounded-bl-sm">
                   <TypingDots />
@@ -185,20 +191,17 @@ export function SupportChat({ orgId }: { orgId?: string }) {
       <button
         onClick={() => setOpen(o => !o)}
         className={cn(
-          "fixed bottom-4 right-4 z-50 w-14 h-14 rounded-full shadow-lg shadow-brand-500/30",
+          "fixed bottom-4 right-4 z-50 w-14 h-14 rounded-full shadow-lg shadow-brand-500/30 overflow-hidden",
           "bg-gradient-to-br from-violet-600 to-indigo-600",
           "flex items-center justify-center transition-all duration-200",
-          "hover:scale-105 active:scale-95",
-          open && "rotate-0"
+          "hover:scale-105 active:scale-95"
         )}
       >
         {open ? (
           <span className="text-white text-xl">✕</span>
         ) : (
           <>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
+            <Image src="/images/slippy-assistant.png" alt="เปิดแชท Slippy Assistant" width={56} height={56} className="w-full h-full object-cover" />
             {unread > 0 && (
               <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
                 {unread}

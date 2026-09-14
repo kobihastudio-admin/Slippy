@@ -1,0 +1,17 @@
+{
+	auto_https off
+}
+
+http://{$WEB_DOMAIN} {
+	reverse_proxy web:3000
+}
+
+http://{$API_DOMAIN} {
+	reverse_proxy api:4000
+}
+
+# Optional local proxy to Supabase Kong running from ./supabase on host port 8000.
+http://{$SUPABASE_DOMAIN} {
+	reverse_proxy {$NAS_HOST}:8000
+}
+

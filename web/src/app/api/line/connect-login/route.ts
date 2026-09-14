@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient }  from "@/lib/supabase/server"
 import { cookies }       from "next/headers"
 import crypto            from "node:crypto"
+import { getAppUrl } from "@/lib/app-url"
 
 const LINE_AUTH_URL = "https://access.line.me/oauth2/v2.1/authorize"
 
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
   const channelId = process.env.LINE_LOGIN_CHANNEL_ID
   if (!channelId) return NextResponse.json({ error: "LINE_LOGIN_CHANNEL_ID not configured" }, { status: 500 })
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://localhost:3000"
+  const appUrl = getAppUrl()
 
   // CSRF state — encode orgId inside so callback knows what to do
   const nonce = crypto.randomBytes(12).toString("hex")

@@ -13,7 +13,6 @@ ALTER TABLE pricing_plans
   ADD COLUMN IF NOT EXISTS feature_priority_ai bool DEFAULT false,
   ADD COLUMN IF NOT EXISTS plan_category text DEFAULT 'consumer'
     CHECK (plan_category IN ('consumer','business'));
-
 INSERT INTO pricing_plans(
   id, name_th, name_en, price_thb, doc_quota, max_users, plan_category,
   feature_life_graph, feature_ai_assistant, feature_ai_search,
@@ -43,7 +42,6 @@ ON CONFLICT(id) DO UPDATE SET
   feature_priority_ai=EXCLUDED.feature_priority_ai,
   features=EXCLUDED.features, sort_order=EXCLUDED.sort_order,
   is_active=EXCLUDED.is_active, highlighted=EXCLUDED.highlighted;
-
 INSERT INTO pricing_plans(
   id, name_th, name_en, price_thb, doc_quota, max_users, plan_category,
   feature_life_graph, feature_ai_assistant, feature_ai_search,
@@ -73,7 +71,6 @@ ON CONFLICT(id) DO UPDATE SET
   feature_priority_ai=EXCLUDED.feature_priority_ai,
   features=EXCLUDED.features, sort_order=EXCLUDED.sort_order,
   is_active=EXCLUDED.is_active, highlighted=EXCLUDED.highlighted;
-
 INSERT INTO pricing_plans(
   id, name_th, name_en, price_thb, doc_quota, max_users, plan_category,
   feature_life_graph, feature_ai_assistant, feature_ai_search,
@@ -103,7 +100,6 @@ ON CONFLICT(id) DO UPDATE SET
   feature_priority_ai=EXCLUDED.feature_priority_ai,
   features=EXCLUDED.features, sort_order=EXCLUDED.sort_order,
   is_active=EXCLUDED.is_active, highlighted=EXCLUDED.highlighted;
-
 INSERT INTO pricing_plans(
   id, name_th, name_en, price_thb, doc_quota, max_users, plan_category,
   feature_life_graph, feature_ai_assistant, feature_ai_search,
@@ -133,7 +129,6 @@ ON CONFLICT(id) DO UPDATE SET
   feature_priority_ai=EXCLUDED.feature_priority_ai,
   features=EXCLUDED.features, sort_order=EXCLUDED.sort_order,
   is_active=EXCLUDED.is_active, highlighted=EXCLUDED.highlighted;
-
 INSERT INTO pricing_plans(
   id, name_th, name_en, price_thb, doc_quota, max_users, plan_category,
   feature_life_graph, feature_ai_assistant, feature_ai_search,
@@ -163,7 +158,6 @@ ON CONFLICT(id) DO UPDATE SET
   feature_priority_ai=EXCLUDED.feature_priority_ai,
   features=EXCLUDED.features, sort_order=EXCLUDED.sort_order,
   is_active=EXCLUDED.is_active, highlighted=EXCLUDED.highlighted;
-
 INSERT INTO pricing_plans(
   id, name_th, name_en, price_thb, doc_quota, max_users, plan_category,
   feature_life_graph, feature_ai_assistant, feature_ai_search,
@@ -193,9 +187,7 @@ ON CONFLICT(id) DO UPDATE SET
   feature_priority_ai=EXCLUDED.feature_priority_ai,
   features=EXCLUDED.features, sort_order=EXCLUDED.sort_order,
   is_active=EXCLUDED.is_active, highlighted=EXCLUDED.highlighted;
-
 UPDATE pricing_plans SET is_active=false WHERE id IN ('starter','personal','sme');
-
 CREATE TABLE IF NOT EXISTS creator_profiles (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,

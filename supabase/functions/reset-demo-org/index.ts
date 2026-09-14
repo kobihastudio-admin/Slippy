@@ -9,6 +9,7 @@
  */
 
 import { createClient } from "jsr:@supabase/supabase-js@2"
+import { logEdgeFunctionError } from "../_shared/error-log.ts"
 
 Deno.serve(async (req: Request) => {
   // Allow invocation from Supabase cron (no JWT) or manually with service key
@@ -36,6 +37,11 @@ Deno.serve(async (req: Request) => {
 
   if (fetchErr) {
     console.error("Failed to fetch demo orgs:", fetchErr.message)
+    await logEdgeFunctionError(supabase, {
+      functionName: "reset-demo-org",
+      error: fetchErr,
+      context: { step: "fetch_demo_orgs" },
+    })
     return new Response(JSON.stringify({ error: fetchErr.message }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
@@ -48,6 +54,11 @@ Deno.serve(async (req: Request) => {
     const { error: resetErr } = await supabase.rpc("reset_demo_org", { p_org_id: org.id })
     if (resetErr) {
       console.error(`reset_demo_org(${org.id}) failed:`, resetErr.message)
+      await logEdgeFunctionError(supabase, {
+        functionName: "reset-demo-org",
+        error: resetErr,
+        context: { step: "reset_demo_org", orgId: org.id, orgName: org.name },
+      })
       results.push({ id: org.id, name: org.name, status: "error", error: resetErr.message })
     } else {
       console.log(`reset_demo_org(${org.id}) OK`)

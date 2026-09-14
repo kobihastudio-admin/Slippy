@@ -27,23 +27,18 @@ GRANT SELECT, INSERT                  ON TABLE document_push_logs   TO authentic
 GRANT SELECT, INSERT                  ON TABLE line_connections      TO authenticated;
 GRANT SELECT, INSERT                  ON TABLE line_connection_tokens TO authenticated;
 GRANT SELECT                          ON TABLE users                TO authenticated;
-
 -- service_role always bypasses RLS — no grants needed for it
 
 -- ── Fix: allow authenticated to update their own full_name ──────
 -- (triggers cover INSERT from auth signup, but profile updates
 --  need explicit policy + grant)
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "users_select_own" ON users FOR SELECT
   USING (id = auth.uid());
-
 CREATE POLICY "users_update_own" ON users FOR UPDATE
   USING (id = auth.uid())
   WITH CHECK (id = auth.uid());
-
 GRANT UPDATE (full_name, avatar_url) ON TABLE users TO authenticated;
-
 -- ── SECURITY DEFINER function: first-time org creation ─────────
 -- Called from the onboarding wizard; bypasses RLS/grant issues
 -- by running as the DB owner (postgres role).
@@ -91,6 +86,5 @@ BEGIN
   RETURN v_org_id;
 END;
 $$;
-
 -- Grant execute to any logged-in user
 GRANT EXECUTE ON FUNCTION public.create_org_for_current_user TO authenticated;

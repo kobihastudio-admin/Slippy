@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient }       from "@/lib/supabase/server"
 import { createAdminClient }  from "@/lib/supabase/admin"
+import { isOrgMember }        from "@/lib/require-org-member"
 
 // GET — list claims (submitter sees own; admin/manager sees all org)
 export async function GET(req: NextRequest) {
@@ -50,6 +51,9 @@ export async function POST(req: NextRequest) {
 
   const { orgId, title, description, amount, category, projectId, documentId } = body
   if (!orgId || !title || !amount) return NextResponse.json({ error: "orgId, title, amount required" }, { status: 400 })
+  if (!(await isOrgMember(user.id, orgId))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
 
   const admin = createAdminClient()
   const { data: claim, error } = await admin.from("expense_claims").insert({

@@ -108,6 +108,7 @@ func statusColor(for status: String) -> Color {
     case "reviewing":  return .statusReviewing
     case "processing": return .statusProcessing
     case "failed":     return .statusFailed
+    case "rejected":   return .statusFailed
     default:           return .statusPending
     }
 }

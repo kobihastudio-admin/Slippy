@@ -16,7 +16,28 @@ import UIKit
 //   • Capture at the sensor's full resolution, optimised for flat documents
 // All of which directly improves OCR/AI extraction accuracy downstream.
 // ─────────────────────────────────────────────────────────────────────────────
+/// Traces the scan → review handoff.
+///
+/// "Tap ✓ and nothing happens" has now come back five separate times, each with
+/// a different cause (presenting before the host was in the window hierarchy, an
+/// unbound dismiss closure, a handoff racing the cover teardown). Every one of
+/// them looked identical from the outside and none left a trace, so each round
+/// started from zero. This path stays instrumented: one run should now say which
+/// hop is missing instead of costing another guess.
+func scanLog(_ msg: String) {
+    print("[scan-flow] \(msg)")
+}
+
 struct DocumentScannerView: UIViewControllerRepresentable {
+    /// Closing goes through SwiftUI's `@Environment(\.dismiss)`, because callers
+    /// present this via `.fullScreenCover(isPresented: $showScanner)`. Tearing
+    /// the UIKit controller down on its own would leave `showScanner` stuck at
+    /// `true`: SwiftUI would still believe the cover is up, and the
+    /// quality alert / preview that `ingestScannedPages` shows after "Save"
+    /// could never appear — the user is stranded with no way forward. Same class
+    /// of bug that took down `CameraImagePicker`; same binding-driven fix.
+    @Environment(\.dismiss) private var dismissAction
+
     /// Called with every page captured in the session, in order, once the
     /// user taps "Save". Empty array means the user cancelled.
     var onFinish: ([UIImage]) -> Void
@@ -36,19 +57,94 @@ struct DocumentScannerView: UIViewControllerRepresentable {
         #endif
     }
 
-    func makeUIViewController(context: Context) -> VNDocumentCameraViewController {
-        let vc = VNDocumentCameraViewController()
-        vc.delegate = context.coordinator
-        return vc
+    /// An empty host. The scanner is *presented* from it rather than returned as
+    /// the representable's own controller.
+    ///
+    /// `VNDocumentCameraViewController` drives its own capture session and
+    /// internal navigation, and only starts them when it comes up through the
+    /// normal modal-presentation path. Handed straight to `.fullScreenCover` as
+    /// the cover's content it is merely *embedded*, and misbehaves in exactly
+    /// the two ways reported: a blank screen with no live camera, or the review
+    /// page from the previous scan instead of a fresh viewfinder. Presenting it
+    /// ourselves — a brand-new instance per appearance — fixes both.
+    func makeUIViewController(context: Context) -> ScannerHostController {
+        let host = ScannerHostController()
+        // Clear, never black: if presentation is ever delayed, the user sees the
+        // sheet behind rather than a black wall.
+        host.view.backgroundColor = .clear
+
+        // Bind the dismissal HERE, not only in updateUIViewController. There is
+        // no guarantee an update pass runs before the user finishes scanning,
+        // and while this was unset it defaulted to an empty closure — so tapping
+        // Save tore down the scanner, left `showScanner` true, and the flow
+        // simply stopped with the cover still up.
+        context.coordinator.dismiss = { dismissAction() }
+        host.onReady = { [weak coordinator = context.coordinator] host in
+            guard let coordinator, !coordinator.hasPresented else { return }
+            coordinator.hasPresented = true
+
+            let scanner = VNDocumentCameraViewController()
+            scanner.delegate = coordinator
+            scanner.modalPresentationStyle = .fullScreen
+            coordinator.scanner = scanner
+            host.present(scanner, animated: false)
+        }
+        return host
     }
 
-    func updateUIViewController(_ vc: VNDocumentCameraViewController, context: Context) {}
+    func updateUIViewController(_ host: ScannerHostController, context: Context) {
+        // Keep the closure bound to the current environment.
+        context.coordinator.dismiss = { dismissAction() }
+    }
+
+    /// Presents the scanner from `viewDidAppear`, not from
+    /// `updateUIViewController`.
+    ///
+    /// This is what made the screen go black: presenting during the SwiftUI
+    /// update pass happens before the host is in the window hierarchy, so UIKit
+    /// silently refuses and the empty host is all that remains on screen. By
+    /// `viewDidAppear` the host is guaranteed to be presentable.
+    final class ScannerHostController: UIViewController {
+        var onReady: ((ScannerHostController) -> Void)?
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            onReady?(self)
+        }
+    }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     final class Coordinator: NSObject, VNDocumentCameraViewControllerDelegate {
         let parent: DocumentScannerView
+        var dismiss: () -> Void = {}
+        var hasPresented = false
+        weak var scanner: VNDocumentCameraViewController?
         init(_ parent: DocumentScannerView) { self.parent = parent }
+
+        /// Closes the scanner, then the SwiftUI cover (one binding-driven
+        /// dismissal, so `showScanner` is reset), and only then hands the pages
+        /// to the caller.
+        ///
+        /// The order is the whole point: `onFinish` typically wants to show
+        /// something of its own (the quality alert, the review screen), and
+        /// anything presented while this cover is still tearing down is silently
+        /// swallowed — which is exactly how "tap Save and nothing happens"
+        /// keeps coming back.
+        private func close(then handoff: @escaping () -> Void) {
+            let finish = dismiss
+            guard let host = scanner?.presentingViewController else {
+                scanLog("close: no presenting VC — closing cover directly")
+                finish()      // nothing of ours is up — just close the cover
+                handoff()
+                return
+            }
+            scanLog("close: dismissing scanner from host")
+            host.dismiss(animated: false) {
+                scanLog("close: scanner dismissed → cover dismiss + handoff")
+                finish()
+                handoff()
+            }
+        }
 
         func documentCameraViewController(_ controller: VNDocumentCameraViewController,
                                            didFinishWith scan: VNDocumentCameraScan) {
@@ -59,25 +155,174 @@ struct DocumentScannerView: UIViewControllerRepresentable {
                 // cropped capture at full sensor resolution.
                 pages.append(scan.imageOfPage(at: i))
             }
+            scanLog("✓ tapped — scan.pageCount=\(scan.pageCount) pages=\(pages.count)")
             hapticSuccess()
-            controller.dismiss(animated: true) {
-                self.parent.onFinish(pages)
-            }
+            let onFinish = parent.onFinish
+            close { onFinish(pages) }
         }
 
         func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
-            controller.dismiss(animated: true) {
-                self.parent.onFinish([])
-            }
+            let onFinish = parent.onFinish
+            close { onFinish([]) }
         }
 
         func documentCameraViewController(_ controller: VNDocumentCameraViewController,
                                            didFailWithError error: Error) {
             print("[DocumentScanner] error:", error.localizedDescription)
-            controller.dismiss(animated: true) {
-                self.parent.onFinish([])
+            let onFinish = parent.onFinish
+            close { onFinish([]) }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MARK: – Image Quality Gate (on-device)
+//
+// Mirrors `api/src/pipeline/image-quality.ts` (same Laplacian-variance blur
+// metric and brightness thresholds) but runs BEFORE upload, so a bad capture
+// is caught while the receipt is still in front of the user instead of after a
+// round-trip. Garbage in → garbage out: the ฿420 receipt that extracted as 523
+// was degraded by glare, and no cloud model recovers from that.
+// ─────────────────────────────────────────────────────────────────────────────
+struct ImageQuality {
+    let blurScore:  Double     // Laplacian variance — higher = sharper
+    let brightness: Double     // mean luma 0…255
+    /// How far the darkest text sits below the paper, in luma (0…255).
+    /// See `isTooBright`.
+    let inkContrast: Double
+    let width:      Int
+    let height:     Int
+
+    // Thresholds kept in sync with image-quality.ts
+    static let blurThreshold:   Double = 35
+    static let darkThreshold:   Double = 40
+    /// Below this paper-to-ink gap the text has been washed out beyond reading.
+    /// Measured on simulated captures: solid black text ≈100, grey thermal ink
+    /// ≈57, a faded old receipt under bright light ≈46, barely-legible ≈32,
+    /// genuine glare ≈19. 25 clears every readable case and still catches glare.
+    static let minInkContrast: Double = 25
+    /// Shortest side below which Thai stops being readable.
+    ///
+    /// Was 700, and 700 let through the captures this check exists to stop: two
+    /// 7-Eleven receipts came in at 762×800 and 908×778, cleared every gate on
+    /// both the phone and the server, and came back with line items reading
+    /// "ก๋วยสลอมหมอง" and "หนี้านริมลงตีแฟลร์". Digits survive far below the point
+    /// where Thai does, so nothing downstream — including the model's own
+    /// confidence — can tell that the words were invented. The only place this
+    /// is cheap to fix is here, while the receipt is still in the user's hand.
+    ///
+    /// Kept equal to MIN_SHORT_SIDE in api/src/pipeline/image-quality.ts.
+    static let minShortSide:    Int    = 1200
+
+    var isBlurry:    Bool { blurScore  < Self.blurThreshold }
+    var isTooDark:   Bool { brightness < Self.darkThreshold }
+    /// Glare is only a problem when it has eaten the CONTRAST.
+    ///
+    /// Two earlier metrics both cried wolf on every photo. Mean brightness fires
+    /// because a receipt IS white paper (a good shot averages 200–240). Counting
+    /// pixels darker than a fixed level (150) fails for the opposite reason:
+    /// thermal ink is grey, strokes are 2–3px wide, and downscaling averages
+    /// them with the paper around them, so a perfectly readable bill scored 0.00%
+    /// ink — the exact same score as real glare. An absolute cutoff cannot
+    /// separate them at all.
+    ///
+    /// What survives glare is the GAP between paper and ink, which is a relative
+    /// measurement and therefore immune to exposure, downscaling, and how much
+    /// of the frame the receipt fills.
+    var isTooBright: Bool { inkContrast < Self.minInkContrast }
+    var isTooSmall:  Bool { min(width, height) < Self.minShortSide && width > 0 }
+
+    /// User-facing Thai problems; empty means good enough to upload.
+    var problems: [String] {
+        var out: [String] = []
+        if isBlurry    { out.append("ภาพเบลอ — จับกล้องให้นิ่งแล้วรอโฟกัส") }
+        if isTooDark   { out.append("ภาพมืดเกินไป — หาที่ที่สว่างขึ้น") }
+        if isTooBright { out.append("แสงสะท้อนจนตัวอักษรหาย — เอียงกระดาษเลี่ยงแสงตกกระทบตรงๆ") }
+        if isTooSmall  { out.append("ความละเอียดต่ำ — ขยับกล้องเข้าใกล้ใบเสร็จ") }
+        return out
+    }
+
+    var isAcceptable: Bool { problems.isEmpty }
+}
+
+enum ImageQualityChecker {
+    /// Cheap enough to run inline on a background task (~512px grayscale pass).
+    static func measure(_ image: UIImage) -> ImageQuality {
+        let upright = image.orientationNormalized()
+        guard let cg = upright.cgImage else {
+            return ImageQuality(blurScore: 999, brightness: 128, inkContrast: 255, width: 0, height: 0)
+        }
+        let fullW = cg.width, fullH = cg.height
+
+        // Downsample the long side to 512 — same as the server's resize.
+        let maxSide = 512
+        let ratio   = min(1.0, Double(maxSide) / Double(max(fullW, fullH, 1)))
+        let w = max(1, Int(Double(fullW) * ratio))
+        let h = max(1, Int(Double(fullH) * ratio))
+        guard w >= 3, h >= 3 else {
+            return ImageQuality(blurScore: 999, brightness: 128, inkContrast: 255, width: fullW, height: fullH)
+        }
+
+        var gray = [UInt8](repeating: 0, count: w * h)
+        let drawn: Bool = gray.withUnsafeMutableBytes { raw -> Bool in
+            guard let base = raw.baseAddress,
+                  let ctx = CGContext(data: base, width: w, height: h,
+                                      bitsPerComponent: 8, bytesPerRow: w,
+                                      space: CGColorSpaceCreateDeviceGray(),
+                                      bitmapInfo: CGImageAlphaInfo.none.rawValue)
+            else { return false }
+            ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+            return true
+        }
+        guard drawn else {
+            return ImageQuality(blurScore: 999, brightness: 128, inkContrast: 255, width: fullW, height: fullH)
+        }
+
+        // Mean brightness + paper-to-ink contrast (see ImageQuality.isTooBright).
+        // Percentiles come off a 256-bin histogram — one pass, no sorting.
+        var lumaSum = 0
+        var hist = [Int](repeating: 0, count: 256)
+        for v in gray {
+            lumaSum += Int(v)
+            hist[Int(v)] += 1
+        }
+        let brightness = Double(lumaSum) / Double(gray.count)
+
+        /// Luma at percentile `p` of the frame.
+        func level(_ p: Double) -> Double {
+            let target = max(1, Int(Double(gray.count) * p))
+            var acc = 0
+            for (v, count) in hist.enumerated() {
+                acc += count
+                if acc >= target { return Double(v) }
+            }
+            return 255
+        }
+        // p05 = the darkest strokes, p90 = the paper. Both ignore outliers, so a
+        // single dark shadow or one blown highlight can't decide the verdict.
+        let inkContrast = gray.isEmpty ? 255 : level(0.90) - level(0.05)
+
+        // Laplacian variance with kernel [0,-1,0, -1,4,-1, 0,-1,0].
+        // Clamped to 0…255 to match sharp's uint8 convolve output, so the
+        // server's BLUR_THRESHOLD stays directly comparable.
+        var sum = 0.0, sumSq = 0.0, n = 0.0
+        for y in 1..<(h - 1) {
+            let row = y * w
+            for x in 1..<(w - 1) {
+                let i = row + x
+                let v = 4.0 * Double(gray[i])
+                    - Double(gray[i - 1]) - Double(gray[i + 1])
+                    - Double(gray[i - w]) - Double(gray[i + w])
+                let c = min(255.0, max(0.0, v))
+                sum += c; sumSq += c * c; n += 1
             }
         }
+        let mean     = n > 0 ? sum / n : 0
+        let variance = n > 0 ? max(0, sumSq / n - mean * mean) : 999
+        let blurScore = (variance * 100).rounded() / 100
+
+        return ImageQuality(blurScore: blurScore, brightness: brightness,
+                            inkContrast: inkContrast, width: fullW, height: fullH)
     }
 }
 
@@ -97,6 +342,9 @@ enum DocumentEnhancer {
     private static let context = CIContext(options: [.useSoftwareRenderer: false])
 
     static func enhance(_ image: UIImage) -> UIImage {
+        // CIImage(cgImage:) ignores imageOrientation, so a portrait camera photo
+        // (EXIF .right) would be flattened sideways. Bake orientation in first.
+        let image = image.orientationNormalized()
         guard let cg = image.cgImage else { return image }
         var ciImage = CIImage(cgImage: cg)
 

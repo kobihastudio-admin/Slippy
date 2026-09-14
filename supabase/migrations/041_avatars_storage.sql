@@ -10,12 +10,10 @@
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('avatars', 'avatars', true, 2097152, array['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 on conflict (id) do nothing;
-
 -- Anyone can view avatars (bucket is public, but explicit policy for clarity)
 create policy "Avatar images are publicly accessible"
   on storage.objects for select
   using (bucket_id = 'avatars');
-
 -- Users can upload only into their own folder ("{user_id}/...")
 create policy "Users can upload their own avatar"
   on storage.objects for insert
@@ -23,7 +21,6 @@ create policy "Users can upload their own avatar"
     bucket_id = 'avatars'
     and (storage.foldername(name))[1] = auth.uid()::text
   );
-
 -- Users can update/replace their own avatar
 create policy "Users can update their own avatar"
   on storage.objects for update
@@ -31,7 +28,6 @@ create policy "Users can update their own avatar"
     bucket_id = 'avatars'
     and (storage.foldername(name))[1] = auth.uid()::text
   );
-
 -- Users can delete their own avatar
 create policy "Users can delete their own avatar"
   on storage.objects for delete

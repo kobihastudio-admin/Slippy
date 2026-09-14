@@ -18,14 +18,11 @@ ALTER TABLE pricing_plans
   ADD COLUMN IF NOT EXISTS stripe_price_id_y  text,
   ADD COLUMN IF NOT EXISTS highlighted        boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS updated_at         timestamptz NOT NULL DEFAULT now();
-
 -- Set highlighted for SME (mirrors lib/plans.ts)
 UPDATE pricing_plans SET highlighted = true WHERE id = 'sme';
-
 -- ── 2. Add superadmin flag to users ─────────────────────────────────────────
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS is_superadmin boolean NOT NULL DEFAULT false;
-
 -- ── 3. RLS policy — only superadmins (via service_role) can write plans ─────
 -- Read is already open (is_active = true). Add write policy:
 CREATE POLICY "pricing_plans_superadmin_write" ON pricing_plans
@@ -44,7 +41,6 @@ CREATE POLICY "pricing_plans_superadmin_write" ON pricing_plans
         AND users.is_superadmin = true
     )
   );
-
 -- ── 4. Auto-update updated_at ─────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION update_pricing_plans_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
@@ -53,12 +49,10 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 DROP TRIGGER IF EXISTS trg_pricing_plans_updated_at ON pricing_plans;
 CREATE TRIGGER trg_pricing_plans_updated_at
   BEFORE UPDATE ON pricing_plans
   FOR EACH ROW EXECUTE FUNCTION update_pricing_plans_updated_at();
-
 -- ── 5. Comments ──────────────────────────────────────────────────────────────
 COMMENT ON COLUMN pricing_plans.stripe_price_id_m IS
   'Stripe Price ID for monthly billing (price_xxx). Stored here so admin panel can manage without env var changes.';

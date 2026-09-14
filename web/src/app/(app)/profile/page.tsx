@@ -25,7 +25,7 @@ export default async function ProfilePage() {
     { data: lineConn },
   ] = await Promise.all([
     supabase.from("organizations").select("name, plan").eq("id", orgId).single(),
-    supabase.from("users").select("full_name, email, avatar_url").eq("id", user?.id ?? "").single(),
+    supabase.from("users").select("full_name, email, avatar_url, date_of_birth").eq("id", user?.id ?? "").single(),
     supabase.from("organization_members").select("joined_at")
       .eq("user_id", user?.id ?? "").eq("organization_id", orgId).single(),
     // Real activity from privacy logs
@@ -52,6 +52,7 @@ export default async function ProfilePage() {
       orgPlan={org?.plan ?? "free"}
       avatarUrl={profile?.avatar_url ?? (user?.user_metadata?.avatar_url as string | undefined) ?? undefined}
       joinedAt={membership?.joined_at ?? undefined}
+      dateOfBirth={profile?.date_of_birth ?? null}
       activityLogs={activityLogs ?? []}
       lineConnection={lineConn ?? null}
     />

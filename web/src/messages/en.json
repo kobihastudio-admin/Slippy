@@ -43,6 +43,7 @@
     "tax": "Tax Filing",
     "vendors": "Vendors",
     "split": "Split Bill",
+    "incomeBills": "Income Bills",
     "lineStudio": "LINE Studio",
     "mobile": "Mobile",
     "settings": "Settings",
@@ -69,7 +70,10 @@
     "journey": "Journey",
     "claims": "Expense Claims",
     "trips": "Trips & Activities",
-    "medications": "Medications"
+    "activities": "Activities",
+    "medications": "Medications",
+    "messages": "Messages",
+    "friends": "Friends"
   },
   "auth": {
     "login": "Log in",

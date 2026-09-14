@@ -10,8 +10,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createPortalSession } from "@/lib/stripe/server"
+import { withErrorLogging } from "@/lib/log-server-error"
+import { getAppUrl } from "@/lib/app-url"
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorLogging("stripe_portal", async (req: NextRequest) => {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -30,8 +32,8 @@ export async function POST(req: NextRequest) {
 
   const session = await createPortalSession({
     customerId: org.stripe_customer_id,
-    returnUrl:  `${process.env.NEXT_PUBLIC_APP_URL}/billing`,
+    returnUrl:  `${getAppUrl()}/billing`,
   })
 
   return NextResponse.json({ url: session.url })
-}
+})

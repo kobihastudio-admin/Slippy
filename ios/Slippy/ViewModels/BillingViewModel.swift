@@ -85,11 +85,22 @@ struct BillingOrg: Codable {
     }
 
     var statusLabel: String {
+        // The free plan has no Stripe subscription, so `subscription_status` sits
+        // at "inactive" and used to fall through to `.capitalized` — printing the
+        // raw English "Inactive" next to a plan the customer is actively using.
+        // Reading "ฟรี — Inactive" is alarming and wrong: nothing is inactive,
+        // there is simply no subscription to have a status.
+        if plan == "free" { return "ใช้งานอยู่" }
+
         switch subscriptionStatus {
         case "active":    return "ใช้งานอยู่"
         case "trialing":  return "ทดลองใช้"
         case "past_due":  return "ค้างชำระ"
         case "canceled":  return "ยกเลิกแล้ว"
+        case "inactive":  return "ยังไม่ได้สมัคร"
+        case nil:         return "—"
+        // Anything new from Stripe still surfaces rather than being hidden, but
+        // it is a status we have not translated — say so instead of pretending.
         default:          return subscriptionStatus?.capitalized ?? "—"
         }
     }

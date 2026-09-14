@@ -8,8 +8,11 @@ import { createClient }      from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createCheckoutSession, STRIPE_PRICES } from "@/lib/stripe/server"
 import { PLAN_MAP } from "@/lib/plans"
+import { getAppUrl } from "@/lib/app-url"
+import { withErrorLogging } from "@/lib/log-server-error"
+import { isOrgMember } from "@/lib/require-org-member"
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorLogging("stripe_create_checkout", async (req: NextRequest) => {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -23,6 +26,14 @@ export async function POST(req: NextRequest) {
   }
   if (!orgId) {
     return NextResponse.json({ error: "orgId required" }, { status: 400 })
+  }
+  // A hijacked orgId here doesn't just leak data — it creates a real Stripe
+  // Checkout session that would upgrade billing for an org the caller
+  // doesn't belong to (or let them attribute their own payment to someone
+  // else's org), so this check matters even though the reads below are
+  // otherwise RLS-safe.
+  if (!(await isOrgMember(user.id, orgId))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
   // ── Resolve Stripe Price ID ───────────────────────────────────────────────
@@ -61,10 +72,10 @@ export async function POST(req: NextRequest) {
     orgId,
     userId:             user.id,
     priceId,
-    successUrl:         `${process.env.NEXT_PUBLIC_APP_URL}/billing?success=true&plan=${planId}`,
-    cancelUrl:          `${process.env.NEXT_PUBLIC_APP_URL}/billing`,
+    successUrl:         `${getAppUrl()}/billing?success=true&plan=${planId}`,
+    cancelUrl:          `${getAppUrl()}/billing`,
     existingCustomerId: org?.stripe_customer_id ?? undefined,
   })
 
   return NextResponse.json({ url: session.url })
-}
+})

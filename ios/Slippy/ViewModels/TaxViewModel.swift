@@ -21,12 +21,6 @@ struct WhtItem: Identifiable {
     let tax: Double
 }
 
-private extension Double {
-    func rounded(toPlaces places: Int) -> Double {
-        let p = pow(10.0, Double(places))
-        return (self * p).rounded() / p
-    }
-}
 
 /// Replicates `/api/tax/vat` and `/api/tax/wht`'s Supabase-fallback computation
 /// (see `web/src/app/api/tax/{vat,wht}/route.ts`) by querying the same

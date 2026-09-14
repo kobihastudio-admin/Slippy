@@ -16,22 +16,40 @@ WebBrowser.maybeCompleteAuthSession()
 // ─── OAuth helper ─────────────────────────────────────────────────────────────
 const REDIRECT = () => makeRedirectUri({ scheme: 'slippy', path: 'auth/callback' })
 
+async function extractAndSetSession(resultUrl: string): Promise<boolean> {
+  const hash = resultUrl.split('#')[1]
+  if (!hash) return false
+  const params = new URLSearchParams(hash)
+  const accessToken  = params.get('access_token')
+  const refreshToken = params.get('refresh_token')
+  if (!accessToken || !refreshToken) return false
+  const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+  return !error
+}
+
 async function signInWithProvider(provider: 'google' | 'facebook' | 'apple') {
+  const redirectUri = REDIRECT()
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
-    options: { redirectTo: REDIRECT(), skipBrowserRedirect: true },
+    options: { redirectTo: redirectUri, skipBrowserRedirect: true },
   })
   if (error || !data?.url) throw error ?? new Error('No URL')
-  return WebBrowser.openAuthSessionAsync(data.url, REDIRECT())
+  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUri)
+  if (result.type === 'success') await extractAndSetSession(result.url)
+  return result
 }
 
 async function signInWithLine() {
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: 'line' as any,
-    options: { redirectTo: REDIRECT(), skipBrowserRedirect: true },
-  })
-  if (error || !data?.url) throw error ?? new Error('No URL')
-  return WebBrowser.openAuthSessionAsync(data.url, REDIRECT())
+  const redirectUri = REDIRECT()
+  // LINE is a custom OIDC provider — construct Supabase auth URL manually
+  const supabaseUrl = 'https://ntzztcnkedcxfjvfxjrf.supabase.co'
+  const url =
+    `${supabaseUrl}/auth/v1/authorize` +
+    `?provider=line` +
+    `&redirect_to=${encodeURIComponent(redirectUri)}`
+  const result = await WebBrowser.openAuthSessionAsync(url, redirectUri)
+  if (result.type === 'success') await extractAndSetSession(result.url)
+  return result
 }
 
 // ─── Reusable social button ───────────────────────────────────────────────────

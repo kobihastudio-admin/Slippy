@@ -22,8 +22,9 @@ export async function GET(req: NextRequest) {
   const { data: bills, error } = await supabase
     .from("split_bills")
     .select(`
-      id, title, total_amount, note, created_at, document_id,
-      split_participants(id, name, email, amount, paid_at)
+      id, title, total_amount, vat_amount, note, status, share_token,
+      created_at, document_id, line_group_id,
+      split_participants(id, name, email, amount, paid_at, line_user_id, is_non_line)
     `)
     .eq("organization_id", orgId)
     .order("created_at", { ascending: false })
@@ -53,6 +54,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "orgId, title, participants required" }, { status: 400 })
   }
 
+  const lineGroupId = (body as any).lineGroupId as string | undefined
+
   // Create bill
   const { data: bill, error: billErr } = await supabase
     .from("split_bills")
@@ -63,8 +66,9 @@ export async function POST(req: NextRequest) {
       title,
       total_amount:    totalAmount,
       note:            note ?? null,
+      line_group_id:   lineGroupId ?? null,
     })
-    .select("id")
+    .select("id, share_token")
     .single()
 
   if (billErr || !bill) {
@@ -84,7 +88,21 @@ export async function POST(req: NextRequest) {
     )
 
   if (partsErr) return NextResponse.json({ error: partsErr.message }, { status: 500 })
-  return NextResponse.json({ billId: bill.id }, { status: 201 })
+
+  // Push LINE notification if created from LINE group
+  if (lineGroupId) {
+    try {
+      const internalKey = process.env.INTERNAL_API_KEY ?? ""
+      const apiBase     = process.env.API_BASE_URL ?? "https://slippy-api.vercel.app"
+      await fetch(`${apiBase}/split/notify`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", "x-internal-key": internalKey },
+        body:    JSON.stringify({ billId: bill.id, event: "created" }),
+      }).catch(() => { /* non-critical */ })
+    } catch { /* non-critical */ }
+  }
+
+  return NextResponse.json({ billId: bill.id, shareToken: bill.share_token }, { status: 201 })
 }
 
 // PATCH — mark a participant as paid (or unpaid)

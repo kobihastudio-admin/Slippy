@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server"
 import Anthropic           from "@anthropic-ai/sdk"
 import { createClient }    from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { hasFeature }      from "@/lib/plans"
 
 const client = new Anthropic()
 
@@ -125,19 +126,50 @@ export async function POST(req: NextRequest) {
 
     const { messages, orgId } = body
     if (!messages?.length) return NextResponse.json({ error: "messages required" }, { status: 400 })
+    if (!orgId) return NextResponse.json({ error: "orgId required" }, { status: 400 })
 
-    // Verify auth
+    // This endpoint used to only *optionally* attach Life Graph context when
+    // a session existed, but called Claude regardless either way — meaning
+    // anyone could POST here with no session at all and get free, unlimited
+    // AI chat completions. Both checks below are required, not optional.
+    //
+    // Two auth paths: web sends the Supabase session via cookies; the iOS
+    // app (ChatViewModel.swift) has no cookie jar shared with a browser, so
+    // it sends `Authorization: Bearer <access_token>` instead (same pattern
+    // as notifyDocumentSource() in Extensions.swift) — verified here via the
+    // service-role client's getUser(token), which validates the JWT directly.
+    const admin = createAdminClient()
+    const bearer = req.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1]
+    const user = bearer
+      ? (await admin.auth.getUser(bearer)).data.user
+      : (await (await createClient()).auth.getUser()).data.user
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    const { data: membership } = await admin
+      .from("organization_members")
+      .select("organization_id")
+      .eq("user_id", user.id)
+      .eq("organization_id", orgId)
+      .maybeSingle()
+    if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+
+    const { data: org } = await admin
+      .from("organizations")
+      .select("plan")
+      .eq("id", orgId)
+      .single()
+    if (!org || !hasFeature(org.plan, "aiAssistant")) {
+      return NextResponse.json(
+        { error: "AI Assistant ต้องอัปเกรดเป็นแผน Pro ขึ้นไป", upgradeRequired: true },
+        { status: 403 }
+      )
+    }
+
     let lifeContext = ""
-    if (orgId) {
-      try {
-        const supabase = await createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          lifeContext = await buildLifeContext(orgId)
-        }
-      } catch {
-        // Life Graph context is optional — chat still works without it
-      }
+    try {
+      lifeContext = await buildLifeContext(orgId)
+    } catch {
+      // Life Graph context is optional — chat still works without it
     }
 
     // Also search AI Memory for relevant context

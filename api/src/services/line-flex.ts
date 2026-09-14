@@ -1,6 +1,7 @@
 /**
  * LINE Flex Message builders for Slippy Bot — Modern Design
  */
+import { getAppUrl } from "../lib/app-url"
 
 // ⚠️ Single source of truth for the public app URL used inside Flex Messages.
 // `slippy.ai` is currently DNS-parked at Namecheap (NOT pointing at Vercel) —
@@ -8,7 +9,7 @@
 // parking page, which injects ad/redirect chains (incl. fake Facebook-login
 // phishing pages users have reported seeing). Always resolve through APP_URL
 // (falls back to the stable Vercel alias) — never hardcode "slippy.ai" below.
-const APP_URL = process.env.APP_URL ?? "https://slippy-solutionxteams-projects.vercel.app"
+const APP_URL = getAppUrl("https://slippy-solutionxteams-projects.vercel.app")
 const LIFF_ID = process.env.NEXT_PUBLIC_LIFF_ID
 
 // "เปิด Slippy App" / "ตรวจสอบในแอป" buttons should land users on a page that's
@@ -844,10 +845,10 @@ export function withQuickReply<T extends Record<string, unknown>>(message: T, it
 /** Standard 4-button quick reply for main navigation */
 export function mainQuickReply(): Array<{ label: string; text: string }> {
   return [
-    { label: "📱 เมนู",    text: "/menu" },
-    { label: "📋 สถานะ",  text: "/status" },
-    { label: "📊 สรุป",   text: "/summary" },
-    { label: "🤝 หารบิล", text: "/split" },
+    { label: "🧭 เมนู",    text: "/menu" },
+    { label: "📄 สถานะ",  text: "/status" },
+    { label: "📈 สรุป",   text: "/summary" },
+    { label: "💸 หารบิล", text: "/split" },
   ]
 }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient }         from "@/lib/supabase/admin"
 import { resolveConnection }         from "@/app/api/liff/sport-groups/_lib"
 import { resolveGoogleMapsLink, PLACE_CATEGORIES } from "./_lib"
+import { getVerifiedLineUserId, liffUnauthorized } from "@/lib/liff-auth"
 
 function present(row: any) {
   const meta = PLACE_CATEGORIES[row.category] ?? PLACE_CATEGORIES.other
@@ -55,8 +56,9 @@ export async function POST(req: NextRequest) {
     photoUrl?: string
   }
 
-  const { lineUserId, action } = body
-  if (!lineUserId) return NextResponse.json({ error: "lineUserId required" }, { status: 400 })
+  const lineUserId = getVerifiedLineUserId(req, body.lineUserId)
+  if (!lineUserId) return liffUnauthorized("LINE identity mismatch")
+  const { action } = body
 
   if (action === "resolve") {
     if (!body.mapsUrl) return NextResponse.json({ error: "mapsUrl required" }, { status: 400 })

@@ -720,7 +720,7 @@ git commit -m "Add TripOfflineCache: download stop photos for offline viewing"
 - Modify: `ios/Slippy/Views/Trips/TripMapView.swift`
 
 **Interfaces:**
-- Consumes: `PlacesSearchAPI.search`/`PlacesSearchAPI.PlaceResult` (Task 4), `CachedPlaceImage` (Task 5), `TripOfflineCache.localImageURL` (Task 6, for a just-added result's photo, before the next itinerary fetch has cached it — see Step 3 below).
+- Consumes: `PlacesSearchAPI.search`/`PlacesSearchAPI.PlaceResult` (Task 4), `CachedPlaceImage` (Task 5). Does NOT consume `TripOfflineCache` — a freshly-searched result has no local cache yet by definition; `CachedPlaceImage` is used here with `localURL: nil`, remote-only. Task 9 is where `TripOfflineCache.localImageURL` actually gets consumed.
 - Produces: `AddStopSheet` gains an optional `searchResult: PlacesSearchAPI.PlaceResult?` init parameter — no other task consumes this, it's the terminal write path (`save()` writes straight to Supabase via the existing `TripItineraryAPI.addStop`).
 
 - [ ] **Step 1: Add search state and the search bar UI**

@@ -12,6 +12,7 @@ import { createClient } from "../lib/supabase"
 // ── Pricing constants (USD per token) ─────────────────────────────────────────
 // อัพเดตตาม Anthropic pricing page
 const PRICING = {
+  "claude-sonnet-5":  { input: 3.0 / 1_000_000,  output: 15.0 / 1_000_000  },
   "claude-sonnet-4-5": { input: 3.0 / 1_000_000,  output: 15.0 / 1_000_000  },
   "claude-haiku-4-5-20251001": { input: 0.8 / 1_000_000, output: 4.0 / 1_000_000 },
   // cache_read is 10% of input price

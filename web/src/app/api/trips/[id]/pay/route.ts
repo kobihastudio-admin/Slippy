@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient }       from "@/lib/supabase/server"
 import { createAdminClient }  from "@/lib/supabase/admin"
+import { getTripAccess }  from "@/lib/trips/trip-access"
+import { recordDenied }   from "@/lib/activity-log"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -10,6 +12,19 @@ export async function POST(req: NextRequest, { params }: Params) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  // Authorization, not just authentication. Every route in this folder reaches
+  // for the service-role client below, which bypasses RLS entirely — so a
+  // logged-in session proved only that somebody exists, never that this trip is
+  // theirs. Until this guard, a trip id worked as a bearer token: anyone with an
+  // account could read or write any trip whose id they could see or guess.
+  //
+  // 404 rather than 403, so a stranger cannot use the difference to discover
+  // which trip ids are real.
+  const access = await getTripAccess(tripId, user.id)
+  if (!access.allowed) {
+    recordDenied("trip.view", { userId: user.id, resourceType: "trip", resourceId: tripId, req })
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
 
   const body = await req.json() as {
     from_participant: string   // participant ID paying
@@ -42,6 +57,19 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  // Authorization, not just authentication. Every route in this folder reaches
+  // for the service-role client below, which bypasses RLS entirely — so a
+  // logged-in session proved only that somebody exists, never that this trip is
+  // theirs. Until this guard, a trip id worked as a bearer token: anyone with an
+  // account could read or write any trip whose id they could see or guess.
+  //
+  // 404 rather than 403, so a stranger cannot use the difference to discover
+  // which trip ids are real.
+  const access = await getTripAccess(tripId, user.id)
+  if (!access.allowed) {
+    recordDenied("trip.view", { userId: user.id, resourceType: "trip", resourceId: tripId, req })
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
 
   const { paymentId, action } = await req.json() as {
     paymentId: string
@@ -80,6 +108,19 @@ export async function GET(req: NextRequest, { params }: Params) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  // Authorization, not just authentication. Every route in this folder reaches
+  // for the service-role client below, which bypasses RLS entirely — so a
+  // logged-in session proved only that somebody exists, never that this trip is
+  // theirs. Until this guard, a trip id worked as a bearer token: anyone with an
+  // account could read or write any trip whose id they could see or guess.
+  //
+  // 404 rather than 403, so a stranger cannot use the difference to discover
+  // which trip ids are real.
+  const access = await getTripAccess(tripId, user.id)
+  if (!access.allowed) {
+    recordDenied("trip.view", { userId: user.id, resourceType: "trip", resourceId: tripId, req })
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
 
   const [paymentsRes, settlementRes] = await Promise.all([
     supabase.from("trip_payments")

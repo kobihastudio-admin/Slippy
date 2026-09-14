@@ -13,7 +13,7 @@ struct AnalyticsView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     if vm.isLoading {
-                        ProgressView().tint(Color.brand500).padding(40)
+                        SlippyLoadingView(message: "กำลังโหลดรายงาน...")
                     } else {
                         yearTotalCard
                         barChartCard
@@ -24,7 +24,7 @@ struct AnalyticsView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 40)
             }
-            .background(Color(hex: "#f8f9fc"))
+            .background(Color.background.ignoresSafeArea())
             .navigationTitle("รายงาน")
             .navigationBarTitleDisplayMode(.large)
             .task {

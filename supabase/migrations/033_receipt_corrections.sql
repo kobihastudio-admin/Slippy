@@ -23,19 +23,15 @@ create table if not exists receipt_corrections (
   corrected_by     uuid references auth.users(id) on delete set null,
   created_at       timestamptz not null default now()
 );
-
 -- index สำหรับ few-shot query (ดึงต่อ org เรียงใหม่สุด)
 create index receipt_corrections_org_idx
   on receipt_corrections (organization_id, created_at desc);
-
 -- index สำหรับ vendor normalization lookup
 create index receipt_corrections_vendor_idx
   on receipt_corrections (organization_id, field_name, ai_value)
   where field_name = 'vendor_name';
-
 -- RLS
 alter table receipt_corrections enable row level security;
-
 create policy "org members can read corrections"
   on receipt_corrections for select
   using (
@@ -45,7 +41,6 @@ create policy "org members can read corrections"
         and user_id = auth.uid()
     )
   );
-
 create policy "org members can insert corrections"
   on receipt_corrections for insert
   with check (
@@ -55,7 +50,6 @@ create policy "org members can insert corrections"
         and user_id = auth.uid()
     )
   );
-
 -- ============================================================
 -- View: vendor_correction_map
 -- แสดง pattern การแก้ชื่อร้าน: ai_value → corrected_value

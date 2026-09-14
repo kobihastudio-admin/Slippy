@@ -5,7 +5,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { cookies }            from "next/headers"
 import { createAdminClient }  from "@/lib/supabase/admin"
-import { findLineConnection, findUserByLineMetadata } from "@/lib/line-identity"
+import { findLineConnection, findUserByLineMetadata, hasPlaceholderEmail, mergeLineOnlyAccount } from "@/lib/line-identity"
+import { getAppUrl } from "@/lib/app-url"
 
 const LINE_TOKEN_URL   = "https://api.line.me/oauth2/v2.1/token"
 const LINE_PROFILE_URL = "https://api.line.me/v2/profile"
@@ -16,7 +17,7 @@ export async function GET(req: NextRequest) {
   const state = searchParams.get("state")
   const error = searchParams.get("error")
 
-  const appUrl      = process.env.NEXT_PUBLIC_APP_URL ?? "https://localhost:3000"
+  const appUrl      = getAppUrl()
   const cookieStore = await cookies()
   const savedState  = cookieStore.get("line_connect_state")?.value
   const userId      = cookieStore.get("line_connect_user")?.value
@@ -89,18 +90,41 @@ export async function GET(req: NextRequest) {
     }
 
     // ── Prevent linking this LINE account to more than one Slippy account ──
+    // EXCEPTION: if the conflicting account is a LINE-only placeholder
+    // account (e.g. created earlier via LINE Login with no email — see
+    // line-identity.ts), merge it into the account that's connecting now
+    // instead of rejecting. This handles the case where a user first signs
+    // in via LINE (placeholder account) and later signs in via Google/
+    // Facebook with their real email (a separate account), then connects
+    // the same LINE account from Settings.
     const admin = createAdminClient()
+    let mergedFrom: string | undefined
+
+    const tryMergeOrReject = async (conflictUserId: string) => {
+      const { data } = await admin.auth.admin.getUserById(conflictUserId)
+      if (data?.user && hasPlaceholderEmail(data.user.email)) {
+        await mergeLineOnlyAccount(admin, conflictUserId, userId)
+        mergedFrom = conflictUserId
+        console.log(`[LINE connect-callback] 🔀 merged LINE-only account ${conflictUserId.slice(0,8)}… into ${userId.slice(0,8)}…`)
+        return true
+      }
+      return false
+    }
 
     const existingConnection = await findLineConnection(admin, profile.userId)
     if (existingConnection?.user_id && existingConnection.user_id !== userId) {
-      console.warn(`[LINE connect-callback] ⚠️ ${profile.userId.slice(0,8)}… already linked to a different account`)
-      return NextResponse.redirect(`${redirectBack}?error=line_already_linked`)
+      if (!(await tryMergeOrReject(existingConnection.user_id))) {
+        console.warn(`[LINE connect-callback] ⚠️ ${profile.userId.slice(0,8)}… already linked to a different account`)
+        return NextResponse.redirect(`${redirectBack}?error=line_already_linked`)
+      }
     }
 
     const existingMetaUser = await findUserByLineMetadata(admin, profile.userId)
-    if (existingMetaUser && existingMetaUser.id !== userId) {
-      console.warn(`[LINE connect-callback] ⚠️ ${profile.userId.slice(0,8)}… already used by account ${existingMetaUser.id.slice(0,8)}`)
-      return NextResponse.redirect(`${redirectBack}?error=line_already_linked`)
+    if (existingMetaUser && existingMetaUser.id !== userId && existingMetaUser.id !== mergedFrom) {
+      if (!(await tryMergeOrReject(existingMetaUser.id))) {
+        console.warn(`[LINE connect-callback] ⚠️ ${profile.userId.slice(0,8)}… already used by account ${existingMetaUser.id.slice(0,8)}`)
+        return NextResponse.redirect(`${redirectBack}?error=line_already_linked`)
+      }
     }
 
     // ── Upsert line_connections ───────────────────────────────────
@@ -128,7 +152,9 @@ export async function GET(req: NextRequest) {
     }
 
     console.log(`[LINE connect-callback] ✅ Connected ${profile.displayName} (${profile.userId.slice(0,8)}…) → org ${orgId.slice(0,8)}`)
-    return NextResponse.redirect(`${redirectBack}?connected=true&name=${encodeURIComponent(profile.displayName)}`)
+    const successParams = new URLSearchParams({ connected: "true", name: profile.displayName })
+    if (mergedFrom) successParams.set("merged", "true")
+    return NextResponse.redirect(`${redirectBack}?${successParams.toString()}`)
 
   } catch (err: any) {
     console.error("[LINE connect-callback] unexpected:", err.message)

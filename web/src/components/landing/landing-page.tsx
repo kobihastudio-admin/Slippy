@@ -6,7 +6,7 @@
  */
 
 import Link                   from "next/link"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { LogoMark }            from "@/components/ui/logo"
 import { PLANS, annualMonthlyPrice, ANNUAL_DISCOUNT_PCT, type PlanId } from "@/lib/plans"
 import { LangThemeToggle }     from "@/components/ui/lang-theme-toggle"
@@ -287,7 +287,14 @@ export function LandingPage() {
     { href: "#faq",       th: "คำถามที่พบบ่อย",   en: "FAQ"         },
   ]
 
-  if (!ready) return <LoadingSplash onDone={() => setReady(true)}/>
+  // Stable across re-renders — an inline arrow here would give LoadingSplash's
+  // effect a new `onDone` identity every render, restarting its 2s timer from
+  // 0 each time and never reaching 100% if anything upstream re-renders
+  // during the loading phase (e.g. an auth/theme provider), leaving the
+  // splash stuck forever.
+  const handleSplashDone = useCallback(() => setReady(true), [])
+
+  if (!ready) return <LoadingSplash onDone={handleSplashDone}/>
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-50 transition-colors">
@@ -535,10 +542,10 @@ export function LandingPage() {
               {isTH ? "ราคา" : "Pricing"}
             </div>
             <h2 className="mt-3 text-[32px] lg:text-[40px] leading-[1.1] font-bold tracking-tight">
-              {isTH ? "เริ่มฟรี อัปเกรดเมื่อพร้อม" : "Start free, upgrade when ready"}
+              {isTH ? "ใช้ทุกวันได้ฟรี จ่ายแค่ตอน AI อ่านเอกสารเยอะ" : "Free for everyday use — pay only for AI document volume"}
             </h2>
             <p className="mt-4 text-[15.5px] leading-relaxed text-gray-500 dark:text-gray-400">
-              {isTH ? "ไม่มีค่าติดตั้ง ยกเลิกได้ทุกเมื่อ" : "No setup fees, cancel anytime."}
+              {isTH ? "หารบิล นัดกีฬา เพิ่มเพื่อน ไม่จำกัดในทุกแพลน ไม่มีค่าติดตั้ง ยกเลิกได้ทุกเมื่อ" : "Split bills, sport groups and friends are unlimited on every plan. No setup fees, cancel anytime."}
             </p>
           </div>
 
@@ -638,7 +645,9 @@ export function LandingPage() {
                     <div className={`mt-3 inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full w-fit
                       ${isHL ? "bg-white/15 text-white/80" : "bg-gray-100 dark:bg-gray-800 text-gray-500"}`}>
                       {plan.docQuota === 0
-                        ? (isTH ? "📄 ไม่จำกัดเอกสาร" : "📄 Unlimited docs")
+                        ? (isTH
+                            ? `📄 ไม่จำกัดเอกสาร${plan.fairUseCapDocs ? ` (Fair use ~${plan.fairUseCapDocs.toLocaleString()}/เดือน)` : ""}`
+                            : `📄 Unlimited docs${plan.fairUseCapDocs ? ` (fair use ~${plan.fairUseCapDocs.toLocaleString()}/mo)` : ""}`)
                         : `📄 ${plan.docQuota.toLocaleString()} ${isTH ? "ใบ/เดือน" : "docs/mo"}`}
                     </div>
 
@@ -663,7 +672,7 @@ export function LandingPage() {
                        : "🤖 AI Standard (Haiku)"}
                     </div>
 
-                    <Link href={isFree ? "/register" : "/register?plan=" + plan.id}
+                    <Link href={isFree ? "/register" : `/register?plan=${plan.id}${pricingYearly ? "&yearly=1" : ""}`}
                       className={`mt-5 h-10 rounded-[10px] font-semibold text-[13.5px] transition flex items-center justify-center
                         ${isHL
                           ? "bg-white text-indigo-700 hover:bg-white/90"
@@ -783,7 +792,7 @@ export function LandingPage() {
                     </div>
 
                     <Link
-                      href={isEnterprise ? "mailto:hello@slippy.app?subject=Enterprise Plan" : "/register?plan=" + plan.id}
+                      href={isEnterprise ? "mailto:hello@slippy.app?subject=Enterprise Plan" : `/register?plan=${plan.id}${pricingYearly ? "&yearly=1" : ""}`}
                       className={`mt-5 h-10 rounded-[10px] font-semibold text-[13.5px] transition flex items-center justify-center
                         ${isHL
                           ? "bg-white text-emerald-700 hover:bg-white/90"
@@ -927,10 +936,10 @@ export function LandingPage() {
 
           <div className="lg:col-span-8 grid grid-cols-2 sm:grid-cols-4 gap-8">
             {[
-              { th:"ผลิตภัณฑ์", en:"Product",   links:[["Features","#features"],["Pricing","#pricing"],["Mobile App","#"],["Changelog","#"]] },
-              { th:"องค์กร",    en:"Company",   links:[[isTH?"เกี่ยวกับเรา":"About","#"],[isTH?"ลูกค้า":"Customers","#"],["Careers","#"],["Press","#"]] },
-              { th:"ทรัพยากร", en:"Resources", links:[["Help center","#"],["API docs","#"],["Status","#"],["Blog","#"]] },
-              { th:"กฎหมาย",   en:"Legal",     links:[[isTH?"นโยบายความเป็นส่วนตัว":"Privacy","/privacy-policy"],[isTH?"นโยบาย Cookie":"Cookie","/cookie-policy"],["PDPA","#"],["DPA","#"]] },
+              { th:"ผลิตภัณฑ์", en:"Product",   links:[["Features","#features"],["Pricing","#pricing"],["Mobile App","/mobile-app"],["Changelog","/changelog"]] },
+              { th:"องค์กร",    en:"Company",   links:[[isTH?"เกี่ยวกับเรา":"About","/about"],[isTH?"ลูกค้า":"Customers","/customers"],["Careers","/careers"],["Press","/press"]] },
+              { th:"ทรัพยากร", en:"Resources", links:[["Help center","/help-center"],["API docs","/api-docs"],["Status","/status"],["Blog","/blog"]] },
+              { th:"กฎหมาย",   en:"Legal",     links:[[isTH?"นโยบายความเป็นส่วนตัว":"Privacy","/privacy-policy"],[isTH?"นโยบาย Cookie":"Cookie","/cookie-policy"],["PDPA","/privacy-policy"],["DPA","/dpa"]] },
             ].map((col, i) => (
               <div key={i}>
                 <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-800 dark:text-gray-100 mb-4">{isTH ? col.th : col.en}</div>

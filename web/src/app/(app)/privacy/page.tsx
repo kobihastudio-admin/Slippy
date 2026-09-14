@@ -18,6 +18,7 @@ type Consents = {
   updated_at?: string
 }
 type SecurityPrefs = { login_alerts: boolean; auto_lock: string; updated_at?: string }
+type TotpFactor = { id: string; status: "verified" | "unverified"; friendly_name?: string | null }
 type Session = {
   id: string; device_name: string | null; device_type: string | null
   os: string | null; browser: string | null; ip_address: string | null
@@ -119,7 +120,7 @@ export default function PrivacyPage() {
   ] as const
 
   return (
-    <div className="p-6 lg:p-7 space-y-5 max-w-[1100px]">
+    <div className="page space-y-5">
 
       {/* ── Hero ── */}
       <div className="relative rounded-[16px] overflow-hidden bg-gradient-to-br from-emerald-500 via-teal-500 to-brand-500 text-white p-6 lg:p-7">
@@ -519,6 +520,9 @@ function SecurityTab() {
         )}
       </Card>
 
+      {/* Two-factor authentication */}
+      <MfaCard />
+
       {/* Password */}
       <Card className="p-5">
         <h3 className="text-[15px] font-semibold">รหัสผ่าน</h3>
@@ -545,6 +549,126 @@ function SecurityTab() {
       {/* Sign out all */}
       <SignOutAllCard />
     </div>
+  )
+}
+
+function MfaCard() {
+  const supabase = createClient()
+  const [factors, setFactors] = useState<TotpFactor[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [busy, setBusy]         = useState(false)
+  const [enrollId, setEnrollId] = useState<string | null>(null)
+  const [qrCode, setQrCode]     = useState<string | null>(null)
+  const [secret, setSecret]     = useState<string | null>(null)
+  const [code, setCode]         = useState("")
+
+  const verifiedFactor = factors.find(f => f.status === "verified") ?? null
+
+  const loadFactors = useCallback(async () => {
+    const { data, error } = await supabase.auth.mfa.listFactors()
+    if (!error) setFactors(data.totp)
+    setLoading(false)
+  }, [supabase])
+
+  useEffect(() => { loadFactors() }, [loadFactors])
+
+  const startEnroll = async () => {
+    setBusy(true)
+    const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp", friendlyName: "Slippy" })
+    setBusy(false)
+    if (error || !data) { toast.error(error?.message ?? "เปิดใช้งานไม่สำเร็จ"); return }
+    setEnrollId(data.id)
+    setQrCode(data.totp.qr_code)
+    setSecret(data.totp.secret)
+  }
+
+  const cancelEnroll = async () => {
+    // The factor created by enroll() stays "unverified" until confirmed —
+    // clean it up so it doesn't linger if the user backs out.
+    if (enrollId) await supabase.auth.mfa.unenroll({ factorId: enrollId })
+    setEnrollId(null); setQrCode(null); setSecret(null); setCode("")
+  }
+
+  const confirmEnroll = async () => {
+    if (!enrollId || code.length !== 6) return
+    setBusy(true)
+    const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId: enrollId, code })
+    setBusy(false)
+    if (error) { toast.error("รหัสไม่ถูกต้อง กรุณาลองใหม่"); return }
+    toast.success("เปิดใช้งาน 2-Factor Authentication แล้ว")
+    setEnrollId(null); setQrCode(null); setSecret(null); setCode("")
+    await loadFactors()
+  }
+
+  const disable = async () => {
+    if (!verifiedFactor) return
+    if (!confirm("ปิดใช้งาน 2-Factor Authentication? บัญชีจะใช้แค่รหัสผ่านในการเข้าสู่ระบบ")) return
+    setBusy(true)
+    const { error } = await supabase.auth.mfa.unenroll({ factorId: verifiedFactor.id })
+    setBusy(false)
+    if (error) { toast.error(error.message); return }
+    toast.success("ปิดใช้งานแล้ว")
+    await loadFactors()
+  }
+
+  return (
+    <Card className="p-5">
+      <h3 className="text-[15px] font-semibold">2-Factor Authentication (2FA)</h3>
+      <p className="mt-1 text-[12px] text-muted-foreground">
+        เพิ่มชั้นความปลอดภัยด้วยแอป Authenticator (Google Authenticator, Authy ฯลฯ) — ไม่บังคับ แนะนำให้เปิดใช้งาน
+      </p>
+
+      {loading ? (
+        <div className="mt-4"><Skeleton className="h-14 w-full rounded-[10px]" /></div>
+      ) : (
+        <div className="mt-4">
+          <SecRow
+            icon={<Icons.ShieldCheck size={16}/>} tone={verifiedFactor ? "emerald" : "amber"} embed
+            title="TOTP Authenticator"
+            desc={verifiedFactor ? "เปิดใช้งานแล้ว — ต้องใช้รหัส 6 หลักทุกครั้งที่เข้าสู่ระบบ" : "ยังไม่เปิดใช้งาน"}
+            right={
+              verifiedFactor ? (
+                <Btn variant="destructive" size="sm" onClick={disable} disabled={busy}>ปิดใช้งาน</Btn>
+              ) : (
+                <Btn variant="default" size="sm" onClick={startEnroll} disabled={busy || !!enrollId}>เปิดใช้งาน</Btn>
+              )
+            }
+          />
+
+          {qrCode && (
+            <div className="mt-4 rounded-[10px] border border-border p-4 space-y-3">
+              <p className="text-[12.5px] text-muted-foreground">
+                สแกน QR ด้วยแอป Authenticator แล้วกรอกรหัส 6 หลักเพื่อยืนยัน
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 items-start">
+                {/* eslint-disable-next-line @next/next/no-img-element -- data: URI SVG from Supabase, not an optimizable asset */}
+                <img src={qrCode} alt="2FA QR code" className="h-40 w-40 rounded-lg border border-border bg-white p-2" />
+                <div className="flex-1 space-y-3 min-w-0">
+                  {secret && (
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">หรือกรอกโค้ดนี้เอง</p>
+                      <code className="block text-[12px] font-mono break-all bg-muted rounded px-2 py-1 mt-1">{secret}</code>
+                    </div>
+                  )}
+                  <input
+                    value={code}
+                    onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="000000"
+                    inputMode="numeric"
+                    maxLength={6}
+                    className="w-32 h-10 rounded-[8px] border border-border bg-card text-center text-[16px] tracking-widest font-mono outline-none focus:border-brand-500"
+                  />
+                  <div className="flex gap-2">
+                    <Btn size="sm" onClick={confirmEnroll} disabled={busy || code.length !== 6}>ยืนยัน</Btn>
+                    <Btn variant="ghost" size="sm" onClick={cancelEnroll} disabled={busy}>ยกเลิก</Btn>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
   )
 }
 

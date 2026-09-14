@@ -4,6 +4,7 @@
  * Only sends if document originated from LINE (source = "line").
  */
 import { NextRequest, NextResponse } from "next/server"
+import { getAppUrl } from "@/lib/app-url"
 import { createClient }       from "@/lib/supabase/server"
 import { createAdminClient }  from "@/lib/supabase/admin"
 
@@ -39,7 +40,7 @@ function fmtTHB(n: number | null | undefined) {
 }
 
 function buildMessage(action: Action, vendorName: string, amount: string, vatAmount: string | null, docId: string): object[] {
-  const reviewUrl = `https://slippy.ai/documents/${docId}/review`
+  const reviewUrl = `${getAppUrl()}/documents/${docId}/review`
 
   switch (action) {
     case "approved":

@@ -1,0 +1,6 @@
+-- Historical ledger placeholder only.
+-- The original SQL for this applied remote migration was not recoverable from
+-- the approved NAS archives on 2026-09-03. This file is intentionally a no-op
+-- and exists solely so the checked-in migration ledger can match the remote
+-- history. Do not edit it into a schema migration; recover the original source
+-- in a separately reviewed archival change if it becomes available.

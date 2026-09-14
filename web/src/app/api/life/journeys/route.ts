@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient }       from "@/lib/supabase/server"
 import { createAdminClient }  from "@/lib/supabase/admin"
+import { isOrgMember }        from "@/lib/require-org-member"
 
 // GET — list journeys
 export async function GET(req: NextRequest) {
@@ -57,6 +58,9 @@ export async function POST(req: NextRequest) {
           started_at, ended_at, destination } = body
 
   if (!orgId || !title) return NextResponse.json({ error: "orgId and title required" }, { status: 400 })
+  if (!(await isOrgMember(user.id, orgId))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
 
   const admin = createAdminClient()
   const { data, error } = await admin.from("life_journeys").insert({
@@ -84,10 +88,20 @@ export async function PATCH(req: NextRequest) {
   const { journeyId, action, eventIds, ...updates } = await req.json()
   const admin = createAdminClient()
 
+  // Neither branch previously checked who owns `journeyId` (or which org
+  // `eventIds` belong to) before mutating — any logged-in user could hijack
+  // another org's expense events into their own journey, or edit any
+  // journey's fields, just by guessing/enumerating ids.
+  const { data: journey } = await admin.from("life_journeys").select("organization_id").eq("id", journeyId).single()
+  if (!journey || !(await isOrgMember(user.id, journey.organization_id))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+
   if (action === "link_events" && eventIds?.length) {
     await admin.from("life_events")
       .update({ journey_id: journeyId })
       .in("id", eventIds)
+      .eq("organization_id", journey.organization_id)  // can only link events from the same org
     return NextResponse.json({ ok: true })
   }
 
@@ -104,6 +118,11 @@ export async function DELETE(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const { journeyId } = await req.json()
-  await createAdminClient().from("life_journeys").delete().eq("id", journeyId)
+  const admin = createAdminClient()
+  const { data: journey } = await admin.from("life_journeys").select("organization_id").eq("id", journeyId).single()
+  if (!journey || !(await isOrgMember(user.id, journey.organization_id))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+  await admin.from("life_journeys").delete().eq("id", journeyId)
   return NextResponse.json({ ok: true })
 }

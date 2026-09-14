@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient }       from "@/lib/supabase/server"
 import { createAdminClient }  from "@/lib/supabase/admin"
+import { isOrgMember }        from "@/lib/require-org-member"
+import { ensureTripConversation, postTripSystemMessage } from "@/lib/trips/trip-conversation"
 
 function generateShareToken() {
   return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10)
@@ -24,7 +26,16 @@ export async function GET(req: NextRequest) {
       trip_participants(id, display_name, amount_owed, amount_paid, is_host, promptpay_type, qr_image_url)
     `)
     .eq("organization_id", orgId)
-    .not("trip_type", "is", null)
+    // trip_type defaults to 'general' (never actually null), so the old
+    // `.not("trip_type", "is", null)` filter matched every life_journeys
+    // row regardless of type — including plain Life Graph entries (event/
+    // experience/milestone/business) created via /api/life/journeys, which
+    // showed up here as phantom zero-participant "general" trips. trip_type
+    // is only meaningful when journey_type='trip' (enforced by the
+    // life_journeys_trip_type_requires_trip_journey CHECK constraint) —
+    // filtering on journey_type directly is the correct, and only correct, way to
+    // scope this list to actual bill-splitting trips.
+    .eq("journey_type", "trip")
     .order("created_at", { ascending: false })
 
   const enriched = (trips ?? []).map(t => ({
@@ -57,6 +68,7 @@ export async function POST(req: NextRequest) {
     base_fee?:    number
     cover_emoji?: string
     notes?:       string
+    base_currency?: string   // defaults to THB — see migration 073
     participants: Array<{
       display_name:    string
       line_user_id?:   string
@@ -69,6 +81,9 @@ export async function POST(req: NextRequest) {
   const { orgId, title, trip_type, participants, ...rest } = body
   if (!orgId || !title || !trip_type) {
     return NextResponse.json({ error: "orgId, title, trip_type required" }, { status: 400 })
+  }
+  if (!(await isOrgMember(user.id, orgId))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
   const admin = createAdminClient()
@@ -87,9 +102,14 @@ export async function POST(req: NextRequest) {
     ended_at:        rest.ended_at ?? null,
     split_mode:      rest.split_mode ?? "equal",
     base_fee:        rest.base_fee ?? 0,
+    base_currency:   rest.base_currency ?? "THB",
     cover_emoji:     rest.cover_emoji ?? (trip_type === "travel" ? "✈️" : trip_type === "sport" ? "🏸" : trip_type === "food_order" ? "🍽️" : "💰"),
     notes:           rest.notes ?? null,
-    journey_type:    trip_type === "travel" ? "trip" : "event",
+    // trip_type (travel/food_order/sport/general) is only meaningful when
+    // journey_type='trip' — matches create_trip_full's RPC convention.
+    // "event"/other journey_types are created via the journeys endpoint
+    // directly, not here.
+    journey_type:    "trip",
     share_token:     generateShareToken(),
     status:          "active",
   }).select("id, share_token").single()
@@ -113,5 +133,28 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  return NextResponse.json({ tripId: journey.id, shareToken: journey.share_token })
+  // Give the trip its group chat (Phase 1 — handoff §9). Best-effort: a chat
+  // that failed to appear is recoverable at any time via
+  // POST /api/trips/[id]/conversation, whereas failing the whole request would
+  // throw away a journey and its participants that are already committed.
+  let conversationId: string | null = null
+  try {
+    const conv = await ensureTripConversation(journey.id, user.id)
+    conversationId = conv.conversationId
+    await postTripSystemMessage({
+      journeyId: journey.id,
+      event:     "trip_created",
+      body:      `สร้างทริป “${title}” แล้ว`,
+      detail:    { title, trip_type },
+      actorId:   user.id,
+    })
+  } catch (err) {
+    console.error("[trips] conversation setup failed:", (err as Error).message)
+  }
+
+  return NextResponse.json({
+    tripId: journey.id,
+    shareToken: journey.share_token,
+    conversationId,
+  })
 }

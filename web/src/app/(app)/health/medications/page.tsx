@@ -11,15 +11,22 @@ export default async function MedicationsPage() {
       .select(`
         id, name, brand_name, dosage_form, strength, category, purpose,
         is_chronic, color, notes, image_url,
-        medication_schedules(id, times, dose_qty, meal_relation, meal_note, reminder_enabled, is_active),
-        medication_inventory(id, qty_remaining, qty_unit, low_stock_alert, expiry_date)
+        provider_id, doctor_instructions, prescribed_by,
+        provider:medical_providers(id, name, type, hn),
+        medication_courses(
+          id, status, start_date, planned_end_date, actual_end_at, prescribed_by,
+          doctor_instructions, instruction_source, resume_review_at,
+          medication_dose_slots(id, time_value, period_label, dose_qty, meal_relation, meal_note, sort_order, reminder_enabled, is_active),
+          medication_course_events(id, action, from_status, to_status, effective_at, reason, confirmed_by, created_at)
+        ),
+        medication_schedules(id, course_id, times, dose_qty, meal_relation, meal_note, reminder_enabled, is_active, is_bedtime),
+        medication_inventory(id, qty_remaining, qty_unit, qty_per_pack, low_stock_alert, expiry_date, loc_code, lot_no)
       `)
       .eq("user_id", user.id)
-      .eq("is_active", true)
       .order("name"),
 
     supabase.from("medication_logs")
-      .select("id, medication_id, scheduled_at, taken_at, status, dose_taken")
+      .select("id, medication_id, course_id, slot_id, scheduled_at, taken_at, status, dose_taken")
       .eq("user_id", user.id)
       .gte("scheduled_at", new Date().toISOString().slice(0, 10) + "T00:00:00+07:00")
       .order("scheduled_at"),

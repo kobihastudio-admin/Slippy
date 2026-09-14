@@ -1,460 +1,369 @@
 import SwiftUI
 import Supabase
 
-// MARK: – Colour palette
-// Mirrors the web login page's adaptive light/dark CSS variables
-// (`globals.css` :root vs .dark) — driven by the system/user display-mode
-// toggle (`AppSettings`/`ThemePicker`) instead of being hard-locked to dark.
-private struct LoginPalette {
-    let bg, card, inputBg, demoBg: Color
-    let border, demoBorder: Color
-    let text, muted, brand, brand2, brandLt, forgotPw: Color
-    let fbBlue, lineGrn, glow1, glow2: Color
-    let gradientTop, gradientBottom: Color
-
-    static let dark = LoginPalette(
-        bg:        Color(hex: "#0a0d1a"),
-        card:      Color(hex: "#111827"),
-        inputBg:   Color(hex: "#0f172a"),
-        demoBg:    Color(hex: "#1e1b4b"),
-        border:    Color(hex: "#1f2937"),
-        demoBorder: Color(hex: "#3730a3"),
-        text:      .white,
-        muted:     Color(hex: "#9ca3af"),
-        brand:     Color(hex: "#6366f1"),
-        brand2:    Color(hex: "#4f46e5"),
-        brandLt:   Color(hex: "#a5b4fc"),
-        forgotPw:  Color(hex: "#818cf8"),
-        fbBlue:    Color(hex: "#1877F2"),
-        lineGrn:   Color(hex: "#06C755"),
-        glow1:     Color(hex: "#6366f1"),
-        glow2:     Color(hex: "#7c3aed"),
-        gradientTop:    Color(hex: "#070a18"),
-        gradientBottom: Color(hex: "#0f1235")
-    )
-
-    static let light = LoginPalette(
-        bg:        Color(hex: "#ffffff"),
-        card:      Color(hex: "#ffffff"),
-        inputBg:   Color(hex: "#f9fafb"),
-        demoBg:    Color(hex: "#eef2ff"),
-        border:    Color(hex: "#e5e7eb"),
-        demoBorder: Color(hex: "#c7d2fe"),
-        text:      Color(hex: "#0f172a"),
-        muted:     Color(hex: "#6b7280"),
-        brand:     Color(hex: "#6366f1"),
-        brand2:    Color(hex: "#4f46e5"),
-        brandLt:   Color(hex: "#4338ca"),
-        forgotPw:  Color(hex: "#4f46e5"),
-        fbBlue:    Color(hex: "#1877F2"),
-        lineGrn:   Color(hex: "#06C755"),
-        glow1:     Color(hex: "#6366f1"),
-        glow2:     Color(hex: "#7c3aed"),
-        gradientTop:    Color(hex: "#eef2ff"),
-        gradientBottom: Color(hex: "#ffffff")
-    )
-}
-
 struct LoginView: View {
     @EnvironmentObject var authVM: AuthViewModel
-    @ObservedObject private var settings = AppSettings.shared
-    @Environment(\.colorScheme) private var systemScheme
-
-    /// Resolves the active palette from the user's chosen display mode
-    /// (falls back to the system scheme when the mode is "system") — this is
-    /// what makes the top-right theme pill actually change the look of the
-    /// login screen, mirroring the web's adaptive light/dark login page.
-    private var c: LoginPalette {
-        let resolved = settings.displayMode.colorScheme ?? systemScheme
-        return resolved == .dark ? .dark : .light
-    }
 
     @State private var email     = ""
     @State private var password  = ""
     @State private var showPw    = false
     @State private var remember  = true
     @State private var isLoading = false
-    @State private var oauthKey: String? = nil
+    @State private var oauthKey: String?
     @State private var localError: String?
+    @State private var appeared   = false
+    @State private var showSignUp = false
+
+    private var busy: Bool {
+        isLoading || oauthKey != nil || (authVM.loginLockedUntil.map { $0 > Date() } ?? false)
+    }
 
     var body: some View {
-        ZStack {
-            // ── Dark gradient bg (matches web #070a18 → #0f1235) ──────
-            LinearGradient(
-                colors: [c.gradientTop, c.gradientBottom],
-                startPoint: .top, endPoint: .bottom
-            )
-            .ignoresSafeArea()
+        GeometryReader { geo in
+            ZStack {
+                splashBackground(geo)
 
-            // Glow blobs
-            Circle().fill(c.glow1.opacity(0.13))
-                .frame(width: 360).blur(radius: 90)
-                .offset(x: -110, y: -280)
-            Circle().fill(c.glow2.opacity(0.08))
-                .frame(width: 300).blur(radius: 90)
-                .offset(x: 150, y: 150)
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        Spacer().frame(height: 36)
 
-            VStack(spacing: 0) {
-                // ── Top bar (logo + theme) ────────────────────────────
-                topBar
-
-                // ── Scrollable content ────────────────────────────────
-                ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Spacer().frame(height: 32)
-
-                        // Heading
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("ยินดีต้อนรับกลับ")
-                                .font(.system(size: 30, weight: .bold))
-                                .foregroundColor(c.text)
-                            Text("เข้าสู่บัญชี Slippy ของคุณ")
-                                .font(.system(size: 14))
-                                .foregroundColor(c.muted)
-                        }
-                        .padding(.horizontal, 24)
+                        logoSection
 
                         Spacer().frame(height: 28)
 
-                        // ── Social ────────────────────────────────────
-                        VStack(spacing: 10) {
-                            googleButton
-                            HStack(spacing: 10) {
-                                facebookButton
-                                lineButton
-                            }
-                        }
-                        .padding(.horizontal, 24)
-                        .disabled(oauthKey != nil || isLoading)
+                        socialSection
 
-                        // ── Divider ───────────────────────────────────
-                        divider.padding(.vertical, 20)
+                        divider
 
-                        // ── Form ──────────────────────────────────────
-                        VStack(spacing: 16) {
-                            if let err = localError ?? authVM.error {
-                                errorBanner(err)
-                            }
-                            emailField
-                            passwordField
-                            rememberRow
-                            submitButton
-                        }
-                        .padding(.horizontal, 24)
+                        emailSection
 
-                        // Register link
-                        HStack(spacing: 4) {
-                            Text("ยังไม่มีบัญชี?")
-                                .font(.system(size: 13)).foregroundColor(c.muted)
-                            Button("สมัครสมาชิก") {}
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(c.forgotPw)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 20)
-
-                        // Demo account
-                        demoSection
-                            .padding(.horizontal, 24)
-                            .padding(.top, 16)
-
-                        Spacer().frame(height: 52)
+                        Spacer().frame(height: 40)
                     }
+                    .frame(width: geo.size.width - 48)
                 }
             }
         }
-        .onTapGesture { hideKeyboard() }
-    }
-
-    // MARK: – Top bar
-    private var topBar: some View {
-        HStack {
-            // Logo
-            HStack(spacing: 10) {
-                SlippyLogoMark(size: 36)
-                Text("Slippy")
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundColor(c.text)
-            }
-            Spacer()
-            // Theme pill toggle
-            ThemePicker()
+        .onTapGesture {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                            to: nil, from: nil, for: nil)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 16)
-        .padding(.bottom, 8)
-    }
-
-    // MARK: – Google button
-    private var googleButton: some View {
-        Button { Task { await runOAuth("Google", provider: .google) } } label: {
-            HStack(spacing: 10) {
-                if oauthKey == "Google" {
-                    ProgressView().tint(c.muted).scaleEffect(0.9)
-                } else {
-                    GoogleLogo(size: 20)
-                    Text("เข้าสู่ระบบด้วย Google")
-                        .font(.system(size: 14.5, weight: .medium))
-                        .foregroundColor(c.text)
-                }
+        .sheet(isPresented: $showSignUp) {
+            SignUpView().environmentObject(authVM)
+        }
+        .onAppear {
+            withAnimation(.spring(response: 0.65, dampingFraction: 0.8).delay(0.1)) {
+                appeared = true
             }
-            .frame(maxWidth: .infinity).frame(height: 46)
-            .background(c.card)
-            .cornerRadius(10)
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(c.border, lineWidth: 1))
         }
     }
 
-    // MARK: – Facebook button
-    private var facebookButton: some View {
-        Button { Task { await runOAuth("Facebook", provider: .facebook) } } label: {
+    // MARK: – Background
+    private func splashBackground(_ geo: GeometryProxy) -> some View {
+        ZStack {
+            Color(hex: "#eeeaff").ignoresSafeArea()
+            // top-right blob
+            Ellipse()
+                .fill(Color(hex: "#c4b5fd").opacity(0.55))
+                .frame(width: 340, height: 260)
+                .rotationEffect(.degrees(-20))
+                .offset(x: geo.size.width * 0.3, y: -geo.size.height * 0.28)
+            // bottom-left blob
+            Ellipse()
+                .fill(Color(hex: "#ddd6fe").opacity(0.4))
+                .frame(width: 300, height: 200)
+                .rotationEffect(.degrees(15))
+                .offset(x: -geo.size.width * 0.2, y: geo.size.height * 0.42)
+        }
+    }
+
+    // MARK: – Logo
+    private var logoSection: some View {
+        VStack(spacing: 0) {
+            // Logo + sparkles — fixed frame so sparkles don't bleed
             ZStack {
-                if oauthKey == "Facebook" {
-                    ProgressView().tint(c.muted).scaleEffect(0.85)
-                } else {
-                    HStack(spacing: 8) {
-                        FacebookLogo(size: 20)
-                        Text("Facebook")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(c.text)
-                    }
-                }
+                sparkle(dx: -68, dy: -26, size: 15, color: Color(hex: "#a78bfa"))
+                sparkle(dx:  70, dy: -18, size: 12, color: Color(hex: "#f472b6"))
+                sparkle(dx: -55, dy:  42, size:  9, color: Color(hex: "#818cf8"))
+                sparkle(dx:  64, dy:  38, size: 11, color: Color(hex: "#a78bfa"))
+                sparkle(dx:  10, dy: -50, size:  8, color: Color(hex: "#f9a8d4"))
+
+                SlippyLogoMark(size: 84, glow: false)
+                    .scaleEffect(appeared ? 1.0 : 0.55)
+                    .opacity(appeared ? 1.0 : 0.0)
             }
-            .frame(maxWidth: .infinity).frame(height: 46)
-            .background(c.card)
-            .cornerRadius(10)
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(c.border, lineWidth: 1))
+            .frame(width: 180, height: 140)
+
+            Spacer().frame(height: 14)
+
+            Text("Slippy")
+                .font(.system(size: 32, weight: .black, design: .rounded))
+                .foregroundColor(Color(hex: "#1e1b4b"))
+
+            Spacer().frame(height: 4)
+
+            Text("Your AI Life Assistant")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(Color(hex: "#7c72f5"))
+
+            Spacer().frame(height: 8)
+
+            Text("จัดการชีวิตให้ง่ายขึ้น\nด้วยผู้ช่วยอัจฉริยะของคุณ 💜")
+                .font(.system(size: 13))
+                .foregroundColor(Color(hex: "#6b7280"))
+                .multilineTextAlignment(.center)
+                .lineSpacing(3)
         }
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : -10)
     }
 
-    // MARK: – LINE button
-    private var lineButton: some View {
-        Button {
-            Task { await runLineOAuth() }
-        } label: {
+    private func sparkle(dx: CGFloat, dy: CGFloat, size: CGFloat, color: Color) -> some View {
+        Image(systemName: "sparkle")
+            .font(.system(size: size, weight: .bold))
+            .foregroundColor(color.opacity(0.85))
+            .offset(x: dx, y: dy)
+    }
+
+    // MARK: – Social buttons
+    private var socialSection: some View {
+        VStack(spacing: 10) {
+            if let err = localError ?? authVM.error {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundColor(Color(hex: "#ef4444"))
+                    Text(err).font(.system(size: 13)).foregroundColor(Color(hex: "#dc2626"))
+                    Spacer()
+                }
+                .padding(12)
+                .background(Color(hex: "#fef2f2"))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: "#fecaca"), lineWidth: 1))
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
+            socialBtn(label: "เข้าสู่ระบบด้วย LINE",
+                      icon: AnyView(LineLogo(size: 20)),
+                      bg: Color(hex: "#06C755"),
+                      isLoading: oauthKey == "LINE") {
+                Task { await runNative("LINE") { await authVM.signInWithLineNative() } }
+            }
+
+            socialBtn(label: "เข้าสู่ระบบด้วย Facebook",
+                      icon: AnyView(FacebookLogo(size: 20)),
+                      bg: Color(hex: "#1877F2"),
+                      isLoading: oauthKey == "Facebook") {
+                Task { await runNative("Facebook") { await authVM.signInWithFacebookNative() } }
+            }
+
+            socialBtn(label: "เข้าสู่ระบบด้วย Google",
+                      icon: AnyView(GoogleLogo(size: 20)),
+                      bg: .white,
+                      textColor: Color(hex: "#1a1a2e"),
+                      border: Color(hex: "#e5e7eb"),
+                      isLoading: oauthKey == "Google") {
+                Task { await runNative("Google") { await authVM.signInWithGoogleNative() } }
+            }
+        }
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : 16)
+    }
+
+    // ★ frame(maxWidth:.infinity) is on the Button directly — not inside the label
+    private func socialBtn(label: String,
+                           icon: AnyView,
+                           bg: Color,
+                           textColor: Color = .white,
+                           border: Color = .clear,
+                           isLoading: Bool,
+                           action: @escaping () -> Void) -> some View {
+        Button(action: { if !busy { hapticLight(); action() } }) {
             ZStack {
-                if oauthKey == "LINE" {
-                    ProgressView().tint(c.muted).scaleEffect(0.85)
+                if isLoading {
+                    ProgressView().tint(textColor)
                 } else {
-                    HStack(spacing: 8) {
-                        LineLogo(size: 20)
-                        Text("LINE")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(c.text)
+                    HStack(spacing: 10) {
+                        icon
+                        Text(label)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(textColor)
                     }
                 }
             }
-            .frame(maxWidth: .infinity).frame(height: 46)
-            .background(c.card)
-            .cornerRadius(10)
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(c.border, lineWidth: 1))
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
+            .background(bg)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(border, lineWidth: border == .clear ? 0 : 1))
+            .shadow(color: bg == .white ? .black.opacity(0.06) : bg.opacity(0.25), radius: 6, x: 0, y: 3)
         }
+        .opacity(busy ? 0.65 : 1)
+        .scaleEffect(busy ? 0.98 : 1)
+        .animation(.spring(response: 0.2), value: busy)
     }
 
     // MARK: – Divider
     private var divider: some View {
         HStack(spacing: 12) {
-            Rectangle().fill(c.border).frame(height: 1)
-            Text("หรือใช้อีเมล")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(c.muted).fixedSize()
-            Rectangle().fill(c.border).frame(height: 1)
+            Rectangle().fill(Color(hex: "#ddd6fe")).frame(height: 1)
+            Text("หรือ")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(Color(hex: "#9ca3af"))
+            Rectangle().fill(Color(hex: "#ddd6fe")).frame(height: 1)
         }
-        .padding(.horizontal, 24)
+        .padding(.vertical, 18)
+        .opacity(appeared ? 1 : 0)
     }
 
-    // MARK: – Error banner
-    private func errorBanner(_ msg: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(Color(hex: "#f87171")).font(.system(size: 13))
-            Text(msg).font(.system(size: 13)).foregroundColor(Color(hex: "#f87171"))
-        }
-        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(hex: "#7f1d1d").opacity(0.4))
-        .cornerRadius(10)
-        .overlay(RoundedRectangle(cornerRadius: 10)
-            .stroke(Color(hex: "#dc2626").opacity(0.45), lineWidth: 1))
-    }
-
-    // MARK: – Email field
-    private var emailField: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text("อีเมล")
-                .font(.system(size: 13, weight: .medium)).foregroundColor(c.text)
-            HStack(spacing: 10) {
+    // MARK: – Email form
+    private var emailSection: some View {
+        VStack(spacing: 12) {
+            // Email
+            HStack(spacing: 12) {
                 Image(systemName: "envelope")
-                    .foregroundColor(c.muted).font(.system(size: 15))
+                    .font(.system(size: 14)).foregroundColor(Color(hex: "#9ca3af"))
                 TextField("", text: $email,
-                          prompt: Text("you@company.com").foregroundColor(c.muted))
+                          prompt: Text("E-mail Address").foregroundColor(Color(hex: "#9ca3af")))
                     .keyboardType(.emailAddress)
                     .autocapitalization(.none)
                     .autocorrectionDisabled()
-                    .foregroundColor(c.text)
-                    .font(.system(size: 14))
+                    .font(.system(size: 15))
+                    .foregroundColor(Color(hex: "#1e1b4b"))
             }
-            .padding(.horizontal, 13).padding(.vertical, 13)
-            .background(c.inputBg).cornerRadius(10)
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(c.border, lineWidth: 1))
-        }
-    }
+            .padding(.horizontal, 16).padding(.vertical, 14)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: "#e5e7eb"), lineWidth: 1))
 
-    // MARK: – Password field
-    private var passwordField: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                Text("รหัสผ่าน")
-                    .font(.system(size: 13, weight: .medium)).foregroundColor(c.text)
-                Spacer()
-                Button("ลืมรหัสผ่าน?") {}
-                    .font(.system(size: 12, weight: .medium)).foregroundColor(c.forgotPw)
-            }
-            HStack(spacing: 10) {
+            // Password
+            HStack(spacing: 12) {
                 Image(systemName: "lock.shield")
-                    .foregroundColor(c.muted).font(.system(size: 15))
+                    .font(.system(size: 14)).foregroundColor(Color(hex: "#9ca3af"))
                 Group {
                     if showPw {
                         TextField("", text: $password,
-                                  prompt: Text("••••••••").foregroundColor(c.muted))
+                                  prompt: Text("Password").foregroundColor(Color(hex: "#9ca3af")))
                     } else {
                         SecureField("", text: $password,
-                                    prompt: Text("••••••••").foregroundColor(c.muted))
+                                    prompt: Text("Password").foregroundColor(Color(hex: "#9ca3af")))
                     }
                 }
-                .foregroundColor(c.text).font(.system(size: 14))
-                Button { showPw.toggle() } label: {
+                .font(.system(size: 15))
+                .foregroundColor(Color(hex: "#1e1b4b"))
+                .onSubmit { Task { await handleEmailSignIn() } }
+                Button { showPw.toggle(); hapticLight() } label: {
                     Image(systemName: showPw ? "eye.slash" : "eye")
-                        .foregroundColor(c.muted).font(.system(size: 15))
+                        .font(.system(size: 14))
+                        .foregroundColor(Color(hex: "#9ca3af"))
                 }
             }
-            .padding(.horizontal, 13).padding(.vertical, 13)
-            .background(c.inputBg).cornerRadius(10)
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(c.border, lineWidth: 1))
-        }
-    }
+            .padding(.horizontal, 16).padding(.vertical, 14)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: "#e5e7eb"), lineWidth: 1))
 
-    // MARK: – Remember me checkbox
-    private var rememberRow: some View {
-        HStack(spacing: 9) {
-            Button { remember.toggle() } label: {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(remember ? c.brand : Color.clear)
-                        .frame(width: 17, height: 17)
-                        .overlay(RoundedRectangle(cornerRadius: 4)
-                            .stroke(remember ? c.brand : c.muted, lineWidth: 1.5))
-                    if remember {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 10, weight: .bold)).foregroundColor(.white)
+            // Remember + Forgot
+            HStack {
+                Button { remember.toggle(); hapticLight() } label: {
+                    HStack(spacing: 8) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(remember ? Color(hex: "#6366f1") : Color.white)
+                                .frame(width: 18, height: 18)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 5)
+                                        .stroke(remember ? Color(hex: "#6366f1") : Color(hex: "#d1d5db"),
+                                                lineWidth: 1.5)
+                                )
+                            if remember {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        Text("จดจำฉัน")
+                            .font(.system(size: 13))
+                            .foregroundColor(Color(hex: "#6b7280"))
                     }
                 }
+                Spacer()
+                Button("ลืมรหัสผ่าน?") {}
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(Color(hex: "#6366f1"))
             }
-            Text("จดจำการเข้าสู่ระบบบนเครื่องนี้")
-                .font(.system(size: 13)).foregroundColor(c.muted)
-        }
-    }
 
-    // MARK: – Submit button
-    private var submitButton: some View {
-        Button { Task { await handleEmailSignIn() } } label: {
-            HStack(spacing: 8) {
-                if isLoading { ProgressView().tint(.white).scaleEffect(0.9) }
-                Text("เข้าสู่ระบบ")
-                    .font(.system(size: 15, weight: .semibold))
+            // Sign-in button — frame(maxWidth:.infinity) on Button directly
+            Button { Task { await handleEmailSignIn() } } label: {
+                ZStack {
+                    if isLoading {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text("เข้าสู่ระบบ")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+                .background(
+                    LinearGradient(
+                        colors: [Color(hex: "#8b7cf8"), Color(hex: "#6366f1")],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .shadow(color: Color(hex: "#6366f1").opacity(0.3), radius: 10, x: 0, y: 4)
             }
-            .frame(maxWidth: .infinity).frame(height: 46)
-            .background(
-                LinearGradient(colors: [c.brand, c.brand2],
-                               startPoint: .leading, endPoint: .trailing)
-            )
-            .foregroundColor(.white).cornerRadius(10)
-            .opacity((isLoading || oauthKey != nil) ? 0.6 : 1)
-        }
-        .disabled(isLoading || oauthKey != nil)
-    }
+            .disabled(busy)
+            .opacity(busy ? 0.7 : 1)
+            .scaleEffect(busy ? 0.98 : 1)
+            .animation(.spring(response: 0.2), value: busy)
 
-    // MARK: – Demo section
-    private var demoSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "info.circle")
-                    .foregroundColor(c.brand).font(.system(size: 14)).padding(.top, 1)
-                (Text("Demo Account").font(.system(size: 12.5, weight: .bold)).foregroundColor(c.text)
-                 + Text(" — สำหรับทดลองใช้งานระบบโดยไม่ต้องสมัคร")
-                    .font(.system(size: 12.5)).foregroundColor(c.muted))
+            // Register link
+            HStack(spacing: 4) {
+                Text("ยังไม่มีบัญชี?")
+                    .font(.system(size: 13)).foregroundColor(Color(hex: "#9ca3af"))
+                Button("สมัครสมาชิก") { showSignUp = true }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(Color(hex: "#6366f1"))
             }
-            Button {
-                email    = "demo@slippy.app"
-                password = "password"
-            } label: {
-                Text("เข้าสู่ระบบด้วย Demo Account")
-                    .font(.system(size: 13, weight: .medium)).foregroundColor(c.brandLt)
-                    .frame(maxWidth: .infinity).frame(height: 36)
-                    .background(c.demoBg).cornerRadius(8)
-                    .overlay(RoundedRectangle(cornerRadius: 8)
-                        .stroke(c.demoBorder.opacity(0.9), lineWidth: 1))
-            }
+            .padding(.top, 4)
         }
-        .padding(14)
-        .background(c.card).cornerRadius(12)
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(c.border, lineWidth: 1))
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : 16)
     }
 
     // MARK: – Actions
     private func handleEmailSignIn() async {
         guard !email.isEmpty, !password.isEmpty else {
-            localError = "กรุณากรอกอีเมลและรหัสผ่าน"; return
+            withAnimation { localError = "กรุณากรอกอีเมลและรหัสผ่าน" }
+            hapticError(); return
         }
-        localError = nil; isLoading = true
-        await authVM.signIn(email: email, password: password)
+        localError = nil; isLoading = true; hapticLight()
+        await authVM.signIn(email: email.trimmingCharacters(in: .whitespaces), password: password)
         if let err = authVM.error {
-            localError = err.contains("Invalid login credentials")
-                ? "อีเมลหรือรหัสผ่านไม่ถูกต้อง"
-                : err.contains("Email not confirmed")
-                ? "กรุณายืนยันอีเมลก่อนเข้าสู่ระบบ"
-                : err
-            authVM.error = nil
+            withAnimation {
+                localError = err.contains("Invalid login credentials") ? "อีเมลหรือรหัสผ่านไม่ถูกต้อง"
+                           : err.contains("Email not confirmed")       ? "กรุณายืนยันอีเมลก่อนเข้าสู่ระบบ"
+                           : err
+            }
+            authVM.error = nil; hapticError()
         }
         isLoading = false
     }
 
-    private func runOAuth(_ key: String, provider: Provider) async {
-        oauthKey = key; localError = nil; authVM.error = nil
-        await authVM.signInWithOAuth(provider: provider)
-        if let err = authVM.error { localError = err; authVM.error = nil }
+    private func runNative(_ key: String, action: () async -> Void) async {
+        oauthKey = key; localError = nil; authVM.error = nil; hapticLight()
+        await action()
+        if let err = authVM.error {
+            withAnimation { localError = err }
+            authVM.error = nil; hapticError()
+        }
         oauthKey = nil
-    }
-
-    /// LINE has no native Supabase provider — routed through the web's custom
-    /// `/api/auth/line` flow (see `AuthViewModel.signInWithLine`).
-    private func runLineOAuth() async {
-        oauthKey = "LINE"; localError = nil; authVM.error = nil
-        await authVM.signInWithLine()
-        if let err = authVM.error { localError = err; authVM.error = nil }
-        oauthKey = nil
-    }
-
-    private func hideKeyboard() {
-        UIApplication.shared.sendAction(
-            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 }
 
-// MARK: – Preview
+private func hapticError() { UINotificationFeedbackGenerator().notificationOccurred(.error) }
+
 #if DEBUG
-#Preview("Login – normal") {
-    LoginView().environmentObject({ () -> AuthViewModel in
-        let vm = AuthViewModel(_preview: true)
-        vm.isLoading = false; return vm
-    }())
-}
-
-#Preview("Login – error") {
-    LoginView().environmentObject({ () -> AuthViewModel in
-        let vm = AuthViewModel(_preview: true)
-        vm.isLoading = false
-        vm.error = "อีเมลหรือรหัสผ่านไม่ถูกต้อง"
-        return vm
-    }())
-}
+#Preview { LoginView().environmentObject(AuthViewModel(_preview: true)) }
 #endif

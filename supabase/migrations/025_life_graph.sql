@@ -56,7 +56,6 @@ CREATE TABLE IF NOT EXISTS life_journeys (
   metadata jsonb NOT NULL DEFAULT '{}',
   created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now()
 );
-
 -- Indexes (IF NOT EXISTS)
 CREATE INDEX IF NOT EXISTS idx_lm_org      ON life_merchants(organization_id);
 CREATE INDEX IF NOT EXISTS idx_lm_category ON life_merchants(organization_id, category);
@@ -69,20 +68,17 @@ CREATE INDEX IF NOT EXISTS idx_lmem_org    ON life_memories(organization_id, mem
 CREATE INDEX IF NOT EXISTS idx_li_org_unread ON life_insights(organization_id, is_read, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_li_type     ON life_insights(organization_id, insight_type);
 CREATE INDEX IF NOT EXISTS idx_lj_org      ON life_journeys(organization_id, started_at DESC);
-
 -- FK: life_events.journey_id → life_journeys
 ALTER TABLE life_events ADD COLUMN IF NOT EXISTS journey_id uuid;
 ALTER TABLE life_events DROP CONSTRAINT IF EXISTS fk_le_journey;
 ALTER TABLE life_events ADD CONSTRAINT fk_le_journey
   FOREIGN KEY (journey_id) REFERENCES life_journeys(id) ON DELETE SET NULL;
-
 -- RLS
 ALTER TABLE life_merchants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE life_events    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE life_memories  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE life_insights  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE life_journeys  ENABLE ROW LEVEL SECURITY;
-
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname='life_merchants_member' AND tablename='life_merchants') THEN
     CREATE POLICY "life_merchants_member" ON life_merchants FOR ALL USING (organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid()));
@@ -100,7 +96,6 @@ DO $$ BEGIN
     CREATE POLICY "life_journeys_member" ON life_journeys FOR ALL USING (organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid()));
   END IF;
 END $$;
-
 -- Function: upsert merchant
 CREATE OR REPLACE FUNCTION upsert_life_merchant(
   p_org_id uuid, p_name text, p_tax_id text DEFAULT NULL,

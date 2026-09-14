@@ -4,34 +4,21 @@
  */
 
 import { NextRequest, NextResponse } from "next/server"
-import { createClient }              from "@/lib/supabase/server"
 import { createAdminClient }         from "@/lib/supabase/admin"
 import { stripe }                    from "@/lib/stripe/server"
-
-// ── Guard helper ─────────────────────────────────────────────────────────────
-async function assertSuperadmin() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-
-  const { data: profile } = await supabase
-    .from("users")
-    .select("is_superadmin")
-    .eq("id", user.id)
-    .single()
-
-  return profile?.is_superadmin === true ? user : null
-}
+import { withErrorLogging }          from "@/lib/log-server-error"
+import { logAdminAction }            from "@/lib/admin-audit-log"
+import { assertSuperadmin }          from "@/lib/admin-guard"
 
 // ── PUT /api/admin/plans/[id] ─────────────────────────────────────────────────
 // Body fields (all optional):
 //   name_th, name_en, price_thb, doc_quota, features (string[]),
 //   highlighted, is_active, sort_order,
 //   stripe_price_id_m, stripe_price_id_y
-export async function PUT(
+export const PUT = withErrorLogging("admin_plan_update", async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   const user = await assertSuperadmin()
   if (!user) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
@@ -58,6 +45,13 @@ export async function PUT(
   // If admin changes price_thb but no stripe ID is supplied, skip Stripe (manual step).
 
   const admin = createAdminClient()
+
+  const { data: before } = await admin
+    .from("pricing_plans")
+    .select(allowed.join(","))
+    .eq("id", id)
+    .single()
+
   const { data, error } = await admin
     .from("pricing_plans")
     .update(patch)
@@ -67,17 +61,27 @@ export async function PUT(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  await logAdminAction({
+    actorId: user.id,
+    action: "pricing_plan_update",
+    targetType: "pricing_plans",
+    targetId: id,
+    before,
+    after: patch,
+    ipAddress: req.headers.get("x-forwarded-for"),
+  })
+
   return NextResponse.json({ ok: true, plan: data })
-}
+})
 
 // ── POST /api/admin/plans/[id]/stripe-sync ───────────────────────────────────
 // Creates Stripe Products & Prices for monthly + yearly billing, then saves
 // the resulting price IDs back to pricing_plans.
 // Expects body: { currency?: "thb", yearlyDiscountPct?: number }
-export async function POST(
+export const POST = withErrorLogging("admin_plan_stripe_sync", async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   const user = await assertSuperadmin()
   if (!user) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
@@ -147,6 +151,16 @@ export async function POST(
     return NextResponse.json({ error: updateErr.message }, { status: 500 })
   }
 
+  await logAdminAction({
+    actorId: user.id,
+    action: "pricing_plan_stripe_sync",
+    targetType: "pricing_plans",
+    targetId: id,
+    before: { stripe_price_id_m: plan.stripe_price_id_m, stripe_price_id_y: plan.stripe_price_id_y },
+    after: { stripe_price_id_m: priceM.id, stripe_price_id_y: priceY.id, stripe_product_id: product.id },
+    ipAddress: req.headers.get("x-forwarded-for"),
+  })
+
   return NextResponse.json({
     ok: true,
     stripe_product_id:  product.id,
@@ -154,4 +168,4 @@ export async function POST(
     stripe_price_id_y:  priceY.id,
     plan:               updated,
   })
-}
+})

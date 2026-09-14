@@ -21,14 +21,11 @@ create table if not exists ocr_error_patterns (
 
   unique (organization_id, field_name, wrong_value, correct_value)
 );
-
 create index ocr_error_patterns_org_idx
   on ocr_error_patterns (organization_id, field_name, occurrence_count desc)
   where is_active = true;
-
 -- global patterns (org_id is null) — no RLS needed, read-only by pipeline
 alter table ocr_error_patterns enable row level security;
-
 create policy "pipeline can read patterns"
   on ocr_error_patterns for select
   using (
@@ -39,12 +36,10 @@ create policy "pipeline can read patterns"
         and user_id = auth.uid()
     )
   );
-
 create policy "service role can manage patterns"
   on ocr_error_patterns for all
   using (true)
   with check (true);
-
 -- ============================================================
 -- Table: image_quality_logs — บันทึก blur score ของแต่ละรูป
 -- ใช้ track ว่า user มักส่งรูปคุณภาพต่ำจาก channel ไหน
@@ -59,5 +54,4 @@ create table if not exists image_quality_logs (
   file_size_kb  int,
   created_at    timestamptz not null default now()
 );
-
 create index image_quality_logs_doc_idx on image_quality_logs (document_id);

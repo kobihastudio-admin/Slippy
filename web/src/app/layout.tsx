@@ -14,6 +14,8 @@ import { NextIntlClientProvider } from "next-intl"
 import { ThemeProvider }         from "@/components/layout/theme-provider"
 import { Toaster }               from "sonner"
 import { CookieBanner, CookieManageButton } from "@/components/ui/cookie-banner"
+import { AppLoadingProvider } from "@/lib/loading"
+import { SlippyLoader }       from "@/components/ui/slippy-loader"
 import "./globals.css"
 
 const inter = Inter({
@@ -31,7 +33,7 @@ const notoSansThai = Noto_Sans_Thai({
 
 export const metadata: Metadata = {
   title:       { default: "Slippy", template: "%s | Slippy" },
-  description: "ระบบจัดการเอกสารบัญชีอัจฉริยะ ด้วย AI OCR — อ่านใบเสร็จ จัดหมวดหมู่ Export รายงาน",
+  description: "เรื่องเล็กๆวันนี้เปลี่ยนชีวิตให้ดีได้ขึ้นทุกวัน",
   keywords:    ["slippy", "accounting", "document", "AI", "OCR", "FlowAccount", "บัญชี", "สลิป", "ใบเสร็จ", "PDPA"],
   manifest:    "/manifest.json",
   appleWebApp: { capable: true, statusBarStyle: "default", title: "Slippy" },
@@ -58,10 +60,10 @@ export const metadata: Metadata = {
   openGraph: {
     type:        "website",
     locale:      "th_TH",
-    url:         "https://slippy.ai",
+    url:         "https://dev.slippyai.app",
     siteName:    "Slippy",
     title:       "Slippy — ระบบจัดการเอกสารบัญชีอัจฉริยะ",
-    description: "อ่านใบเสร็จด้วย AI · จัดหมวดหมู่อัตโนมัติ · Export รายงาน · เชื่อม LINE",
+    description: "เรื่องเล็กๆวันนี้เปลี่ยนชีวิตให้ดีได้ขึ้นทุกวัน",
     images: [
       {
         url:    "/og-image.png",
@@ -74,7 +76,7 @@ export const metadata: Metadata = {
   twitter: {
     card:        "summary_large_image",
     title:       "Slippy — ระบบจัดการเอกสารบัญชีอัจฉริยะ",
-    description: "อ่านใบเสร็จด้วย AI · จัดหมวดหมู่อัตโนมัติ · Export รายงาน",
+    description: "เรื่องเล็กๆวันนี้เปลี่ยนชีวิตให้ดีได้ขึ้นทุกวัน",
     images:      ["/og-image.png"],
   },
 }
@@ -93,7 +95,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             enableSystem
             disableTransitionOnChange
           >
-            {children}
+            <AppLoadingProvider>
+              <SlippyLoader />
+              {children}
+            </AppLoadingProvider>
             <CookieBanner />
             <CookieManageButton />
             <Toaster

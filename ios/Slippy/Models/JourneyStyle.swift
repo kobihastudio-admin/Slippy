@@ -41,7 +41,7 @@ enum JourneyStyle {
         "restaurant": Spec(label: "ร้านอาหาร",  symbol: "fork.knife",                  color: Color(hex: "#F97316"), kind: .food),
         "meal":       Spec(label: "มื้ออาหาร",  symbol: "cup.and.saucer.fill",         color: Color(hex: "#FB923C"), kind: .food),
 
-        "activity":   Spec(label: "กิจกรรม",    symbol: "camera.fill",                 color: Color(hex: "#10B981"), kind: .place),
+        "activity":   Spec(label: "กิจกรรม",    symbol: "star.fill",                   color: Color(hex: "#10B981"), kind: .place),
         "onsen":      Spec(label: "ออนเซ็น",    symbol: "drop.fill",                   color: Color(hex: "#22D3EE"), kind: .place),
         "shopping":   Spec(label: "ช้อปปิ้ง",   symbol: "bag.fill",                    color: Color(hex: "#D946EF"), kind: .place),
 
@@ -73,11 +73,24 @@ enum JourneyStyle {
 
     static func categoryLabel(_ kind: Kind) -> String {
         switch kind {
-        case .stay:      return "ที่พัก"
-        case .transport: return "เดินทาง"
-        case .food:      return "อาหาร"
-        case .place:     return "กิจกรรม"
-        case .admin:     return "อื่นๆ"
+        case .stay:      return ActivityCategoryStyle.stay.label
+        case .transport: return ActivityCategoryStyle.transport.label
+        case .food:      return ActivityCategoryStyle.food.label
+        case .place:     return ActivityCategoryStyle.sightseeing.label
+        case .admin:     return ActivityCategoryStyle.general.label
+        }
+    }
+
+    /// Keeps legacy itinerary types intact while sharing the same high-level
+    /// category keys used on the Web. Callers that need the exact train/hotel
+    /// icon should continue to use `spec(_:)`.
+    static func activityCategory(_ type: String) -> ActivityCategoryStyle {
+        switch spec(type).kind {
+        case .transport: return .transport
+        case .stay:      return .stay
+        case .food:      return .food
+        case .place:     return type == "shopping" ? .shopping : .sightseeing
+        case .admin:     return type == "booking" ? .reservation : .general
         }
     }
 }

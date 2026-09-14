@@ -10,6 +10,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { stripe } from "@/lib/stripe/server"
+import { withErrorLogging } from "@/lib/log-server-error"
+import { isOrgMember } from "@/lib/require-org-member"
+import { getAppUrl } from "@/lib/app-url"
 
 const DOC_PACKS = {
   pack_100: { priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PACK_100!, docs: 100,  label: "100 เอกสาร" },
@@ -17,7 +20,7 @@ const DOC_PACKS = {
   pack_500: { priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PACK_500!, docs: 500,  label: "500 เอกสาร" },
 } as const
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorLogging("stripe_buy_pack", async (req: NextRequest) => {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -26,6 +29,9 @@ export async function POST(req: NextRequest) {
 
   const pack = DOC_PACKS[packId as keyof typeof DOC_PACKS]
   if (!pack) return NextResponse.json({ error: "Invalid pack" }, { status: 400 })
+  if (!orgId || !(await isOrgMember(user.id, orgId))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
 
   const { data: org } = await supabase
     .from("organizations")
@@ -38,8 +44,8 @@ export async function POST(req: NextRequest) {
     payment_method_types: ["card"],
     customer:             org?.stripe_customer_id ?? undefined,
     line_items:           [{ price: pack.priceId, quantity: 1 }],
-    success_url:          `${process.env.NEXT_PUBLIC_APP_URL}/billing?pack_success=true`,
-    cancel_url:           `${process.env.NEXT_PUBLIC_APP_URL}/billing`,
+    success_url:          `${getAppUrl()}/billing?pack_success=true`,
+    cancel_url:           `${getAppUrl()}/billing`,
     metadata: {
       type:     "doc_pack",
       org_id:   orgId,
@@ -51,4 +57,4 @@ export async function POST(req: NextRequest) {
   })
 
   return NextResponse.json({ url: session.url })
-}
+})

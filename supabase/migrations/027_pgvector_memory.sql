@@ -5,24 +5,21 @@
 
 -- Enable pgvector extension
 CREATE EXTENSION IF NOT EXISTS vector;
-
 -- Add embedding column to life_memories for semantic search
 ALTER TABLE life_memories
-  ADD COLUMN IF NOT EXISTS embedding vector(1536);   -- text-embedding-3-small dimensions
+  ADD COLUMN IF NOT EXISTS embedding vector(1536);
+-- text-embedding-3-small dimensions
 
 -- Index for fast cosine similarity search
 CREATE INDEX IF NOT EXISTS idx_lm_embedding
   ON life_memories USING ivfflat (embedding vector_cosine_ops)
   WITH (lists = 100);
-
 -- Document embeddings for semantic document search
 ALTER TABLE documents
   ADD COLUMN IF NOT EXISTS embedding vector(1536);
-
 CREATE INDEX IF NOT EXISTS idx_doc_embedding
   ON documents USING ivfflat (embedding vector_cosine_ops)
   WITH (lists = 100);
-
 -- ─── Semantic memory search function ─────────────────────────────────────────
 CREATE OR REPLACE FUNCTION search_memories(
   p_org_id      uuid,
@@ -47,7 +44,6 @@ LANGUAGE sql AS $$
   ORDER BY embedding <=> p_embedding
   LIMIT p_limit;
 $$;
-
 -- ─── Semantic document search function ───────────────────────────────────────
 CREATE OR REPLACE FUNCTION search_documents_semantic(
   p_org_id      uuid,

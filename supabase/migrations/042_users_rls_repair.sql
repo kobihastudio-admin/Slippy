@@ -17,18 +17,14 @@
 -- applied successfully.
 
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS "users_select_own" ON users;
 CREATE POLICY "users_select_own" ON users FOR SELECT
   USING (id = auth.uid());
-
 DROP POLICY IF EXISTS "users_update_own" ON users;
 CREATE POLICY "users_update_own" ON users FOR UPDATE
   USING (id = auth.uid())
   WITH CHECK (id = auth.uid());
-
 GRANT SELECT ON TABLE users TO authenticated;
-
 -- `authenticated` previously held a table-wide UPDATE/INSERT grant from when
 -- this table was created (Supabase Studio grants ALL by default). Combined
 -- with the row-level policy above (id = auth.uid()), that would let any

@@ -17,11 +17,12 @@
  *   5. /tripdone closes the group and posts the final settle-up summary
  */
 import { supabase } from "../lib/supabase"
+import { getAppUrl } from "../lib/app-url"
 import {
   billCreatedCard, paymentConfirmText, fullyPaidCard, reminderCard,
 } from "./line-bill-cards"
 
-const APP_URL = process.env.APP_URL ?? "https://slippy.ai"
+const APP_URL = getAppUrl()
 
 const TRIP_THEME = "#38bdf8"
 
@@ -69,9 +70,9 @@ export function tripGroupCard(params: {
         contents: [{
           type: "box", layout: "vertical", paddingAll: "18px",
           contents: [
-            { type: "text", text: "🧳 สร้างกลุ่มทริปแล้ว", size: "xs", color: "rgba(255,255,255,0.65)", weight: "bold", letterSpacing: "2px" },
-            { type: "text", text: `${emoji} ${tripType}`, size: "xl", color: "#fff", weight: "bold", margin: "xs" },
-            ...(destination ? [{ type: "text", text: `📍 ${destination}`, size: "xs", color: "rgba(255,255,255,0.8)", margin: "xs" } as object] : []),
+            { type: "text", text: "🧳 สร้างกลุ่มทริปแล้ว", size: "xs", color: "#ffffffa6", weight: "bold", letterSpacing: "2px" },
+            { type: "text", text: `${emoji} ${tripType}`, size: "xl", color: "#ffffff", weight: "bold", margin: "xs" },
+            ...(destination ? [{ type: "text", text: `📍 ${destination}`, size: "xs", color: "#ffffffcc", margin: "xs" } as object] : []),
           ]
         }]
       },
@@ -149,8 +150,8 @@ export function tripStatusCard(params: {
         contents: [{
           type: "box", layout: "vertical", paddingAll: "16px", alignItems: "center",
           contents: [
-            { type: "text", text: done ? "✅ ปิดกลุ่ม — สรุปยอด" : "📊 สถานะกลุ่มทริป", color: "#fff", weight: "bold", size: "md" },
-            { type: "text", text: `${emoji} ${tripType}${destination ? ` · 📍${destination}` : ""}`, color: "rgba(255,255,255,0.85)", size: "xs", margin: "xs" },
+            { type: "text", text: done ? "✅ ปิดกลุ่ม — สรุปยอด" : "📊 สถานะกลุ่มทริป", color: "#ffffff", weight: "bold", size: "md" },
+            { type: "text", text: `${emoji} ${tripType}${destination ? ` · 📍${destination}` : ""}`, color: "#ffffffd9", size: "xs", margin: "xs" },
           ]
         }]
       },

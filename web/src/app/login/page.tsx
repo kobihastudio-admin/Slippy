@@ -16,7 +16,7 @@ import { LangThemeToggle } from "@/components/ui/lang-theme-toggle"
 
 const features = [
   { Icon: Icons.Sparkles, text: "AI อ่านเอกสารอัตโนมัติ 95% accuracy" },
-  { Icon: Icons.Plug,     text: "เชื่อมต่อ FlowAccount, PEAK และอื่นๆ" },
+  { Icon: Icons.Plug,     text: "Export เข้า Google Sheets อัตโนมัติ" },
   { Icon: Icons.BarChart, text: "รายงาน VAT & WHT พร้อม Export" },
   { Icon: Icons.Smartphone, text: "ถ่ายรูปผ่าน Mobile App ได้เลย" },
 ]

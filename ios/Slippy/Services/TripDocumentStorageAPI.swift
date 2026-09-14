@@ -75,7 +75,7 @@ enum TripDocumentStorageAPI {
         } catch {
             // The row write failed — don't leave an orphaned file nobody can
             // ever list or delete through the app.
-            try? await db.storage.from(bucket).remove(paths: [path])
+            _ = try? await db.storage.from(bucket).remove(paths: [path])
             throw error
         }
     }
@@ -112,7 +112,7 @@ enum TripDocumentStorageAPI {
     }
 
     static func remove(document: TripDocument) async throws {
-        try? await db.storage.from(bucket).remove(paths: [document.filePath])
+        _ = try? await db.storage.from(bucket).remove(paths: [document.filePath])
         try await db.from("trip_documents").delete().eq("id", value: document.id).execute()
     }
 }

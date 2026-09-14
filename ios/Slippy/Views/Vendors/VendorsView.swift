@@ -9,8 +9,9 @@ struct VendorsView: View {
     @StateObject private var vm = VendorsViewModel()
     @State private var editingVendor: Vendor?
 
+    // No NavigationStack here — always reached via a push from Profile or
+    // the "เพิ่มเติม" hub, both of which already own one.
     var body: some View {
-        NavigationStack {
             Group {
                 if vm.isLoading && vm.vendors.isEmpty {
                     loadingSkeleton
@@ -32,7 +33,6 @@ struct VendorsView: View {
                                     phone: phone, category: category)
                 }
             }
-        }
     }
 
     // MARK: – Category chips

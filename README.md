@@ -1,9 +1,28 @@
-# Slipify
+# Slippy
 
-AI-powered document ingestion SaaS for Thai accounting teams.  
-Upload invoices, receipts, and tax documents — Slipify extracts the data and pushes it directly to FlowAccount, PEAK, or Express in seconds.
+AI Life Assistant platform that turns receipts, documents, journeys,
+relationships, health activity, and business activity into a Life Graph.
+
+The document OCR product remains a core data-ingestion capability, but the
+platform architecture is broader:
+
+```text
+LINE OA / Web / Mobile
+        -> Domain Services
+        -> Life Graph
+        -> AI Memory
+        -> AI Assistant
+```
 
 ---
+
+## Documentation
+
+- [Document index and review status](docs/README.md)
+- [Repository structure](docs/MONOREPO_STRUCTURE.md)
+- [Documentation policy](docs/documentation-policy.md)
+- [Image and brand asset register](docs/assets/README.md)
+- [Slippy rename and environment status](docs/operations/SLIPPY_RENAME.md)
 
 ## Tech Stack
 
@@ -12,23 +31,27 @@ Upload invoices, receipts, and tax documents — Slipify extracts the data and p
 | Frontend | Next.js 15 (App Router), Tailwind CSS, next-intl, next-themes |
 | Backend API | Fastify 4, BullMQ, Redis |
 | Database | Supabase (PostgreSQL + Auth + Storage + RLS) |
-| AI | Anthropic Claude (claude-sonnet-4-5) |
-| OCR | Google Document AI |
+| AI | Anthropic Claude |
+| OCR | Claude Vision + Google Document AI fallback |
 | Payments | Stripe |
-| Mobile | Expo (React Native) |
+| LINE | Messaging API + LIFF |
+| Mobile | Expo, native iOS, native Android |
 
 ---
 
 ## Monorepo Structure
 
 ```
-doc-hub/
+slippy/
 ├── web/                  # Next.js frontend
 ├── api/                  # Fastify API + BullMQ workers
 ├── mobile/               # Expo React Native app
+├── ios/                  # Native SwiftUI app
+├── android/              # Native Kotlin app
+├── docs/                 # Product and architecture documentation
 ├── supabase/
 │   ├── config.toml       # Local dev config
-│   └── migrations/       # SQL migrations (001–004)
+│   └── migrations/       # Ordered SQL migrations
 └── package.json          # Workspace root
 ```
 
@@ -49,8 +72,8 @@ doc-hub/
 ### 1. Clone & install
 
 ```bash
-git clone https://github.com/your-org/slipify.git
-cd slipify/doc-hub
+git clone https://github.com/Chainimit/Slippy.git
+cd Slippy
 npm install
 ```
 
@@ -137,6 +160,25 @@ npm run workers -w api  # BullMQ workers
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
 | `LINE_CHANNEL_SECRET` | Line Bot channel secret |
 | `LINE_CHANNEL_ACCESS_TOKEN` | Line Bot channel access token |
+| `NEXT_PUBLIC_LIFF_ID` | LIFF app ID used by Rich Menu mini-apps |
+
+---
+
+## LIFF Security
+
+Private `/api/liff/*` routes do not trust `lineUserId` supplied by the browser.
+
+1. LIFF obtains the current LINE access token.
+2. The LIFF layout adds it as `Authorization: Bearer <token>`.
+3. Next.js middleware validates the token with LINE Profile API.
+4. Middleware replaces any client-provided internal identity header.
+5. Mutation routes compare body/form `lineUserId` with the verified identity.
+
+Public share-token routes are limited to bill information and join flows. When
+a join request claims a LINE identity, that identity must still be verified.
+
+Do not add a new LIFF mutation that reads `lineUserId` directly. Use
+`getVerifiedLineUserId()` from `web/src/lib/liff-auth.ts`.
 
 ---
 
@@ -162,18 +204,23 @@ npm run workers -w api  # BullMQ workers
 
 ## Database Migrations
 
-Migrations live in `supabase/migrations/` and are applied in order:
-
-| File | Contents |
-|---|---|
-| `001_core_schema.sql` | Core tables, triggers, indexes |
-| `002_rls_policies.sql` | Row Level Security policies |
-| `003_stripe.sql` | Stripe events, billing, plans, quota enforcement |
-| `004_views.sql` | Analytics views and tax report functions |
+Migrations live in `supabase/migrations/` and are applied in numeric order.
+Migration `055_recent_features_security.sql` enables RLS and constraints for
+scanner, trip/community, friendships, chat, and payment-request tables.
 
 Apply to local dev:
 ```bash
 supabase db push
+```
+
+Before production deployment:
+
+```bash
+npm run typecheck -w web
+npm run test:security -w web
+npm run build -w api
+npm run typecheck --prefix mobile
+supabase db push --dry-run
 ```
 
 Apply to production (using Supabase CLI linked to project):
@@ -221,4 +268,4 @@ npm run workers -w api
 
 ## License
 
-MIT © 2026 Slipify
+MIT © 2026 Slippy

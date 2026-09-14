@@ -168,6 +168,23 @@ export default function DashboardScreen() {
               </View>
             )}
 
+            {/* Additive prototype entry — intentionally separate from production trip data */}
+            <TouchableOpacity
+              style={ds.journeyCard}
+              onPress={() => router.push('/(app)/journey-prototype' as any)}
+              accessibilityRole="button"
+              accessibilityLabel="เปิด Journey Prototype"
+              testID="journey-prototype-entry"
+            >
+              <View style={ds.journeyIcon}><Text style={{ fontSize: 24 }}>🗺️</Text></View>
+              <View style={{ flex: 1 }}>
+                <Text style={ds.journeyEyebrow}>NEW PROTOTYPE</Text>
+                <Text style={ds.journeyTitle}>Slippy Journey</Text>
+                <Text style={ds.journeySub}>สร้างทริป · วางแผนรายวัน · แผนที่ · งบประมาณ</Text>
+              </View>
+              <Text style={ds.journeyArrow}>›</Text>
+            </TouchableOpacity>
+
             {/* Recent documents */}
             <View style={ds.section}>
               <View style={ds.sectionHeader}>
@@ -210,4 +227,10 @@ const ds = StyleSheet.create({
   seeAll:       { fontSize: 13, color: Brand[500], fontWeight: '600' },
   docList:      { backgroundColor: Light.card, borderTopWidth: 1, borderBottomWidth: 1, borderColor: Light.border },
   empty:        { padding: 24, textAlign: 'center', color: Light.mutedFg, fontSize: 14 },
+  journeyCard:  { marginHorizontal: 20, marginTop: 10, padding: 15, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 18, backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#a7f3d0' },
+  journeyIcon:  { width: 48, height: 48, borderRadius: 15, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  journeyEyebrow:{ fontSize: 9, fontWeight: '800', color: '#047857', letterSpacing: 1 },
+  journeyTitle: { marginTop: 2, fontSize: 17, fontWeight: '800', color: '#064e3b' },
+  journeySub:   { marginTop: 2, fontSize: 11, color: '#047857' },
+  journeyArrow: { fontSize: 28, color: '#059669', fontWeight: '300' },
 })

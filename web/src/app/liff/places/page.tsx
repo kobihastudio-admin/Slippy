@@ -441,11 +441,11 @@ export default function LiffPlacesPage() {
   const [nearbyOrgId,   setNearbyOrgId]   = useState<string | null>(null)
 
   useEffect(() => {
-    if (!picker) return
-    fetch("/api/org/current").then(r => r.ok ? r.json() : null).then(d => {
-      if (d?.orgId) setNearbyOrgId(d.orgId)
+    if (!picker || !lineUserId) return
+    fetch(`/api/liff/profile?lineUserId=${lineUserId}`).then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.profile?.organizationId) setNearbyOrgId(d.profile.organizationId)
     }).catch(() => {})
-  }, [picker])
+  }, [picker, lineUserId])
 
   const searchNearby = useCallback((searchLat: number, searchLng: number) => {
     setLoadingNearby(true)
@@ -488,11 +488,11 @@ export default function LiffPlacesPage() {
   const [orgId,     setOrgId]     = useState<string | null>(null)
 
   useEffect(() => {
-    if (picker) return
-    fetch("/api/org/current").then(r => r.ok ? r.json() : null).then(d => {
-      if (d?.orgId) setOrgId(d.orgId)
+    if (picker || !lineUserId) return
+    fetch(`/api/liff/profile?lineUserId=${lineUserId}`).then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.profile?.organizationId) setOrgId(d.profile.organizationId)
     }).catch(() => {})
-  }, [picker])
+  }, [picker, lineUserId])
 
   const search = useCallback(async (searchLat: number, searchLng: number, searchType: string) => {
     setLoading(true)

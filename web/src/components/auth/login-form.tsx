@@ -11,10 +11,10 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { Icons } from "@/components/ui/icons"
+import { TurnstileWidget } from "@/components/auth/turnstile-widget"
 
 // ─── Social icon SVGs ────────────────────────────────────────────────────────
 function SvgGoogle() {
@@ -60,7 +60,6 @@ function SocialBtn({ onClick, label, icon }: { onClick: () => void; label: strin
 
 // ─────────────────────────────────────────────────────────────────────────────
 export function LoginForm() {
-  const router   = useRouter()
   const supabase = createClient()
 
   const [email,    setEmail]    = useState("")
@@ -68,23 +67,72 @@ export function LoginForm() {
   const [showPw,   setShowPw]   = useState(false)
   const [remember, setRemember] = useState(true)
   const [loading,  setLoading]  = useState(false)
+  const [captchaToken, setCaptchaToken] = useState("")
+
+  // ── MFA challenge step (only entered if the account has TOTP enrolled) ──
+  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null)
+  const [mfaCode,      setMfaCode]    = useState("")
+  const [mfaError,     setMfaError]   = useState<string | null>(null)
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    // Goes through /api/auth/login (not supabase.auth.signInWithPassword
+    // directly) so the server can enforce an app-level lockout on top of
+    // Supabase's own platform-level auth rate limiting — see that route for
+    // why a server-side proxy is the only way to durably count failures.
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, captchaToken }),
+    })
+    const json = await res.json().catch(() => ({}))
 
-    if (error) {
-      toast.error(error.message === "Invalid login credentials"
-        ? "อีเมลหรือรหัสผ่านไม่ถูกต้อง"
-        : error.message)
+    if (!res.ok) {
+      toast.error(json.error ?? "เข้าสู่ระบบไม่สำเร็จ")
       setLoading(false)
       return
     }
 
-    router.push("/dashboard")
-    router.refresh()
+    if (json.mfaRequired) {
+      // Password was correct and the session cookie is already set (at
+      // aal1) — find the verified TOTP factor and switch to the code-entry
+      // step. The actual challenge/verify call goes straight to Supabase
+      // via the browser client; that's fine even server-proxied logins use
+      // the client SDK for this step since aal1 is already enough to call it.
+      const { data, error } = await supabase.auth.mfa.listFactors()
+      const factor = data?.totp.find(f => f.status === "verified")
+      if (error || !factor) {
+        toast.error("ไม่พบการตั้งค่า 2FA กรุณาติดต่อฝ่ายสนับสนุน")
+        setLoading(false)
+        return
+      }
+      setMfaFactorId(factor.id)
+      setLoading(false)
+      return
+    }
+
+    // Full reload (not router.push) so the browser Supabase client
+    // re-initializes its in-memory session from the cookies the server
+    // route just set, instead of staying stale.
+    window.location.href = "/dashboard"
+  }
+
+  const handleVerifyMfa = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!mfaFactorId || mfaCode.length !== 6) return
+    setLoading(true)
+    setMfaError(null)
+
+    const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId: mfaFactorId, code: mfaCode })
+    if (error) {
+      setMfaError("รหัสไม่ถูกต้อง กรุณาลองใหม่")
+      setLoading(false)
+      return
+    }
+
+    window.location.href = "/dashboard"
   }
 
   const signInWith = async (provider: "google" | "facebook") => {
@@ -98,6 +146,47 @@ export function LoginForm() {
   // because LINE is not a native Supabase provider.
   const signInWithLine = () => {
     window.location.href = "/api/auth/line"
+  }
+
+  if (mfaFactorId) {
+    return (
+      <div className="animate-fade-in">
+        <h2 className="text-[28px] font-bold tracking-tight text-foreground">ยืนยันตัวตน</h2>
+        <p className="mt-1.5 text-sm text-muted-foreground">
+          กรอกรหัส 6 หลักจากแอป Authenticator ของคุณ
+        </p>
+        <form onSubmit={handleVerifyMfa} className="mt-7 space-y-4">
+          <input
+            type="text"
+            value={mfaCode}
+            onChange={e => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            autoFocus
+            inputMode="numeric"
+            maxLength={6}
+            placeholder="000000"
+            className="w-full h-14 rounded-[10px] border border-border bg-card text-center text-2xl
+              tracking-[0.4em] font-mono outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15"
+          />
+          {mfaError && <p className="text-sm text-rose-500">{mfaError}</p>}
+          <button
+            type="submit"
+            disabled={loading || mfaCode.length !== 6}
+            className="w-full h-11 rounded-[10px] bg-brand-500 hover:bg-brand-600 text-white font-medium
+              text-sm transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+          >
+            {loading && <Icons.Loader size={16} />}
+            ยืนยัน
+          </button>
+          <button
+            type="button"
+            onClick={() => { setMfaFactorId(null); setMfaCode(""); setMfaError(null) }}
+            className="w-full text-center text-sm text-muted-foreground hover:underline"
+          >
+            กลับไปเข้าสู่ระบบ
+          </button>
+        </form>
+      </div>
+    )
   }
 
   return (
@@ -194,6 +283,8 @@ export function LoginForm() {
           />
           จดจำการเข้าสู่ระบบบนเครื่องนี้
         </label>
+
+        <TurnstileWidget onVerify={setCaptchaToken} />
 
         {/* Submit */}
         <button

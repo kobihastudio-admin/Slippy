@@ -9,17 +9,18 @@ import {
   Plus, Trash2, X, Check, ChevronRight, Copy,
   Clock, CheckCircle2, FileText, Link, Loader2,
   ExternalLink, AlertCircle, RefreshCw,
+  ArrowRight, TrendingUp, TrendingDown, Minus, Wallet,
 } from "lucide-react"
 
 /* ─── Types ───────────────────────────────────────────────────────────────── */
 export type Participant = {
-  id:           string
-  name:         string
-  email:        string | null
-  amount:       number
-  paid_at:      string | null
+  id:            string
+  name:          string
+  email:         string | null
+  amount:        number
+  paid_at:       string | null
   line_user_id?: string | null
-  is_non_line?: boolean
+  is_non_line?:  boolean
 }
 
 export type SplitBill = {
@@ -30,6 +31,7 @@ export type SplitBill = {
   note:               string | null
   status?:            string
   share_token?:       string | null
+  line_group_id?:     string | null
   created_at:         string
   document_id:        string | null
   split_participants: Participant[]
@@ -58,7 +60,7 @@ function getShareUrl(token: string): string {
   if (liffId && typeof window !== "undefined") {
     return `https://liff.line.me/${liffId}/liff/join/${token}?type=split`
   }
-  const base = typeof window !== "undefined" ? window.location.origin : "https://slippy.ai"
+  const base = typeof window !== "undefined" ? window.location.origin : "https://dev.slippyai.app"
   return `${base}/split/join/${token}`
 }
 
@@ -693,6 +695,154 @@ function CreateBillModal({ orgId, onClose, onCreate }: {
   )
 }
 
+/* ─── Balance helpers ─────────────────────────────────────────────────────── */
+type PersonBalance = { name: string; net: number /* positive = owed to them, negative = they owe */ }
+type Settlement    = { from: string; to: string; amount: number }
+
+function computeBalances(bills: SplitBill[]): PersonBalance[] {
+  // key = line_user_id when available, otherwise name (normalised lowercase)
+  const netMap:  Record<string, number> = {}
+  const nameMap: Record<string, string> = {}  // key → display name
+
+  for (const bill of bills) {
+    for (const p of bill.split_participants) {
+      const key  = (p.line_user_id ?? p.name.trim().toLowerCase())
+      const name = p.name.trim()
+      if (!netMap[key]) { netMap[key] = 0; nameMap[key] = name }
+      if (!p.paid_at) netMap[key] -= Number(p.amount)
+      else            netMap[key] += Number(p.amount)
+    }
+  }
+  return Object.entries(netMap)
+    .filter(([, n]) => Math.abs(n) >= 1)
+    .map(([key, net]) => ({ name: nameMap[key], net }))
+    .sort((a, b) => b.net - a.net)
+}
+
+function simplifyDebts(balances: PersonBalance[]): Settlement[] {
+  const creditors = balances.filter(b => b.net > 0).map(b => ({ ...b }))
+  const debtors   = balances.filter(b => b.net < 0).map(b => ({ ...b }))
+  const result: Settlement[] = []
+  let ci = 0, di = 0
+  while (ci < creditors.length && di < debtors.length) {
+    const c = creditors[ci], d = debtors[di]
+    const amount = Math.min(c.net, -d.net)
+    result.push({ from: d.name, to: c.name, amount: Math.round(amount) })
+    c.net -= amount
+    d.net += amount
+    if (Math.abs(c.net) < 1) ci++
+    if (Math.abs(d.net) < 1) di++
+  }
+  return result
+}
+
+/* ─── Balance overview card ───────────────────────────────────────────────── */
+function BalanceCard({ bills }: { bills: SplitBill[] }) {
+  const [showSettle, setShowSettle] = useState(false)
+  const balances    = computeBalances(bills)
+  const settlements = simplifyDebts(balances)
+
+  if (balances.length === 0) return null
+
+  return (
+    <>
+      <div className="rounded-xl border bg-card overflow-hidden mb-6">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b bg-muted/30">
+          <div className="flex items-center gap-2">
+            <Wallet className="w-4 h-4 text-brand-500" />
+            <span className="text-sm font-semibold">ยอดคงค้างสุทธิ</span>
+          </div>
+          {settlements.length > 0 && (
+            <button onClick={() => setShowSettle(true)}
+              className="h-7 px-3 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold transition-colors">
+              ชำระหนี้
+            </button>
+          )}
+        </div>
+        <div className="divide-y divide-border">
+          {balances.map(b => (
+            <div key={b.name} className="flex items-center gap-3 px-5 py-3">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                {b.name[0]?.toUpperCase() ?? "?"}
+              </div>
+              <span className="flex-1 text-sm font-medium">{b.name}</span>
+              <div className="flex items-center gap-1.5">
+                {b.net > 0
+                  ? <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
+                  : <TrendingDown className="w-3.5 h-3.5 text-rose-500" />}
+                <span className={cn("text-sm font-bold",
+                  b.net > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
+                  {b.net > 0 ? "+" : ""}{fmtTHB(Math.abs(b.net))}
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  {b.net > 0 ? "ถูกติดหนี้" : "ติดหนี้"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {showSettle && (
+        <SettleUpModal settlements={settlements} onClose={() => setShowSettle(false)} />
+      )}
+    </>
+  )
+}
+
+/* ─── Settle Up Modal ─────────────────────────────────────────────────────── */
+function SettleUpModal({ settlements, onClose }: { settlements: Settlement[]; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-card border rounded-[16px] shadow-2xl w-full max-w-sm">
+        <div className="p-6">
+          <div className="flex items-start justify-between mb-5">
+            <div>
+              <h3 className="text-[17px] font-semibold">ชำระหนี้ให้เสร็จสิ้น</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                ทำ {settlements.length} รายการเพื่อปิดหนี้ทั้งหมด
+              </p>
+            </div>
+            <button onClick={onClose} className="h-8 w-8 rounded-[8px] hover:bg-muted flex items-center justify-center text-muted-foreground">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {settlements.map((s, i) => (
+              <div key={i} className="flex items-center gap-3 p-3.5 rounded-[10px] bg-muted/50 border">
+                <div className="w-8 h-8 rounded-full bg-rose-100 dark:bg-rose-500/15 flex items-center justify-center text-xs font-bold text-rose-600 dark:text-rose-400 shrink-0">
+                  {s.from[0]?.toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{s.from}</p>
+                  <p className="text-xs text-muted-foreground">จ่ายให้ {s.to}</p>
+                </div>
+                <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-bold text-brand-500">{fmtTHB(s.amount)}</p>
+                  <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-500/15 flex items-center justify-center text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+                    {s.to[0]?.toUpperCase()}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-[11px] text-muted-foreground text-center mt-4">
+            คำนวณด้วยอัลกอริทึมลดจำนวนรายการให้น้อยที่สุด
+          </p>
+          <button onClick={onClose}
+            className="w-full mt-3 h-10 rounded-[10px] bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-colors">
+            เข้าใจแล้ว
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ─── Main SplitClient ───────────────────────────────────────────────────── */
 export function SplitClient({ orgId, bills: initialBills }: SplitClientProps) {
   const [bills,     setBills]     = useState<SplitBill[]>(initialBills)
@@ -780,7 +930,7 @@ export function SplitClient({ orgId, bills: initialBills }: SplitClientProps) {
   const pendingAmount  = bills.flatMap(b => b.split_participants).filter(p => !p.paid_at).reduce((s, p) => s + Number(p.amount), 0)
 
   return (
-    <div className="p-6 lg:p-7 max-w-[960px] animate-fade-in">
+    <div className="page animate-fade-in">
       {/* Header */}
       <div className="mb-6 flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
@@ -814,6 +964,9 @@ export function SplitClient({ orgId, bills: initialBills }: SplitClientProps) {
           </div>
         ))}
       </div>
+
+      {/* Balance Overview */}
+      {bills.length > 0 && <BalanceCard bills={bills} />}
 
       {/* Bills list */}
       {bills.length === 0 ? (

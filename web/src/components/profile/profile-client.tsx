@@ -11,13 +11,15 @@
 
 import { useState, useTransition, useRef } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
+import { profilePlanLabel, profileTabs, type ProfileTab } from "@/lib/profile/profile-sections"
 import {
   User, Mail, Shield, LogOut, Camera, Check, Edit2,
-  Bell, Smartphone, MessageCircle, Key, ChevronRight,
+  MessageCircle, Key,
   Clock, FileText, CheckCircle2, AlertCircle, Loader2,
-  Trash2, Building2, Upload, X, Sparkles,
+  Trash2, Building2, Upload, X, Sparkles, Cake,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -44,6 +46,7 @@ interface ProfileProps {
   orgPlan:         string
   avatarUrl?:      string
   joinedAt?:       string
+  dateOfBirth?:    string | null
   activityLogs:    ActivityLog[]
   lineConnection:  LineConnection
 }
@@ -302,8 +305,8 @@ function AvatarSection({ userId, name, avatarUrl, onAvatarChange }: {
 
 /* ─── Edit name form ── */
 function EditableField({
-  label, value, icon: Icon, editable = false, onSave
-}: { label: string; value: string; icon: React.FC<{className?:string}>; editable?: boolean; onSave?: (v: string) => Promise<void> }) {
+  label, value, icon: Icon, editable = false, onSave, type = "text"
+}: { label: string; value: string; icon: React.FC<{className?:string}>; editable?: boolean; onSave?: (v: string) => Promise<void>; type?: "text" | "date" }) {
   const [editing, setEditing] = useState(false)
   const [val, setVal]         = useState(value)
   const [saving, setSaving]   = useState(false)
@@ -326,6 +329,7 @@ function EditableField({
         {editing ? (
           <div className="flex items-center gap-2">
             <input
+              type={type}
               value={val}
               onChange={e => setVal(e.target.value)}
               autoFocus
@@ -347,7 +351,9 @@ function EditableField({
             </button>
           </div>
         ) : (
-          <p className="text-sm font-medium">{val}</p>
+          <p className="text-sm font-medium">
+            {type === "date" && val ? new Date(val).toLocaleDateString("th-TH", { year: "numeric", month: "long", day: "numeric" }) : (val || "—")}
+          </p>
         )}
       </div>
       {editable && !editing && (
@@ -439,53 +445,11 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   )
 }
 
-/* ─── Notification preferences ── */
-function NotifPrefs() {
-  const prefs = [
-    { key: "doc_approved",  label: "เอกสารได้รับการอนุมัติ",   sub: "แจ้งทุกครั้งที่ approved",     def: true },
-    { key: "doc_reviewing", label: "เอกสารรอตรวจสอบ",          sub: "แจ้งเมื่อต้องตรวจด้วยตนเอง", def: true },
-    { key: "quota_alert",   label: "โควต้าใกล้เต็ม",           sub: "แจ้งเมื่อใช้ไป 80%",          def: true },
-    { key: "weekly_report", label: "รายงานรายสัปดาห์",         sub: "สรุปค่าใช้จ่ายทุกวันจันทร์",  def: false },
-    { key: "line_push",     label: "Push ผ่าน LINE Bot",        sub: "ส่งแจ้งเตือนใน LINE",         def: true },
-  ]
-  const [enabled, setEnabled] = useState<Record<string, boolean>>(
-    Object.fromEntries(prefs.map(p => [p.key, p.def]))
-  )
-  return (
-    <div className="space-y-1.5">
-      {prefs.map(p => (
-        <div key={p.key} className="flex items-center justify-between p-3.5 rounded-xl bg-muted/40 hover:bg-muted/60 transition-colors">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium">{p.label}</p>
-            <p className="text-xs text-muted-foreground">{p.sub}</p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={enabled[p.key]}
-            onClick={() => setEnabled(s => ({ ...s, [p.key]: !s[p.key] }))}
-            className={cn(
-              "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 ease-in-out",
-              "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-              enabled[p.key] ? "bg-brand-500" : "bg-gray-300 dark:bg-gray-600"
-            )}
-          >
-            <span className={cn(
-              "inline-block h-5 w-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ease-in-out",
-              enabled[p.key] ? "translate-x-[22px]" : "translate-x-0.5"
-            )} />
-          </button>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 /* ─── Main component ── */
 export function ProfileClient({
-  userId, name, email, role, orgName, orgPlan, avatarUrl, joinedAt, activityLogs, lineConnection,
+  userId, name, email, role, orgName, orgPlan, avatarUrl, joinedAt, dateOfBirth, activityLogs, lineConnection,
 }: ProfileProps) {
-  const [tab, setTab]           = useState<"info"|"notif"|"security">("info")
+  const [tab, setTab]           = useState<ProfileTab>("info")
   const [avatar, setAvatar]     = useState(avatarUrl)
   const [pwModalOpen, setPwModalOpen] = useState(false)
   const [isPending, startTrans] = useTransition()
@@ -498,6 +462,12 @@ export function ProfileClient({
     else { toast.success("บันทึกชื่อแล้ว"); router.refresh() }
   }
 
+  const handleSaveDob = async (newDob: string) => {
+    const { error } = await supabase.from("users").update({ date_of_birth: newDob || null }).eq("id", userId)
+    if (error) toast.error("ไม่สามารถบันทึกวันเกิดได้")
+    else { toast.success("บันทึกวันเกิดแล้ว"); router.refresh() }
+  }
+
   const handleLogout = () => {
     startTrans(async () => {
       await supabase.auth.signOut()
@@ -505,14 +475,8 @@ export function ProfileClient({
     })
   }
 
-  const tabs = [
-    { key: "info",     label: "ข้อมูลส่วนตัว" },
-    { key: "notif",    label: "การแจ้งเตือน" },
-    { key: "security", label: "ความปลอดภัย" },
-  ] as const
-
   return (
-    <div className="p-6 lg:p-7 max-w-[680px] animate-fade-in space-y-6">
+    <div className="page-narrow animate-fade-in space-y-6">
 
       {/* ── Hero card ── */}
       <div className="rounded-2xl border bg-card overflow-hidden">
@@ -530,11 +494,11 @@ export function ProfileClient({
               avatarUrl={avatar}
               onAvatarChange={url => { setAvatar(url); router.refresh() }}
             />
-            <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border
+            <a href="#profile-account" className="flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border
               hover:bg-muted transition-colors mb-1">
               <Edit2 className="w-3.5 h-3.5" />
               แก้ไขโปรไฟล์
-            </button>
+            </a>
           </div>
 
           <div className="space-y-1">
@@ -545,18 +509,18 @@ export function ProfileClient({
               </span>
             </div>
             <p className="text-sm text-muted-foreground">{email}</p>
-            <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-muted-foreground">
+              <span className="inline-flex min-w-0 items-center gap-1.5">
                 <Building2 className="w-3.5 h-3.5" />
-                {orgName}
-                <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase",
+                <span className="truncate">{orgName}</span>
+                <span className={cn("shrink-0 whitespace-nowrap px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase",
                   orgPlan === "pro" ? "bg-amber-500/10 text-amber-600" : "bg-muted text-muted-foreground"
                 )}>
-                  {orgPlan}
+                  {profilePlanLabel(orgPlan)}
                 </span>
               </span>
               {joinedAt && (
-                <span className="flex items-center gap-1.5">
+                <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap">
                   <Clock className="w-3.5 h-3.5" />
                   เข้าร่วม {new Date(joinedAt).toLocaleDateString("th-TH", { month: "long", year: "numeric" })}
                 </span>
@@ -568,7 +532,7 @@ export function ProfileClient({
 
       {/* ── Tabs ── */}
       <div className="flex gap-1 p-1 bg-muted/60 rounded-xl">
-        {tabs.map(t => (
+        {profileTabs.map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
@@ -587,9 +551,10 @@ export function ProfileClient({
       {/* ── Tab: ข้อมูลส่วนตัว ── */}
       {tab === "info" && (
         <div className="space-y-4">
-          <div className="space-y-2">
+          <div id="profile-account" className="space-y-2 scroll-mt-6">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">บัญชี</p>
             <EditableField label="ชื่อ-นามสกุล" value={name}  icon={User}  editable onSave={handleSaveName} />
+            <EditableField label="วันเกิด" value={dateOfBirth ?? ""} type="date" icon={Cake} editable onSave={handleSaveDob} />
             <EditableField label="อีเมล"         value={email} icon={Mail}             />
           </div>
 
@@ -599,7 +564,7 @@ export function ProfileClient({
               <div className="w-9 h-9 rounded-xl bg-background border flex items-center justify-center shrink-0">
                 <Building2 className="w-4 h-4 text-muted-foreground" />
               </div>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-muted-foreground mb-0.5">องค์กรปัจจุบัน</p>
                 <p className="text-sm font-medium">{orgName}</p>
               </div>
@@ -625,27 +590,9 @@ export function ProfileClient({
                     : "ยังไม่ได้เชื่อมต่อ"}
                 </p>
               </div>
-              <button className={cn(
-                "text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors",
-                lineConnection
-                  ? "border-destructive/30 text-destructive hover:bg-destructive/10"
-                  : "hover:bg-muted"
-              )}>
-                {lineConnection ? "ยกเลิก" : "เชื่อมต่อ"}
-              </button>
-            </div>
-            {/* Mobile */}
-            <div className="flex items-center gap-3 p-4 rounded-xl bg-muted/40 hover:bg-muted/60 transition-colors">
-              <div className="w-9 h-9 rounded-xl bg-brand-500/10 flex items-center justify-center shrink-0">
-                <Smartphone className="w-4 h-4 text-brand-500" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium">Mobile App</p>
-                <p className="text-xs text-muted-foreground">เร็วๆ นี้</p>
-              </div>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                เร็วๆ นี้
-              </span>
+              <Link href="/settings/integrations" className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors hover:bg-muted">
+                {lineConnection ? "จัดการ" : "เชื่อมต่อ"}
+              </Link>
             </div>
           </div>
 
@@ -681,95 +628,35 @@ export function ProfileClient({
         </div>
       )}
 
-      {/* ── Tab: การแจ้งเตือน ── */}
-      {tab === "notif" && (
-        <div className="space-y-4">
-          <div className="rounded-xl border bg-card p-4 flex gap-3">
-            <Bell className="w-5 h-5 text-brand-500 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-semibold">ตั้งค่าการแจ้งเตือน</p>
-              <p className="text-xs text-muted-foreground mt-0.5">เลือกเหตุการณ์ที่ต้องการรับการแจ้งเตือน</p>
-            </div>
-          </div>
-          <NotifPrefs />
-        </div>
-      )}
-
       {/* ── Tab: ความปลอดภัย ── */}
       {tab === "security" && (
         <div className="space-y-4">
-          {[
-            {
-              icon: Key,
-              label: "เปลี่ยนรหัสผ่าน",
-              desc: "อัปเดตรหัสผ่านของบัญชี",
-              action: "เปลี่ยนรหัสผ่าน",
-              onClick: () => setPwModalOpen(true),
-            },
-            {
-              icon: Shield,
-              label: "การยืนยันสองขั้นตอน (2FA)",
-              desc: "เพิ่มความปลอดภัยด้วย OTP ทาง Email",
-              comingSoon: true,
-            },
-            {
-              icon: Smartphone,
-              label: "อุปกรณ์ที่เข้าสู่ระบบ",
-              desc: "MacBook Pro · Chrome · กรุงเทพฯ · ตอนนี้",
-              comingSoon: true,
-            },
-          ].map(({ icon: Icon, label, desc, action, onClick, comingSoon }) => (
-            <div
-              key={label}
-              onClick={onClick}
-              className={cn(
-                "flex items-center gap-3 p-4 rounded-xl border bg-card transition-colors",
-                onClick ? "hover:bg-muted/30 cursor-pointer" : "opacity-70"
-              )}
-            >
-              <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center shrink-0">
-                <Icon className="w-4 h-4 text-muted-foreground" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold">{label}</p>
-                <p className="text-xs text-muted-foreground">{desc}</p>
-              </div>
-              {comingSoon ? (
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground shrink-0">
-                  เร็วๆ นี้
-                </span>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-brand-600 hover:underline cursor-pointer">{action}</span>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                </div>
-              )}
+          <button
+            type="button"
+            onClick={() => setPwModalOpen(true)}
+            className="w-full text-left flex items-center gap-3 p-4 rounded-xl border bg-card hover:bg-muted/30 transition-colors"
+          >
+            <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center shrink-0">
+              <Key className="w-4 h-4 text-muted-foreground" />
             </div>
-          ))}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold">เปลี่ยนรหัสผ่าน</p>
+              <p className="text-xs text-muted-foreground">อัปเดตรหัสผ่านของบัญชี</p>
+            </div>
+            <span className="text-xs font-medium text-brand-600">เปลี่ยนรหัสผ่าน</span>
+          </button>
 
           {/* Auth method info */}
           <div className="rounded-xl border bg-emerald-500/5 border-emerald-500/20 px-4 py-3 flex items-center gap-3">
             <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
             <p className="text-xs text-emerald-700 dark:text-emerald-400">
-              ยืนยันตัวตนด้วย <span className="font-semibold">อีเมล + รหัสผ่าน</span> · เข้าสู่ระบบครั้งล่าสุดเมื่อกี้
+              บัญชีนี้ใช้ <span className="font-semibold">อีเมล + รหัสผ่าน</span> สำหรับการลงชื่อเข้าใช้
             </p>
           </div>
-
-          {/* Danger zone */}
-          <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 space-y-3 mt-4">
-            <p className="text-xs font-semibold text-destructive uppercase tracking-wider">Danger Zone</p>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">ลบบัญชี</p>
-                <p className="text-xs text-muted-foreground">การดำเนินการนี้ไม่สามารถย้อนกลับได้</p>
-              </div>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-destructive border border-destructive/30
-                rounded-lg hover:bg-destructive/10 transition-colors">
-                <Trash2 className="w-3.5 h-3.5" />
-                ลบบัญชี
-              </button>
-            </div>
-          </div>
+          <Link href="/privacy" className="block rounded-xl border bg-card p-4 hover:bg-muted/30 transition-colors">
+            <p className="text-sm font-semibold">ความเป็นส่วนตัวและข้อมูลของคุณ</p>
+            <p className="mt-1 text-xs text-muted-foreground">จัดการสิทธิ์ข้อมูล การส่งออกข้อมูล และคำขอลบบัญชีจากหน้าความเป็นส่วนตัว</p>
+          </Link>
         </div>
       )}
 

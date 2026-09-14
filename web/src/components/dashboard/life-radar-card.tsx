@@ -20,6 +20,7 @@
  * personal rather than like a generic accounting tool.
  */
 
+import { useState } from "react"
 import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   ResponsiveContainer, Tooltip,
@@ -69,6 +70,7 @@ export function LifeRadarCard({
   }))
 
   const tone = scoreTone(overall)
+  const [imgFailed, setImgFailed] = useState(false)
 
   return (
     <div className="rounded-[14px] border bg-card overflow-hidden">
@@ -81,9 +83,15 @@ export function LifeRadarCard({
           <div className="w-14 h-14 rounded-2xl p-[2px]"
             style={{ background: "linear-gradient(135deg,#8b5cf6,#6366f1,#ec4899)" }}>
             <div className="w-full h-full rounded-[14px] overflow-hidden bg-card flex items-center justify-center">
-              {avatarUrl ? (
+              {avatarUrl && !imgFailed ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+                <img
+                  src={avatarUrl}
+                  alt={displayName}
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                  onError={() => setImgFailed(true)}
+                />
               ) : (
                 <span className="text-base font-bold text-violet-500">{initials(displayName)}</span>
               )}

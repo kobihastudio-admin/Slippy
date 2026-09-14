@@ -24,19 +24,15 @@ ALTER TABLE organizations
   ADD COLUMN IF NOT EXISTS data_retention_years   smallint NOT NULL DEFAULT 5
     CHECK (data_retention_years BETWEEN 1 AND 20),
   ADD COLUMN IF NOT EXISTS retention_last_run_at  timestamptz;
-
 COMMENT ON COLUMN organizations.data_retention_years IS
   'Number of years to retain documents (Thai accounting law minimum = 5).';
 COMMENT ON COLUMN organizations.retention_last_run_at IS
   'Timestamp of last successful data-retention cleanup run.';
-
 -- ── 2. Archived-at timestamp on documents ────────────────────────────────────
 ALTER TABLE documents
   ADD COLUMN IF NOT EXISTS archived_at  timestamptz;
-
 COMMENT ON COLUMN documents.archived_at IS
   'Populated when a document is soft-archived by the retention cleanup job.';
-
 -- ── 3. Soft-delete: move expired documents to "archived" ─────────────────────
 CREATE OR REPLACE FUNCTION cleanup_expired_documents()
 RETURNS TABLE (organization_id uuid, archived_count int)
@@ -73,7 +69,6 @@ BEGIN
   );
 END;
 $$;
-
 -- ── 4. Hard-delete: permanently remove rows archived > 30 days ago ────────────
 --   Storage objects are deleted by the Edge Function before calling this,
 --   so we only remove the DB rows (plus dependent child rows).
@@ -107,19 +102,15 @@ BEGIN
   RETURN v_count;
 END;
 $$;
-
 -- ── 5. Grant execute to service_role only ────────────────────────────────────
 REVOKE ALL ON FUNCTION cleanup_expired_documents()       FROM PUBLIC;
 REVOKE ALL ON FUNCTION hard_delete_archived_documents()  FROM PUBLIC;
-
 GRANT  EXECUTE ON FUNCTION cleanup_expired_documents()       TO service_role;
 GRANT  EXECUTE ON FUNCTION hard_delete_archived_documents()  TO service_role;
-
 -- ── 6. Index for efficient retention scan ────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_documents_created_at_status
   ON documents (organization_id, created_at, status)
   WHERE status NOT IN ('archived', 'deleted');
-
 -- ── 7. Comments ───────────────────────────────────────────────────────────────
 COMMENT ON FUNCTION cleanup_expired_documents() IS
   'Soft-archives documents older than the org data_retention_years. '

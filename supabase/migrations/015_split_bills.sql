@@ -11,7 +11,6 @@ CREATE TABLE split_bills (
   note            text,
   created_at      timestamptz DEFAULT now()
 );
-
 CREATE TABLE split_participants (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   split_bill_id uuid NOT NULL REFERENCES split_bills(id) ON DELETE CASCADE,
@@ -21,22 +20,18 @@ CREATE TABLE split_participants (
   paid_at       timestamptz,
   created_at    timestamptz DEFAULT now()
 );
-
 -- ── Indexes ────────────────────────────────────────────────────────────────────
 
 CREATE INDEX idx_split_bills_org  ON split_bills(organization_id, created_at DESC);
 CREATE INDEX idx_split_parts_bill ON split_participants(split_bill_id);
-
 -- ── RLS ───────────────────────────────────────────────────────────────────────
 
 ALTER TABLE split_bills        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE split_participants ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "split_bills_select" ON split_bills FOR SELECT
   USING (organization_id IN (
     SELECT organization_id FROM organization_members WHERE user_id = auth.uid()
   ));
-
 CREATE POLICY "split_bills_insert" ON split_bills FOR INSERT
   WITH CHECK (
     creator_id = auth.uid()
@@ -44,34 +39,28 @@ CREATE POLICY "split_bills_insert" ON split_bills FOR INSERT
       SELECT organization_id FROM organization_members WHERE user_id = auth.uid()
     )
   );
-
 CREATE POLICY "split_bills_update" ON split_bills FOR UPDATE
   USING (creator_id = auth.uid());
-
 CREATE POLICY "split_bills_delete" ON split_bills FOR DELETE
   USING (creator_id = auth.uid());
-
 CREATE POLICY "split_parts_select" ON split_participants FOR SELECT
   USING (split_bill_id IN (
     SELECT id FROM split_bills WHERE organization_id IN (
       SELECT organization_id FROM organization_members WHERE user_id = auth.uid()
     )
   ));
-
 CREATE POLICY "split_parts_insert" ON split_participants FOR INSERT
   WITH CHECK (split_bill_id IN (
     SELECT id FROM split_bills WHERE organization_id IN (
       SELECT organization_id FROM organization_members WHERE user_id = auth.uid()
     )
   ));
-
 CREATE POLICY "split_parts_update" ON split_participants FOR UPDATE
   USING (split_bill_id IN (
     SELECT id FROM split_bills WHERE organization_id IN (
       SELECT organization_id FROM organization_members WHERE user_id = auth.uid()
     )
   ));
-
 -- ── Grants ────────────────────────────────────────────────────────────────────
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE split_bills        TO authenticated;

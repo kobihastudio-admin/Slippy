@@ -416,7 +416,7 @@ export function VendorsClient({ vendors: initialVendors }: Props) {
   const geoCount   = vendors.filter(v => v.lat && v.lng).length
 
   return (
-    <div className="p-5 lg:p-6 space-y-4 max-w-[1600px] animate-fade-in">
+    <div className="page-wide space-y-4 animate-fade-in">
 
       {/* Header */}
       <div className="flex items-center justify-between gap-3 flex-wrap">

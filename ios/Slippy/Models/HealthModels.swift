@@ -10,6 +10,10 @@ struct MedicationSchedule: Codable {
     let mealRelation: String      // before | after | with | any
     let mealNote: String?
     let reminderEnabled: Bool
+    /// Display-only — a real HH:mm is still stored in `times` and still
+    /// drives the actual reminder. This just means "show 'ก่อนนอน' instead
+    /// of the literal time" wherever a schedule's time is displayed.
+    let isBedtime: Bool
 
     enum CodingKeys: String, CodingKey {
         case id, times
@@ -17,6 +21,7 @@ struct MedicationSchedule: Codable {
         case mealRelation = "meal_relation"
         case mealNote = "meal_note"
         case reminderEnabled = "reminder_enabled"
+        case isBedtime = "is_bedtime"
     }
 }
 
@@ -25,15 +30,21 @@ struct MedicationInventory: Codable {
     let id: String
     let qtyRemaining: Double
     let qtyUnit: String
+    let qtyPerPack: Double?
     let lowStockAlert: Double
     let expiryDate: String?
+    let locCode: String?
+    let lotNo: String?
 
     enum CodingKeys: String, CodingKey {
         case id
         case qtyRemaining = "qty_remaining"
         case qtyUnit = "qty_unit"
+        case qtyPerPack = "qty_per_pack"
         case lowStockAlert = "low_stock_alert"
         case expiryDate = "expiry_date"
+        case locCode = "loc_code"
+        case lotNo = "lot_no"
     }
 
     /// Days of stock left, at the actual consumption rate — not the fixed
@@ -44,6 +55,85 @@ struct MedicationInventory: Codable {
         let perDay = schedule.doseQty * Double(schedule.times.count)
         guard perDay > 0 else { return nil }
         return Int(qtyRemaining / perDay)
+    }
+}
+
+/// A hospital, clinic, or pharmacy the user has medications from — a
+/// personal, reusable list so "which hospital was this from" is a pick,
+/// not retyped free text, and medication history can be filtered by source.
+struct MedicalProvider: Codable, Identifiable, Hashable {
+    let id: String
+    let userId: String
+    let name: String
+    let type: String          // hospital | clinic | pharmacy
+    /// Patient number AT THIS hospital — meaningless (and typically nil) for
+    /// a clinic or pharmacy, since HN is tied to the specific hospital, not
+    /// the person globally.
+    let hn: String?
+    let createdAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, type, hn
+        case userId = "user_id"
+        case createdAt = "created_at"
+    }
+
+    var typeLabel: String {
+        switch type {
+        case "hospital": return "🏥 โรงพยาบาล"
+        case "clinic":   return "🩺 คลินิก"
+        case "pharmacy": return "💊 ร้านยา"
+        default:         return type
+        }
+    }
+}
+
+enum MedicationCourseStatus: String, Codable {
+    case active, paused, stopped, completed
+}
+
+struct MedicationDoseSlot: Codable, Identifiable {
+    let id: String
+    let timeValue: String?
+    let periodLabel: String
+    let doseQty: Double
+    let mealRelation: String
+    let mealNote: String?
+    let sortOrder: Int
+    let reminderEnabled: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case timeValue = "time_value"
+        case periodLabel = "period_label"
+        case doseQty = "dose_qty"
+        case mealRelation = "meal_relation"
+        case mealNote = "meal_note"
+        case sortOrder = "sort_order"
+        case reminderEnabled = "reminder_enabled"
+    }
+}
+
+struct MedicationCourse: Codable, Identifiable {
+    let id: String
+    let status: MedicationCourseStatus
+    let startDate: String
+    let plannedEndDate: String?
+    let actualEndAt: String?
+    let prescribedBy: String?
+    let doctorInstructions: String?
+    let instructionSource: String
+    let doseSlots: [MedicationDoseSlot]
+
+    enum CodingKeys: String, CodingKey {
+        case id, status
+        case startDate = "start_date"
+        case plannedEndDate = "planned_end_date"
+        case actualEndAt = "actual_end_at"
+        case prescribedBy = "prescribed_by"
+        case doctorInstructions = "doctor_instructions"
+        case instructionSource = "instruction_source"
+        case doseSlots = "medication_dose_slots"
     }
 }
 
@@ -77,9 +167,19 @@ struct Medication: Codable, Identifiable {
     // the whole medications list on the phone. See the identical fix on web
     // (medications-client.tsx's own comment on this).
     let inventoryRows: [MedicationInventory]
+    /// The hospital/clinic/pharmacy this came from, embedded via
+    /// `provider_id`'s FK — PostgREST returns a to-one embed as an object,
+    /// not an array, because there IS a real to-one relationship here
+    /// (medications.provider_id -> medical_providers.id), unlike the
+    /// schedules/inventory to-many embeds above.
+    let provider: MedicalProvider?
+    /// Reuses the existing (previously unused) `prescribed_by` column.
+    let doctorName: String?
+    let doctorInstructions: String?
+    let courses: [MedicationCourse]
 
     enum CodingKeys: String, CodingKey {
-        case id, name, notes, purpose, color, strength
+        case id, name, notes, purpose, color, strength, provider
         case userId = "user_id"
         case brandName = "brand_name"
         case genericName = "generic_name"
@@ -88,6 +188,9 @@ struct Medication: Codable, Identifiable {
         case createdAt = "created_at"
         case schedules = "medication_schedules"
         case inventoryRows = "medication_inventory"
+        case doctorName = "prescribed_by"
+        case doctorInstructions = "doctor_instructions"
+        case courses = "medication_courses"
     }
 
     var inventory: MedicationInventory? { inventoryRows.first }
@@ -109,6 +212,9 @@ struct Medication: Codable, Identifiable {
     /// can only usefully show one at a time, same simplification the web
     /// card already makes (`med.medication_schedules[0]`).
     var primarySchedule: MedicationSchedule? { schedules.first }
+    var currentCourse: MedicationCourse? {
+        courses.first { $0.status == .active || $0.status == .paused } ?? courses.first
+    }
 }
 
 struct MedicationLog: Codable, Identifiable {
@@ -117,12 +223,22 @@ struct MedicationLog: Codable, Identifiable {
     let userId: String
     let status: String
     let createdAt: String
+    let scheduledAt: String
+    let takenAt: String?
+    let doseTaken: Double?
+    let courseId: String?
+    let slotId: String?
 
     enum CodingKeys: String, CodingKey {
         case id, status
         case medicationId = "medication_id"
         case userId = "user_id"
         case createdAt = "created_at"
+        case scheduledAt = "scheduled_at"
+        case takenAt = "taken_at"
+        case doseTaken = "dose_taken"
+        case courseId = "course_id"
+        case slotId = "slot_id"
     }
 
     var statusLabel: String {
@@ -130,6 +246,7 @@ struct MedicationLog: Codable, Identifiable {
         case "taken":   return "ทานแล้ว ✅"
         case "missed":  return "ลืมทาน ❌"
         case "skipped": return "ข้าม ⏭️"
+        case "cancelled": return "ยกเลิกตามคอร์ส"
         default:        return "รอทาน ⏳"
         }
     }
