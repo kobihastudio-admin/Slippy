@@ -46,6 +46,7 @@ type Settlement = { from_name: string; to_name: string; amount: number; from_id:
 
 const fmtTHB  = (n: number) => "฿" + Number(n).toLocaleString("th-TH", { maximumFractionDigits: 0 })
 const fmtDate = (d: string) => new Date(d).toLocaleDateString("th-TH", { day: "numeric", month: "short" })
+const EXPENSE_CATEGORY_OPTIONS = ["food", "transport", "accommodation", "activity", "other"] as const
 const MONEY_CATEGORY = expenseCategory()
 const MoneyIcon = MONEY_CATEGORY.icon
 /** Formats an amount in an arbitrary currency (not just THB) — used for a
