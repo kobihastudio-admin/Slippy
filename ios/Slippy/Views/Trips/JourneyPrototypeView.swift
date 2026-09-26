@@ -700,7 +700,7 @@ struct JourneyWorkspaceView: View {
             )
             LinearGradient(colors: [.clear, Color(hex: "#081126").opacity(0.93)], startPoint: .top, endPoint: .bottom)
             VStack(alignment: .leading, spacing: 10) {
-                Text("KYUSHU ANIME JOURNEY · 2026").font(.system(size: 10, weight: .bold)).tracking(1.2).foregroundColor(Color(hex: "#DAD5FF"))
+                Text("KYUSHU AUTUMN ESCAPE · 2026").font(.system(size: 10, weight: .bold)).tracking(1.2).foregroundColor(Color(hex: "#DAD5FF"))
                 Text(trip.tripTypeEmoji + " " + trip.title).font(.system(size: 26, weight: .bold)).foregroundColor(.white).shadow(color: Color.black.opacity(0.7), radius: 3, x: 0, y: 1).lineLimit(2)
                 if let destination = trip.destination ?? trip.venue { Label(destination, systemImage: "mappin.and.ellipse") }
                 if let start = trip.startedAt ?? trip.eventDate {
@@ -931,43 +931,57 @@ struct JourneyWorkspaceView: View {
         let items: [(type: String, title: String, location: String, time: String?, notes: String?)]
     }
 
-    /// The latest user-supplied outline. It is deliberately a one-tap template
-    /// rather than a hidden seed: dates, hotels and the final rental booking
-    /// remain visible and editable decisions owned by the traveller.
+    /// Snapshot of the confirmed Notion master itinerary, last reconciled on
+    /// 18 September 2026. It stays a one-tap template so travellers can review
+    /// confirmed bookings and optional stops before writing them to the trip.
     private static let kyushuTemplate: [KyushuDay] = [
         .init(date: "2026-11-21", title: "Fukuoka old town & Nakasu", city: "Fukuoka", items: [
+            ("hotel", "JR Kyushu Hotel Blossom Fukuoka", "2-2-4 Hakataeki Higashi, Hakata-ku", nil, "Superior Double ×2 ห้อง · 4 คน · Pay at hotel · สมาชิกคนที่ 5 ต้องยืนยันที่พักแยก"),
             ("activity", "Kushida Shrine", "Kushida Shrine, Fukuoka", nil, nil),
-            ("shopping", "Canal City Hakata", "Canal City Hakata", nil, nil),
+            ("activity", "Hakata old town", "Hakata, Fukuoka", nil, nil),
+            ("shopping", "Canal City Hakata", "Canal City Hakata", nil, "ดูรองเท้า"),
             ("meal", "Nakasu evening", "Nakasu, Fukuoka", nil, "เลือกร้านและจองโต๊ะถ้าจำเป็น")]),
         .init(date: "2026-11-22", title: "Fukuoka autumn", city: "Fukuoka", items: [
-            ("activity", "Yusentei Park", "Yusentei Park, Fukuoka", nil, nil),
+            ("activity", "Yusentei Park", "Yusentei Park, Fukuoka", "09:00", nil),
             ("activity", "Ohori Park", "Ohori Park, Fukuoka", nil, nil),
             ("activity", "Fukuoka Castle", "Fukuoka Castle Ruins", nil, "ตรวจช่วงใบไม้แดง"),
             ("shopping", "Tenjin", "Tenjin, Fukuoka", nil, nil)]),
-        .init(date: "2026-11-23", title: "Kumamoto & One Piece", city: "Kumamoto", items: [
-            ("shinkansen", "Hakata → Kumamoto", "Hakata Station", "07:30", "ยืนยันตั๋วและเวลาขบวน"),
-            ("car_rental", "รับรถเช่า (รอตัดสินใจ)", "Kumamoto Station Shinkansen Exit", "09:00", "เปรียบเทียบ Nippon 7 ที่นั่ง กับ Nissan 8 ที่นั่ง; ตรวจใบขับขี่สากล, ETC และประกัน"),
-            ("activity", "Kumamoto Castle", "Kumamoto Castle", nil, nil),
-            ("activity", "One Piece statues", "Kumamoto Prefectural Government Office", nil, "Luffy เป็นจุดหลัก; Chopper/Zoro/Usopp/Franky เป็น optional ตามเวลา")]),
+        .init(date: "2026-11-23", title: "Kumamoto day trip & One Piece", city: "Kumamoto", items: [
+            ("shinkansen", "Sakura 401 · Hakata → Kumamoto", "Hakata Station", "07:58", "ถึง 08:36 · ตั๋วซื้อแล้ว 5 คน"),
+            ("car_rental", "AVIS Kumamoto Station · #00010850016", "3-13-6 Kasuga, Nishi-ku, Kumamoto", "09:00", "WA Wagon · คืน 17:00 · Safety Pack/NOC ¥0 · จ่ายแล้ว ¥15,472 · พก Passport + IDP Geneva 1949 ตัวจริง + บัตรเครดิต"),
+            ("activity", "Kumamoto Castle + Josaien", "Kumamoto Castle", "09:30", "เผื่อประมาณ 3 ชั่วโมง"),
+            ("activity", "Luffy Statue", "Kumamoto Prefectural Office", nil, nil),
+            ("activity", "Suizenji Jojuen + lunch", "Suizenji Jojuen Garden, Kumamoto", nil, nil),
+            ("activity", "Chopper Statue", "Kumamoto City Zoological and Botanical Gardens", nil, nil),
+            ("activity", "Zoro Statue · optional", "Ozu Central Park, Kumamoto", nil, "ใช้เวลาเพิ่มประมาณ 85 นาทีไป-กลับ; ตัดออกถ้าเวลาเริ่มตึง"),
+            ("car_rental", "คืนรถ AVIS Kumamoto Station", "AVIS Kumamoto Station", "17:00", "พักและอาหารเย็นที่ Amu Plaza Kumamoto"),
+            ("shinkansen", "Sakura 772 · Kumamoto → Hakata", "Kumamoto Station", "19:38", "ถึง Hakata 20:16 · ตั๋วซื้อแล้ว")]),
         .init(date: "2026-11-24", title: "Dazaifu → Yufuin", city: "Yufuin", items: [
-            ("activity", "Dazaifu Tenmangu", "Dazaifu Tenmangu", nil, nil),
-            ("activity", "Kamado Shrine", "Kamado Shrine, Dazaifu", nil, "ตรวจเวลาเปิดและการเดินขึ้น"),
-            ("hotel", "พัก Yufuin", "Yufuin, Oita", nil, "เพิ่มใบยืนยันโรงแรม")]),
+            ("car_rental", "AVIS Hakata Station Chikushi Exit · #00010859204", "1-18-10 Hakataeki Higashi, Hakata-ku", "09:00", "WA Wagon · คืน 26 พ.ย. 19:00 · Safety Pack + ETC · จ่ายแล้ว ¥51,711"),
+            ("activity", "Dazaifu Tenmangu", "Dazaifu Tenmangu", "09:45", "จอด Dazaifu Parking Center · ชิม Umegae Mochi"),
+            ("activity", "Kamado Shrine", "Kamado Shrine, Dazaifu", "11:30", "ต่อทางด่วนไป Yufuin"),
+            ("activity", "Kinrin Lake", "Kinrinko Lake, Yufuin", nil, "แวะเมื่อถึง Yufuin หากเวลาพอ"),
+            ("hotel", "Yufuin Bath Satoyamasafu", "828-1 Kawaminami, Yufuin-cho, Yufu", "16:30", "Confirmation #6307849636 · 5 คน · รวมอาหารเช้า/เย็น · เช็กอินก่อน 18:00 · จอดรถฟรี")]),
         .init(date: "2026-11-25", title: "Yufuin → Fukuoka", city: "Fukuoka", items: [
-            ("activity", "Kirin Lake", "Kinrinko Lake, Yufuin", nil, nil),
+            ("hotel", "เช็กเอาต์ Satoyamasafu", "Yufuin Bath Satoyamasafu", "08:30", "เช็กเอาต์ได้ 08:00–10:00"),
+            ("activity", "Kinrin Lake morning", "Kinrinko Lake, Yufuin", "09:00", nil),
             ("activity", "Yunotsubo Street", "Yunotsubo Kaido, Yufuin", nil, nil),
-            ("shopping", "Yufuin Floral Village", "Yufuin Floral Village", nil, nil),
-            ("car_rental", "คืนรถเช่า", "Kumamoto Station Shinkansen Exit", nil, "ยืนยันสาขาคืนรถจริงและค่าน้ำมัน")]),
+            ("shopping", "Yufuin Floral Village", "Yufuin Floral Village", nil, "ไม่มีที่จอดของตัวเอง ใช้ coin parking ใกล้เคียง"),
+            ("car_rental", "ขับกลับ Fukuoka", "Yufuin, Oita", "13:15", "ไม่แวะ Dazaifu ซ้ำ · เก็บรถไว้ใช้ถึง 26 พ.ย."),
+            ("hotel", "JR Kyushu Hotel Blossom Fukuoka", "2-2-4 Hakataeki Higashi, Hakata-ku", nil, "พัก 25–27 พ.ย. · Superior Double ×2 ห้อง · Pay at hotel")]),
         .init(date: "2026-11-26", title: "Temple day", city: "Fukuoka", items: [
-            ("train", "Nanzoin Temple", "Nanzoin Temple", nil, nil),
-            ("activity", "Kaizan Sennyuji", "Kaizan Sennyuji, Fukuoka", nil, nil),
-            ("shopping", "Hakata", "Hakata Station", nil, nil)]),
+            ("activity", "Nanzoin Temple", "Nanzoin Temple, Sasaguri", nil, "ใช้รถเช่า · จอดฝั่งเหนือสถานี Sasaguri"),
+            ("activity", "Tennoin / Nomiyama · recommended", "Nomiyama Kannonji Temple", nil, "ตัวเลือกใกล้ Nanzoin ประมาณ 20 นาที"),
+            ("activity", "Raizan Sennyoji · optional", "Raizan Sennyoji Daihioin", nil, "เลือกแทน Tennoin หากเวลาเหลือ; ไกลประมาณ 60 นาที"),
+            ("car_rental", "คืนรถ AVIS Hakata Station Chikushi Exit", "1-18-10 Hakataeki Higashi, Hakata-ku", "19:00", "เติมน้ำมันและเผื่อเวลาตรวจรถก่อนคืน")]),
         .init(date: "2026-11-27", title: "Hakata & Tenjin", city: "Fukuoka", items: [
             ("activity", "Tochoji Temple", "Tochoji Temple", nil, nil),
             ("shopping", "Tenjin Underground Mall", "Tenjin Chikagai", nil, nil),
-            ("shopping", "Canal City final shopping", "Canal City Hakata", nil, "จัด tax-free และแพ็กกระเป๋า")]),
+            ("shopping", "Canal City final shopping", "Canal City Hakata", nil, "จัด tax-free และแพ็กกระเป๋า"),
+            ("hotel", "JR Kyushu Hotel Blossom Hakata Chuo", "2-2-11 Hakataekimae, Hakata-ku", nil, "ย้ายที่พัก · Superior Twin ×2 ห้อง · Pay at hotel")]),
         .init(date: "2026-11-28", title: "Departure", city: "Fukuoka", items: [
-            ("flight", "เดินทางไป Fukuoka Airport", "Fukuoka Airport", nil, "เพิ่มเที่ยวบิน เช็กอิน และคืน SIM/Wi‑Fi")])
+            ("hotel", "เช็กเอาต์ Blossom Hakata Chuo", "JR Kyushu Hotel Blossom Hakata Chuo", nil, "ออกเช้าและเผื่อเวลาเดินทางสนามบิน"),
+            ("flight", "เดินทางกลับไทย", "Fukuoka Airport", "11:00", "เที่ยวบิน 11:00 น. · ถึงสนามบินก่อนเวลาอย่างน้อย 2.5–3 ชั่วโมง")])
     ]
 
     @MainActor
