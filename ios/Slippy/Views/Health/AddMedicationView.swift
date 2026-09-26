@@ -280,7 +280,7 @@ struct AddMedicationView: View {
                                 }
                             }
                             bedtimeToggle
-                                .onChange(of: isBedtime) { newValue in
+                                .onChange(of: isBedtime) { _, newValue in
                                     if newValue && times == ["08:00"] { times = ["22:00"] }
                                 }
                             if !isBedtime {
