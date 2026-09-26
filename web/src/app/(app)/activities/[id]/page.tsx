@@ -1,8 +1,10 @@
+import { isActivitiesEnabled } from "@/lib/activities/feature"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 
 export default async function ActivityDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  if (!isActivitiesEnabled(process.env.ACTIVITIES_ENABLED)) notFound()
   const { id } = await params
   const supabase = await createClient()
   const { data: activity } = await supabase.from("activities")

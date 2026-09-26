@@ -1,9 +1,12 @@
+import { isActivitiesEnabled } from "@/lib/activities/feature"
+import { notFound } from "next/navigation"
 import { ActivityFeed, type ActivitySummary } from "@/components/activities/activity-feed"
 import { createClient } from "@/lib/supabase/server"
 
 const ACTIVITY_FIELDS = "id, title, summary, category, visibility, status, location_name, starts_at, source_type"
 
 export default async function ActivitiesPage() {
+  if (!isActivitiesEnabled(process.env.ACTIVITIES_ENABLED)) notFound()
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   const { data } = user

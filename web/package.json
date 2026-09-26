@@ -16,6 +16,7 @@
     "test:medications": "node --experimental-strip-types --test src/lib/medications.test.mjs",
     "test:medication-lifecycle": "node --experimental-strip-types --test src/lib/medication-lifecycle.test.mjs",
     "test:location-sharing": "node --experimental-strip-types --test src/lib/trips/location-sharing.test.mjs",
+    "test:activities": "node --experimental-strip-types --test src/lib/activities/feature.test.mjs src/lib/activities/input.test.mjs src/lib/activities/routes.test.mjs src/lib/activities/visibility.test.mjs",
     "test:calls": "node --experimental-strip-types --test src/lib/trips/calls.test.mjs"
   },
   "dependencies": {

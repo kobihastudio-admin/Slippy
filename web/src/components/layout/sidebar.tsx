@@ -9,6 +9,7 @@
  * in whole or in part, is strictly prohibited without prior written permission.
  */
 
+import { isActivitiesEnabled } from "@/lib/activities/feature"
 import { useState }                    from "react"
 import Link                            from "next/link"
 import { usePathname, useRouter }      from "next/navigation"
@@ -379,7 +380,7 @@ export function Sidebar({ org, allOrgs, user, collapsed, mobileOpen, onToggle, o
             กิจกรรม & เครื่องมือ
           </p>
         </div>
-        {activityItems.map(({ key, href, icon: Icon, label }) => {
+        {activityItems.filter(item => item.key !== "activities" || isActivitiesEnabled(process.env.NEXT_PUBLIC_ACTIVITIES_ENABLED)).map(({ key, href, icon: Icon, label }) => {
           const active = isActive(href)
           const displayLabel = label ?? t(key as any)
           return (
