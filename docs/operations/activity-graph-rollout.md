@@ -85,8 +85,20 @@ supabase db push --linked
 ```
 
 Apply the migrations in their committed order. The itinerary projection is
-idempotent: it only fills a null `trip_itinerary_items.activity_id`; it never
-deletes a trip field or moves itinerary data.
+idempotent: for each itinerary item without a linked activity it inserts one
+`activities` row (visibility `private`, status `published`, or `cancelled` for
+cancelled items) and then fills the null `trip_itinerary_items.activity_id`. It
+never deletes a trip field or moves itinerary data.
+
+## Verification
+
+Run from the release commit; both must pass before the production gate:
+
+```bash
+npm run build                                   # web (next build) and api (tsc)
+xcodebuild -project ios/Slippy.xcodeproj -scheme Slippy \
+  -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+```
 
 ## Reconciliation
 
@@ -111,6 +123,10 @@ journey. Do not manually rewrite itinerary rows to force a zero result.
 - [ ] Existing trip route, web Google Map/Apple Maps action, and iOS MapKit/Google link still work.
 - [ ] Backup destination, retention, encryption owner, and restore operator are approved.
 
+Review note (2026-09-26): these items are unchecked because they need runtime,
+log, database, or staging access. A repository review confirmed only the code
+side (token hashing, Explore filtering, RLS policies); it does not tick them.
+
 ## Browser smoke test
 
 In authenticated staging, verify:
@@ -126,8 +142,10 @@ In authenticated staging, verify:
 
 ## Rollback
 
-Do not drop Activity Graph tables during an incident. Disable the Activities
-navigation/API feature at the application layer, keep legacy `/trips` live,
-and restore from the approved backup only if a data-restoration incident is
-declared. The additive links use `ON DELETE SET NULL` so a future controlled
-removal does not delete legacy itinerary items.
+Do not drop Activity Graph tables during an incident. There is currently no
+feature flag for Activities (flags exist only for trips, `TRIP_FEATURE_*`), so
+disabling the Activities navigation/API means a code change and redeploy; keep
+legacy `/trips` live in the meantime, and restore from the approved backup only
+if a data-restoration incident is declared. The additive links use
+`ON DELETE SET NULL` so a future controlled removal does not delete legacy
+itinerary items.
