@@ -824,7 +824,7 @@ async function handleEvent(event: any) {
       )])
       return
     }
-    const result = await handleSplitCommand(parts[1], conn.organization_id, lineUserId, displayName)
+    const result = await handleSplitCommand(parts[1], conn.organization_id, lineUserId, displayName, conn.user_id)
     if (result.card) await replyMsg(replyToken, [result.card])
     else if (result.text) await replyMsg(replyToken, [txt(result.text)])
     return

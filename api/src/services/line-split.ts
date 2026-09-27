@@ -226,10 +226,20 @@ export function splitSummaryCard(params: {
 
 // ─── Handle /split command ────────────────────────────────────────────────────
 export async function handleSplitCommand(
-  docIdPrefix: string,
-  orgId:       string,
-  lineUserId:  string,
-  displayName: string,
+  docIdPrefix:   string,
+  orgId:         string,
+  lineUserId:    string,
+  displayName:   string,
+  /**
+   * split_bills.creator_id is `uuid references users(id)` — the LINE user id
+   * (e.g. "U4af49...") is neither. Passing it straight through made every
+   * insert fail the type check; the insert only destructured `{ data }`, so
+   * the error was silently discarded and /split always replied "failed" with
+   * no indication why. This must be the caller's resolved system user id
+   * (line_connections.user_id) — the participant row below still records the
+   * LINE identity via its own `line_user_id` (a text column).
+   */
+  creatorUserId: string,
 ): Promise<{ card?: object; text?: string }> {
 
   // Find document
@@ -256,11 +266,11 @@ export async function handleSplitCommand(
   }
 
   // Create split bill
-  const { data: bill } = await supabase
+  const { data: bill, error: billErr } = await supabase
     .from("split_bills")
     .insert({
       organization_id: orgId,
-      creator_id:      lineUserId,  // store LINE userId as creator
+      creator_id:      creatorUserId,
       document_id:     doc.id,
       title:           doc.vendor_name ?? "บิลจาก LINE",
       total_amount:    doc.total_amount ?? 0,
@@ -270,7 +280,10 @@ export async function handleSplitCommand(
     .select("id, share_token")
     .single()
 
-  if (!bill) return { text: "❌ สร้างบิลหารไม่สำเร็จ กรุณาลองใหม่" }
+  if (billErr || !bill) {
+    console.error("[line-split] create bill failed:", billErr?.message)
+    return { text: "❌ สร้างบิลหารไม่สำเร็จ กรุณาลองใหม่" }
+  }
 
   // Auto-add creator as first participant
   await supabase.from("split_participants").insert({
