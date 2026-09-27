@@ -1,10 +1,12 @@
 import { createHash, randomBytes } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { activitiesDisabledBody, isActivitiesEnabled } from "@/lib/activities/feature"
 
 export const runtime = "nodejs"
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!isActivitiesEnabled(process.env.ACTIVITIES_ENABLED)) return NextResponse.json(activitiesDisabledBody, { status: 404 })
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

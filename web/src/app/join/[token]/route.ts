@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { activitiesDisabledBody, isActivitiesEnabled } from "@/lib/activities/feature"
 
 type JoinActivityResult = { activity_id: string; joined: boolean }
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+  if (!isActivitiesEnabled(process.env.ACTIVITIES_ENABLED)) return NextResponse.json(activitiesDisabledBody, { status: 404 })
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { parseActivityInput } from "@/lib/activities/input"
 import { createClient } from "@/lib/supabase/server"
+import { activitiesDisabledBody, isActivitiesEnabled } from "@/lib/activities/feature"
 
 const ACTIVITY_FIELDS = "id, owner_id, trip_id, group_id, title, summary, category, visibility, status, location_name, starts_at, ends_at, source_type, source_url, created_at, updated_at"
 
 export async function GET(req: NextRequest) {
+  if (!isActivitiesEnabled(process.env.ACTIVITIES_ENABLED)) return NextResponse.json(activitiesDisabledBody, { status: 404 })
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   const scope = req.nextUrl.searchParams.get("scope") ?? "mine"
@@ -21,6 +23,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  if (!isActivitiesEnabled(process.env.ACTIVITIES_ENABLED)) return NextResponse.json(activitiesDisabledBody, { status: 404 })
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

@@ -142,10 +142,16 @@ In authenticated staging, verify:
 
 ## Rollback
 
-Do not drop Activity Graph tables during an incident. There is currently no
-feature flag for Activities (flags exist only for trips, `TRIP_FEATURE_*`), so
-disabling the Activities navigation/API means a code change and redeploy; keep
-legacy `/trips` live in the meantime, and restore from the approved backup only
-if a data-restoration incident is declared. The additive links use
-`ON DELETE SET NULL` so a future controlled removal does not delete legacy
-itinerary items.
+Do not drop Activity Graph tables during an incident. Disable the feature with
+the kill switch instead and keep legacy `/trips` live:
+
+- `ACTIVITIES_ENABLED=0` (server, read at runtime): `/activities`, `/api/activities*`
+  and `/join/[token]` return 404. Set it in the web container's environment and
+  restart the web service; no rebuild is needed.
+- `NEXT_PUBLIC_ACTIVITIES_ENABLED=0` (build time): also hides the sidebar entry.
+  Next.js inlines it, so this needs a rebuild and redeploy.
+
+The default is enabled; only the exact value `0` disables it. Restore from the
+approved backup only if a data-restoration incident is declared. The additive
+links use `ON DELETE SET NULL` so a future controlled removal does not delete
+legacy itinerary items.
