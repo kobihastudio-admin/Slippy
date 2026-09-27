@@ -4,6 +4,7 @@ import { getAppUrl } from "../lib/app-url"
 import { supabase } from "../lib/supabase"
 import { ingestDocument } from "../services/ingest"
 import { handleSplitCommand, handleClaimCommand, handleSplitStatus } from "../services/line-split"
+import { populateLifeGraph } from "../services/life-graph"
 import { handleCreateSportGroup, handleSportStatus, handleSportPay, handleSportToggle, handleLinkGroupCommand, handleLinkGroupList, handleLinkGroupAsk, handleSetLineGroup, handleSportInviteCommand, handleCreateSportClub, handleSetClubConcept, handleSetClubMap, handleCreateSportSession, handleSportRoster } from "../services/line-sport"
 import { handleCreateTripGroup, handleTripStatus, handleTripPay } from "../services/line-trip"
 import {
@@ -726,6 +727,15 @@ async function handleEvent(event: any) {
     }
 
     await supabase.from("documents").update({ status: "approved" }).eq("id", doc.id)
+    // The web review UI populates the Life Graph on manual approve (see
+    // web/src/app/api/life/populate); this command is the same manual-approve
+    // action from LINE and was missing the same call, so a document approved
+    // entirely through the bot never got a life event, merchant upsert, or
+    // memory. Both processes run in this same API process, so call it directly
+    // rather than round-tripping through HTTP the way the web client does.
+    populateLifeGraph(doc.id, orgId).catch(err =>
+      console.error("[line:/approve] life graph population error:", err?.message)
+    )
     await replyMsg(replyToken, [txt(`✅ อนุมัติ "${doc.vendor_name ?? doc.id.slice(0,8)}" สำเร็จแล้วครับ`)])
     return
   }
