@@ -18,8 +18,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await admin.from("friendships").update({ status: "accepted", updated_at: new Date().toISOString() })
       .eq("id", id).eq("addressee_id", user.id)
   } else if (action === "block") {
+    // Scoped to either party, same as DELETE below — without this, any
+    // authenticated caller who knew a friendship's id could block it even
+    // though they were not the requester or the addressee. The admin client
+    // bypasses friendships' RLS, so this check is the only thing enforcing
+    // that here.
     await admin.from("friendships").update({ status: "blocked", updated_at: new Date().toISOString() })
       .eq("id", id)
+      .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
   } else {
     return NextResponse.json({ error: "invalid action" }, { status: 400 })
   }
