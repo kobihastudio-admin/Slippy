@@ -11,7 +11,7 @@ They share one identity table, `line_connections` (`line_user_id` ↔ `user_id` 
 
 ## Webhook
 
-`POST /line` (`lineRoutes` in `api/src/routes/line.ts`). Every request is verified with `x-line-signature`: HMAC-SHA256 of the raw body using `LINE_CHANNEL_SECRET`, compared with `crypto.timingSafeEqual`. An invalid or missing signature gets `400` immediately, before the body is touched.
+`POST /webhooks/line` (`lineRoutes` in `api/src/routes/line.ts`, registered under the `/webhooks` prefix in `api/src/index.ts` — **correction (2026-10-02):** an earlier version of this document said `POST /line`, missing that prefix; see API_SPEC.md for the full route layout). Every request is verified with `x-line-signature`: HMAC-SHA256 of the raw body using `LINE_CHANNEL_SECRET`, compared with `crypto.timingSafeEqual`. An invalid or missing signature gets `400` immediately, before the body is touched.
 
 **Reply before processing.** The handler responds `{ ok: true }` immediately, then processes `events` in the background (`Promise.allSettled`). LINE retries a webhook that does not answer within 10 seconds, and a retry would otherwise create duplicate records — this is why replying first matters.
 
