@@ -65,7 +65,7 @@ Parsed as `cmd = text.split(" ")[0].toLowerCase()`, `parts = text.split(" ")`.
 
 **Places:** `/food ID` — nearby food search.
 
-**Assistant:** `/ai`, "nova", "คุยกับ Nova 🤖", or a message starting with "สวัสดี nova" (case-insensitive) — routes to the chat assistant.
+**"Nova" intro:** `/ai`, "nova", "คุยกับ Nova 🤖", or a message starting with "สวัสดี nova" (case-insensitive). **Correction (2026-10-02):** this does not route to the real AI Assistant — it only sends one fixed, canned introduction with quick-reply buttons. See AI_ASSISTANT_SPEC.md. An earlier version of this document said it "routes to the chat assistant," which overstated what the code does.
 
 **Help:** `/menu`, `/help`, "help", "เมนู", "menu" — the command menu card.
 
