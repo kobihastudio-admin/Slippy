@@ -10,9 +10,14 @@
 import { NextRequest, NextResponse }                from "next/server"
 import { createServerClient, type CookieOptions }  from "@supabase/ssr"
 import { cookies }                                  from "next/headers"
+import { getPublicOrigin }                          from "@/lib/public-origin"
 
 export async function GET(req: NextRequest) {
-  const { searchParams, origin } = new URL(req.url)
+  const { searchParams } = new URL(req.url)
+  // Not `new URL(req.url).origin`: inside the Docker image that is the
+  // container id (https://<id>:3000), which sent users to an unreachable host
+  // after login. See lib/public-origin.ts.
+  const origin = getPublicOrigin(req.headers)
   const code  = searchParams.get("code")
   const next  = searchParams.get("next") ?? "/dashboard"
 
