@@ -5,7 +5,7 @@ final class SportPlayAPIClient {
 
     private let base: String = {
         ProcessInfo.processInfo.environment["API_BASE_URL"]
-            ?? "https://slippy-api.vercel.app"
+            ?? Config.apiURL.absoluteString
     }()
 
     // MARK: – Create session

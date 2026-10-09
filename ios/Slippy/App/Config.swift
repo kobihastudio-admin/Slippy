@@ -13,6 +13,12 @@ enum Config {
     // which changed every time ngrok restarted.
     static let webAppURL    = URL(string: "https://dev.slippyai.app")!
 
+    // MARK: – API server (Fastify) — endpoints under /v1 (e.g. sport-play).
+    // Same NAS, exposed through the Cloudflare Tunnel as api.slippyai.app.
+    // This replaces the old default `slippy-api.vercel.app`, which no longer
+    // exists (DEPLOYMENT_NOT_FOUND) and could be claimed by a third party.
+    static let apiURL       = URL(string: "https://api.slippyai.app")!
+
     // MARK: – Social Sign-In
     static let googleClientID    = "940654280425-19pvlqjqssgv3oe8sd7im9nm1an62jp9.apps.googleusercontent.com"
     // Web client ID — Supabase validates Google ID tokens against this audience

@@ -93,8 +93,10 @@ export async function POST(req: NextRequest) {
   if (lineGroupId) {
     try {
       const internalKey = process.env.INTERNAL_API_KEY ?? ""
-      const apiBase     = process.env.API_BASE_URL ?? "https://slippy-api.vercel.app"
-      await fetch(`${apiBase}/split/notify`, {
+      // No default host: the old fallback (slippy-api.vercel.app) no longer
+      // exists, so an unset API_BASE_URL means "skip the push", not "call it".
+      const apiBase     = process.env.API_BASE_URL
+      if (apiBase) await fetch(`${apiBase}/split/notify`, {
         method:  "POST",
         headers: { "Content-Type": "application/json", "x-internal-key": internalKey },
         body:    JSON.stringify({ billId: bill.id, event: "created" }),

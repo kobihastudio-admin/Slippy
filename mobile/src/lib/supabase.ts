@@ -4,7 +4,7 @@ import Constants from 'expo-constants'
 
 const supabaseUrl  = Constants.expoConfig?.extra?.supabaseUrl  ?? ''
 const supabaseAnon = Constants.expoConfig?.extra?.supabaseAnon ?? ''
-export const apiBase: string = Constants.expoConfig?.extra?.apiBase ?? 'https://api-staging.slippyai.app'
+export const apiBase: string = Constants.expoConfig?.extra?.apiBase ?? 'https://api.slippyai.app'
 
 /** Expo-compatible SecureStore adapter for Supabase session persistence */
 const ExpoSecureStoreAdapter = {
