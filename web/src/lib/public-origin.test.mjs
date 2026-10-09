@@ -3,6 +3,8 @@ import test from "node:test"
 
 import { getPublicOrigin } from "./public-origin.ts"
 
+process.env.NEXT_PUBLIC_APP_URL = "https://dev.slippyai.app"
+
 const h = (obj) => ({ get: (k) => obj[k.toLowerCase()] ?? null })
 
 test("uses the forwarded public host and scheme", () => {
@@ -44,4 +46,12 @@ test("rejects a malformed host and uses the configured app URL", () => {
     if (saved === undefined) delete process.env.NEXT_PUBLIC_APP_URL
     else process.env.NEXT_PUBLIC_APP_URL = saved
   }
+})
+
+test("a spoofed host that is not the configured app host is ignored", () => {
+  assert.equal(
+    getPublicOrigin(h({ "x-forwarded-host": "evil.example", "x-forwarded-proto": "https" })),
+    "https://dev.slippyai.app",
+  )
+  assert.equal(getPublicOrigin(h({ host: "bf6801baa76d:3000" })), "https://dev.slippyai.app")
 })

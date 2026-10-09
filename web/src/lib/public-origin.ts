@@ -10,8 +10,10 @@
  *
  * The reverse proxy (Cloudflare Tunnel) forwards the public host in
  * `x-forwarded-host` / `host`, and the scheme in `x-forwarded-proto`, so those
- * are the source of truth. If neither header yields a usable host, fall back to
- * the configured app URL rather than to the unreliable `req.url`.
+ * are the source of truth. The host is only trusted when it is the configured
+ * app host (or localhost); anything else — a spoofed Host/X-Forwarded-Host, a
+ * container id, an unexpected LAN name — falls back to the configured app URL,
+ * so a forged header cannot steer a post-login redirect to another domain.
  */
 import { getAppUrl } from "./app-url.ts"
 
@@ -27,9 +29,14 @@ function isLocalHost(host: string): boolean {
   return name === "localhost" || name === "127.0.0.1" || name.endsWith(".localhost")
 }
 
+function appHost(): string | null {
+  try { return new URL(getAppUrl()).host.toLowerCase() } catch { return null }
+}
+
 export function getPublicOrigin(headers: Pick<Headers, "get">): string {
   const host = first(headers.get("x-forwarded-host")) ?? first(headers.get("host"))
   if (!host || !HOST_RE.test(host)) return getAppUrl()
+  if (!isLocalHost(host) && host.toLowerCase() !== appHost()) return getAppUrl()
 
   const forwardedProto = first(headers.get("x-forwarded-proto"))?.toLowerCase()
   const proto =
