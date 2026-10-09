@@ -144,11 +144,11 @@ tunnel is a long-lived, named resource tied to your own domain.
    run --token <TOKEN>` command — copy just the token into this stack's
    `.env` as `CLOUDFLARE_TUNNEL_TOKEN`.
 3. Still in that tunnel's settings, add two **Public Hostnames**:
-   - `staging.yourdomain.com` → Service `HTTP`, URL `web:3000`
-   - `api-staging.yourdomain.com` → Service `HTTP`, URL `api:4000`
+   - `dev.yourdomain.com` → Service `HTTP`, URL `web:3000`
+   - `api.yourdomain.com` → Service `HTTP`, URL `api:4000`
 4. Set `NEXT_PUBLIC_APP_URL`/`NEXT_PUBLIC_API_URL` in `.env` to those same
    hostnames (with `https://`), then rebuild: `docker compose up -d --build web`.
-5. Register `https://api-staging.yourdomain.com/webhooks/line` as the LINE
+5. Register `https://api.yourdomain.com/webhooks/line` as the LINE
    webhook URL in the LINE Developers Console — that's handled by `api`
    directly (`api/src/routes/line.ts`), not proxied through `web`.
 6. Restart `cloudflared`: `docker compose up -d cloudflared`.

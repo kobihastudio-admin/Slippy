@@ -78,8 +78,10 @@ export async function PATCH(
           .eq("id", body.participantId!).single()
         const { data: bill } = await admin.from("split_bills")
           .select("title, line_group_id").eq("id", id).single()
-        if (p?.line_user_id) {
-          const apiBase    = process.env.API_BASE_URL ?? "https://slippy-api.vercel.app"
+        // No default host: the old fallback (slippy-api.vercel.app) no longer
+        // exists, so an unset API_BASE_URL means "skip the push".
+        const apiBase = process.env.API_BASE_URL
+        if (apiBase && p?.line_user_id) {
           const internalKey = process.env.INTERNAL_API_KEY ?? ""
           await fetch(`${apiBase}/split/notify`, {
             method:  "POST",
