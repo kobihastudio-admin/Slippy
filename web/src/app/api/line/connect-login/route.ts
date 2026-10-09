@@ -8,13 +8,14 @@ import { createClient }  from "@/lib/supabase/server"
 import { cookies }       from "next/headers"
 import crypto            from "node:crypto"
 import { getAppUrl } from "@/lib/app-url"
+import { getPublicOrigin } from "@/lib/public-origin"
 
 const LINE_AUTH_URL = "https://access.line.me/oauth2/v2.1/authorize"
 
 export async function GET(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.redirect(new URL("/login", req.url))
+  if (!user) return NextResponse.redirect(new URL("/login", getPublicOrigin(req.headers)))
 
   const orgId = req.nextUrl.searchParams.get("orgId")
   if (!orgId) return NextResponse.json({ error: "orgId required" }, { status: 400 })

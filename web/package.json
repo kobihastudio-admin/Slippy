@@ -17,7 +17,8 @@
     "test:medication-lifecycle": "node --experimental-strip-types --test src/lib/medication-lifecycle.test.mjs",
     "test:location-sharing": "node --experimental-strip-types --test src/lib/trips/location-sharing.test.mjs",
     "test:activities": "node --experimental-strip-types --test src/lib/activities/feature.test.mjs src/lib/activities/input.test.mjs src/lib/activities/routes.test.mjs src/lib/activities/visibility.test.mjs",
-    "test:calls": "node --experimental-strip-types --test src/lib/trips/calls.test.mjs"
+    "test:calls": "node --experimental-strip-types --test src/lib/trips/calls.test.mjs",
+    "test:public-origin": "node --experimental-strip-types --test src/lib/public-origin.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.3",
