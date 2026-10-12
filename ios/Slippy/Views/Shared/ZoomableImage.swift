@@ -105,11 +105,15 @@ struct ZoomableImageViewer: View {
     }
 }
 
-/// Full-screen viewer for a remote profile photo: pinch to zoom, drag when
-/// zoomed, double-tap to toggle, tap the close button (or swipe down) to leave.
-struct ProfileImageViewer: View {
-    let url: URL
-    var title: String? = nil
+/// Full-screen image viewer: pinch to zoom, drag when zoomed, double-tap to
+/// toggle, swipe down or tap the close button to leave. Shows a remote photo
+/// (`url`) or a bundled asset (`assetName`). `footer` adds actions, such as
+/// "change photo", above the caption.
+struct ProfileImageViewer<Footer: View>: View {
+    var url: URL?
+    var assetName: String?
+    var title: String?
+    private let footer: Footer
 
     @Environment(\.dismiss) private var dismiss
     @State private var scale: CGFloat = 1
@@ -117,37 +121,37 @@ struct ProfileImageViewer: View {
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
 
+    init(url: URL? = nil, assetName: String? = nil, title: String? = nil, @ViewBuilder footer: () -> Footer) {
+        self.url = url
+        self.assetName = assetName
+        self.title = title
+        self.footer = footer()
+    }
+
     var body: some View {
         GeometryReader { geo in
             ZStack {
                 Color.black.ignoresSafeArea()
 
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: geo.size.width, height: geo.size.height)
-                            .scaleEffect(scale)
-                            .offset(offset)
-                            .gesture(zoomGesture(in: geo.size))
-                            .onTapGesture(count: 2) {
-                                withAnimation(.easeInOut(duration: 0.25)) {
-                                    if scale > 1 { reset() } else { scale = 2.5; lastScale = 2.5 }
-                                }
+                if let assetName {
+                    zoomable(Image(assetName), in: geo.size)
+                } else if let url {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            zoomable(image, in: geo.size)
+                        case .failure:
+                            VStack(spacing: 8) {
+                                Image(systemName: "photo.badge.exclamationmark").font(.system(size: 40))
+                                Text("โหลดรูปไม่สำเร็จ").font(.system(size: 14))
                             }
-                    case .failure:
-                        VStack(spacing: 8) {
-                            Image(systemName: "person.crop.circle.badge.exclamationmark").font(.system(size: 40))
-                            Text("โหลดรูปไม่สำเร็จ").font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.8))
+                        default:
+                            ProgressView().tint(.white)
                         }
-                        .foregroundColor(.white.opacity(0.8))
-                    default:
-                        ProgressView().tint(.white)
                     }
+                    .frame(width: geo.size.width, height: geo.size.height)
                 }
-                .frame(width: geo.size.width, height: geo.size.height)
 
                 VStack {
                     HStack {
@@ -162,6 +166,7 @@ struct ProfileImageViewer: View {
                     }
                     .padding(.horizontal, 16).padding(.top, 8)
                     Spacer()
+                    footer.padding(.bottom, 8)
                     if let title, !title.isEmpty {
                         Text(title)
                             .font(.system(size: 16, weight: .semibold)).foregroundColor(.white)
@@ -172,6 +177,21 @@ struct ProfileImageViewer: View {
                 }
             }
         }
+    }
+
+    private func zoomable(_ image: Image, in size: CGSize) -> some View {
+        image
+            .resizable()
+            .scaledToFit()
+            .frame(width: size.width, height: size.height)
+            .scaleEffect(scale)
+            .offset(offset)
+            .gesture(zoomGesture(in: size))
+            .onTapGesture(count: 2) {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    if scale > 1 { reset() } else { scale = 2.5; lastScale = 2.5 }
+                }
+            }
     }
 
     private func reset() {
@@ -214,3 +234,8 @@ struct ProfileImageViewer: View {
     }
 }
 
+extension ProfileImageViewer where Footer == EmptyView {
+    init(url: URL? = nil, assetName: String? = nil, title: String? = nil) {
+        self.init(url: url, assetName: assetName, title: title) { EmptyView() }
+    }
+}
