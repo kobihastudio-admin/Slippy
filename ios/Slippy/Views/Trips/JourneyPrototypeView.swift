@@ -536,8 +536,7 @@ struct JourneyWorkspaceView: View {
     /// stack one step at a time and only leaves the trip from the overview.
     @State private var tabHistory: [Int] = []
     @State private var steppingBack = false
-    @State private var showAddDay = false
-    @State private var addItemDay: TripItineraryDay?
+    @State private var editorTarget: ItineraryEditorTarget?
     @State private var showFriendPicker = false
     @State private var isPreparingShare = false
     @State private var showTravelImport = false
@@ -560,6 +559,15 @@ struct JourneyWorkspaceView: View {
     @State private var showNotes = false
     @State private var remindersOn = false
     @State private var reminderMessage: String?
+
+    private var itineraryActions: ItineraryActions {
+        ItineraryActions(
+            addItem: { dayId, fields in try await vm.addItineraryItem(dayId: dayId, fields: fields) },
+            updateItem: { itemId, fields in try await vm.updateItineraryItem(itemId: itemId, journeyId: trip.id, fields: fields) },
+            removeItem: { itemId in try await vm.removeItineraryItem(itemId, journeyId: trip.id) },
+            addDay: { day in try await vm.addItineraryDay(journeyId: trip.id, date: day.date, title: day.title, city: day.city, summary: day.summary) },
+            updateDay: { dayId, day in try await vm.updateItineraryDay(dayId: dayId, journeyId: trip.id, date: day.date, title: day.title, city: day.city, summary: day.summary) })
+    }
 
     /// Participants as last fetched; falls back to what the trip list loaded.
     private var people: [TripParticipant] { livePeople ?? trip.participants ?? [] }
@@ -605,12 +613,7 @@ struct JourneyWorkspaceView: View {
             await vm.loadTripConversation(journeyId: trip.id)
             await loadExtras()
         }
-        .sheet(isPresented: $showAddDay) { AddItineraryDaySheet { date, title in
-            try await vm.addItineraryDay(journeyId: trip.id, date: date, title: title)
-        }}
-        .sheet(item: $addItemDay) { day in AddItineraryItemSheet(day: day) { type, title, location, time, notes in
-            try await vm.addItineraryItem(dayId: day.id, type: type, title: title, location: location, timeFrom: time, notes: notes)
-        }}
+        .itineraryEditor(target: $editorTarget, actions: itineraryActions)
         .sheet(isPresented: $showFriendPicker) { TripFriendPicker(friends: socialVM.friends) { friend in
             try await vm.addFriendToTrip(journeyId: trip.id, friendId: friend.id)
         }}
@@ -633,11 +636,8 @@ struct JourneyWorkspaceView: View {
             DayDetailSheet(
                 day: vm.itineraryDays.first(where: { $0.id == request.dayId }),
                 imageName: request.imageName,
-                onOpenPlan: { momentRequest = nil; tab = 1 },
-                onAdd: { dayId, type, title, location, time, notes in
-                    try await vm.addItineraryItem(dayId: dayId, type: type, title: title, location: location, timeFrom: time, notes: notes)
-                },
-                onRemove: { itemId in try await vm.removeItineraryItem(itemId, journeyId: trip.id) })
+                actions: itineraryActions,
+                onOpenPlan: { momentRequest = nil; tab = 1 })
         }
         .sheet(item: $selectedCrew) { crew in
             CrewProfileSheet(crew: crew, participant: participant(for: crew), avatarURL: visibleAvatarURL(participant(for: crew)), save: saveTripProfile)
@@ -1348,7 +1348,7 @@ struct JourneyWorkspaceView: View {
                             .font(.system(size: 11)).foregroundColor(Color(hex: "#9CA9C4"))
                     }
                     Spacer()
-                    Button { showAddDay = true } label: {
+                    Button { editorTarget = .addDay } label: {
                         Label("เพิ่มวัน", systemImage: "plus")
                             .font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
                             .padding(.horizontal, 13).padding(.vertical, 8)
@@ -1365,11 +1365,20 @@ struct JourneyWorkspaceView: View {
                             DayHeroView(day: day, imageName: dayImageName(day), height: 140)
                                 .contentShape(Rectangle())
                                 .onTapGesture { momentRequest = MomentRequest(dayId: day.id, imageName: dayImageName(day)) }
+                                .overlay(alignment: .topTrailing) {
+                                    Button { editorTarget = .editDay(day) } label: {
+                                        Image(systemName: "pencil")
+                                            .font(.system(size: 12, weight: .bold)).foregroundColor(.white)
+                                            .frame(width: 30, height: 30).background(.black.opacity(0.45), in: Circle())
+                                    }
+                                    .buttonStyle(.plain).padding(10)
+                                    .accessibilityLabel("แก้ไขวัน")
+                                }
                             VStack(spacing: 8) {
                                 ForEach(day.items ?? []) { item in
-                                    DayItemRow(item: item) { pendingPlanDelete = item }
+                                    DayItemRow(item: item, onEdit: { editorTarget = .editItem(item, day) }) { pendingPlanDelete = item }
                                 }
-                                Button { addItemDay = day } label: {
+                                Button { editorTarget = .addItem(day) } label: {
                                     Label("เพิ่มรายการ", systemImage: "plus.circle.fill")
                                         .font(.system(size: 12, weight: .semibold)).foregroundColor(.brand300)
                                         .frame(maxWidth: .infinity).padding(.vertical, 10)
@@ -1844,20 +1853,6 @@ private extension String {
     }
 }
 
-private struct AddItineraryDaySheet: View {
-    let save: (String?, String?) async throws -> Void
-    @Environment(\.dismiss) private var dismiss
-    @State private var date = Date(); @State private var title = ""; @State private var saving = false
-    var body: some View { NavigationStack { Form { DatePicker("วันที่", selection: $date, displayedComponents: .date); TextField("ชื่อวัน เช่น Kyoto", text: $title); Button(saving ? "กำลังบันทึก…" : "เพิ่มวัน") { saving = true; Task { let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; try? await save(f.string(from: date), title.isEmpty ? nil : title); dismiss() } }.disabled(saving) }.navigationTitle("เพิ่มวัน").toolbar { Button("ยกเลิก") { dismiss() } } } }
-}
-
-private struct AddItineraryItemSheet: View {
-    let day: TripItineraryDay; let save: (String, String, String?, String?, String?) async throws -> Void
-    @Environment(\.dismiss) private var dismiss
-    @State private var type = "activity"; @State private var title = ""; @State private var location = ""; @State private var time = Date(); @State private var notes = ""; @State private var saving = false
-    var body: some View { NavigationStack { Form { Picker("ประเภท", selection: $type) { ForEach(["activity", "meal", "shopping", "transport", "shinkansen", "car_rental", "flight", "hotel", "booking", "other"], id: \.self) { Text($0).tag($0) } }; TextField("ชื่อรายการ", text: $title); TextField("สถานที่", text: $location); DatePicker("เวลา", selection: $time, displayedComponents: .hourAndMinute); TextField("หมายเหตุ", text: $notes, axis: .vertical); Button(saving ? "กำลังบันทึก…" : "เพิ่มในแผน") { saving = true; Task { let f = DateFormatter(); f.dateFormat = "HH:mm:ss"; try? await save(type, title, location.isEmpty ? nil : location, f.string(from: time), notes.isEmpty ? nil : notes); dismiss() } }.disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || saving) }.navigationTitle("วันที่ \(day.dayNumber)").toolbar { Button("ยกเลิก") { dismiss() } } } }
-}
-
 private struct TripFriendPicker: View {
     let friends: [UserProfile]; let add: (UserProfile) async throws -> Void
     @Environment(\.dismiss) private var dismiss
@@ -2234,6 +2229,7 @@ private struct DayHeroView: View {
 /// One itinerary line in the plan: icon, time, title, place, notes, status and (for bookings) the amount.
 private struct DayItemRow: View {
     let item: TripItineraryItem
+    var onEdit: (() -> Void)? = nil
     let onDelete: () -> Void
 
     private var statusLabel: (text: String, tint: Color)? {
@@ -2281,6 +2277,10 @@ private struct DayItemRow: View {
                 }
             }
             Spacer(minLength: 0)
+            if onEdit != nil {
+                Image(systemName: "pencil").font(.system(size: 11, weight: .semibold)).foregroundColor(Color(hex: "#7C879F"))
+                    .frame(width: 24, height: 30)
+            }
             Button(action: onDelete) {
                 Image(systemName: "trash").font(.system(size: 12)).foregroundColor(Color(hex: "#7C879F"))
                     .frame(width: 30, height: 30)
@@ -2290,6 +2290,8 @@ private struct DayItemRow: View {
         }
         .padding(11)
         .background(Color(hex: "#151D32"), in: RoundedRectangle(cornerRadius: 14))
+        .contentShape(RoundedRectangle(cornerRadius: 14))
+        .onTapGesture { onEdit?() }
     }
 }
 
@@ -2298,13 +2300,12 @@ private struct DayItemRow: View {
 private struct DayDetailSheet: View {
     let day: TripItineraryDay?
     let imageName: String
+    let actions: ItineraryActions
     let onOpenPlan: () -> Void
-    let onAdd: (String, String, String, String?, String?, String?) async throws -> Void
-    let onRemove: (String) async throws -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var showImage = false
-    @State private var addingTo: TripItineraryDay?
+    @State private var editorTarget: ItineraryEditorTarget?
     @State private var pendingDelete: TripItineraryItem?
     @State private var errorText: String?
 
@@ -2321,6 +2322,15 @@ private struct DayDetailSheet: View {
                                     .frame(width: 30, height: 30).background(.black.opacity(0.45), in: Circle())
                                     .padding(10)
                             }
+                            .overlay(alignment: .topLeading) {
+                                Button { editorTarget = .editDay(day) } label: {
+                                    Label("แก้ไขวัน", systemImage: "pencil")
+                                        .font(.system(size: 11, weight: .semibold)).foregroundColor(.white)
+                                        .padding(.horizontal, 10).padding(.vertical, 6)
+                                        .background(.black.opacity(0.45), in: Capsule())
+                                }
+                                .buttonStyle(.plain).padding(10)
+                            }
                             .onTapGesture { showImage = true }
 
                         if let summary = day.summary, !summary.isEmpty {
@@ -2331,14 +2341,14 @@ private struct DayDetailSheet: View {
                             Text("รายการของวัน (\((day.items ?? []).count))")
                                 .font(.system(size: 15, weight: .bold)).foregroundColor(.white)
                             Spacer()
-                            Button { addingTo = day } label: {
+                            Button { editorTarget = .addItem(day) } label: {
                                 Label("เพิ่มรายการ", systemImage: "plus.circle.fill")
                                     .font(.system(size: 12, weight: .semibold)).foregroundColor(.brand300)
                             }
                         }
                         VStack(spacing: 8) {
                             ForEach(day.items ?? []) { item in
-                                DayItemRow(item: item) { pendingDelete = item }
+                                DayItemRow(item: item, onEdit: { editorTarget = .editItem(item, day) }) { pendingDelete = item }
                             }
                             if (day.items ?? []).isEmpty {
                                 Text("ยังไม่มีรายการในวันนี้").font(.system(size: 12)).foregroundColor(Color(hex: "#9CA9C4"))
@@ -2365,16 +2375,12 @@ private struct DayDetailSheet: View {
             .fullScreenCover(isPresented: $showImage) {
                 ProfileImageViewer(assetName: imageName, title: day?.title)
             }
-            .sheet(item: $addingTo) { target in
-                AddItineraryItemSheet(day: target) { type, title, location, time, notes in
-                    try await onAdd(target.id, type, title, location, time, notes)
-                }
-            }
+            .itineraryEditor(target: $editorTarget, actions: actions)
             .confirmationDialog("ลบรายการนี้?", isPresented: Binding(
                 get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }), titleVisibility: .visible) {
                 Button("ลบ \(pendingDelete?.title ?? "")", role: .destructive) {
                     if let target = pendingDelete {
-                        Task { do { try await onRemove(target.id) } catch { errorText = error.localizedDescription } }
+                        Task { do { try await actions.removeItem(target.id) } catch { errorText = error.localizedDescription } }
                     }
                     pendingDelete = nil
                 }
@@ -3238,5 +3244,444 @@ private struct TripMoneyView: View {
         if let updated = vm.trips.first(where: { $0.id == trip.id }) { trip = updated }
         await vm.loadSettlement(journeyId: trip.id)
         await vm.loadPayments(journeyId: trip.id)
+    }
+}
+
+// MARK: – Itinerary editor (add / edit a day or a line) in the trip's dark theme
+
+private enum ItineraryEditorTarget: Identifiable {
+    case addDay
+    case editDay(TripItineraryDay)
+    case addItem(TripItineraryDay)
+    case editItem(TripItineraryItem, TripItineraryDay)
+
+    var id: String {
+        switch self {
+        case .addDay: return "addDay"
+        case .editDay(let day): return "editDay-\(day.id)"
+        case .addItem(let day): return "addItem-\(day.id)"
+        case .editItem(let item, _): return "editItem-\(item.id)"
+        }
+    }
+}
+
+private struct DayDraft {
+    var date: String?
+    var title: String?
+    var city: String?
+    var summary: String?
+}
+
+private struct ItineraryActions {
+    let addItem: (String, TripsViewModel.TripItemFields) async throws -> Void
+    let updateItem: (String, TripsViewModel.TripItemFields) async throws -> Void
+    let removeItem: (String) async throws -> Void
+    let addDay: (DayDraft) async throws -> Void
+    let updateDay: (String, DayDraft) async throws -> Void
+}
+
+private extension View {
+    func itineraryEditor(target: Binding<ItineraryEditorTarget?>, actions: ItineraryActions) -> some View {
+        sheet(item: target) { current in
+            switch current {
+            case .addDay: DayEditorSheet(day: nil, actions: actions)
+            case .editDay(let day): DayEditorSheet(day: day, actions: actions)
+            case .addItem(let day): ItemEditorSheet(day: day, item: nil, actions: actions)
+            case .editItem(let item, let day): ItemEditorSheet(day: day, item: item, actions: actions)
+            }
+        }
+    }
+}
+
+private let itineraryTypeChoices: [(id: String, label: String)] = [
+    ("activity", "กิจกรรม"), ("meal", "อาหาร"), ("shopping", "ช้อปปิ้ง"), ("transport", "เดินทาง"),
+    ("shinkansen", "ชินคันเซ็น"), ("car_rental", "รถเช่า"), ("flight", "เที่ยวบิน"), ("hotel", "ที่พัก"),
+    ("booking", "การจอง"), ("other", "อื่นๆ"),
+]
+private let itineraryStatusChoices: [(id: String, label: String)] = [
+    ("planned", "วางแผน"), ("confirmed", "ยืนยันแล้ว"), ("optional", "ตัวเลือก"), ("cancelled", "ยกเลิก"),
+]
+
+private enum FormTheme {
+    static let page = Color(hex: "#080C1A")
+    static let card = Color(hex: "#0E1527")
+    static let field = Color(hex: "#151D32")
+    static let muted = Color(hex: "#9CA9C4")
+}
+
+/// A titled navy card holding form fields.
+private struct FormCard<Content: View>: View {
+    let title: String
+    var icon: String? = nil
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 7) {
+                if let icon { Image(systemName: icon).font(.system(size: 12, weight: .bold)).foregroundColor(.brand300) }
+                Text(title).font(.system(size: 14, weight: .bold)).foregroundColor(.white)
+            }
+            content
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(FormTheme.card, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.brand300.opacity(0.12), lineWidth: 1))
+    }
+}
+
+/// A caption above an input box, in the same sizes used across the trip pages.
+private struct FormField<Content: View>: View {
+    let label: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label).font(.system(size: 11, weight: .semibold)).foregroundColor(FormTheme.muted)
+            content
+        }
+    }
+}
+
+private struct FormTextField: View {
+    let placeholder: String
+    @Binding var text: String
+    var axis: Axis = .horizontal
+    var keyboard: UIKeyboardType = .default
+
+    var body: some View {
+        TextField("", text: $text,
+                  prompt: Text(placeholder).foregroundColor(Color(hex: "#5F6B85")), axis: axis)
+            .font(.system(size: 14)).foregroundColor(.white).tint(.brand300)
+            .keyboardType(keyboard)
+            .lineLimit(axis == .vertical ? 1...5 : 1...1)
+            .padding(12)
+            .background(FormTheme.field, in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+private struct FormChip: View {
+    let title: String
+    var icon: String? = nil
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                if let icon { Image(systemName: icon).font(.system(size: 11, weight: .bold)) }
+                Text(title).font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundColor(selected ? .white : FormTheme.muted)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(selected ? Color.brand500 : FormTheme.field, in: Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct FormToggleRow: View {
+    let title: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            Text(title).font(.system(size: 13, weight: .medium)).foregroundColor(.white)
+        }
+        .tint(.brand500)
+    }
+}
+
+private struct FormSaveBar: View {
+    let title: String
+    let saving: Bool
+    let enabled: Bool
+    let errorText: String?
+    let action: () -> Void
+
+    var body: some View {
+        VStack(spacing: 8) {
+            if let errorText {
+                Text(errorText).font(.system(size: 11, weight: .medium)).foregroundColor(.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Button(action: action) {
+                HStack(spacing: 8) {
+                    if saving { ProgressView().tint(.white) }
+                    Text(saving ? "กำลังบันทึก…" : title).font(.system(size: 15, weight: .semibold))
+                }
+                .foregroundColor(.white).frame(maxWidth: .infinity).padding(14)
+                .background(enabled ? Color.brand500 : Color.brand500.opacity(0.4), in: RoundedRectangle(cornerRadius: 14))
+            }
+            .disabled(!enabled || saving)
+        }
+    }
+}
+
+private func parseClock(_ value: String?) -> Date? {
+    guard let value, value.count >= 5 else { return nil }
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = value.count >= 8 ? "HH:mm:ss" : "HH:mm"
+    guard let time = formatter.date(from: String(value.prefix(value.count >= 8 ? 8 : 5))) else { return nil }
+    // Put the time on today's date so the DatePicker has a sensible full Date.
+    let parts = Calendar.current.dateComponents([.hour, .minute], from: time)
+    return Calendar.current.date(bySettingHour: parts.hour ?? 0, minute: parts.minute ?? 0, second: 0, of: Date())
+}
+
+private func formatClock(_ date: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "HH:mm:ss"
+    return formatter.string(from: date)
+}
+
+/// Add a line to a day, or edit one (every field, including booking details).
+private struct ItemEditorSheet: View {
+    let day: TripItineraryDay
+    let item: TripItineraryItem?
+    let actions: ItineraryActions
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var type: String
+    @State private var title: String
+    @State private var location: String
+    @State private var hasStart: Bool
+    @State private var start: Date
+    @State private var hasEnd: Bool
+    @State private var end: Date
+    @State private var status: String
+    @State private var notes: String
+    @State private var provider: String
+    @State private var code: String
+    @State private var amount: String
+    @State private var currency: String
+    @State private var saving = false
+    @State private var errorText: String?
+    @State private var confirmDelete = false
+
+    init(day: TripItineraryDay, item: TripItineraryItem?, actions: ItineraryActions) {
+        self.day = day
+        self.item = item
+        self.actions = actions
+        let startTime = parseClock(item?.timeFrom)
+        let endTime = parseClock(item?.timeTo)
+        _type = State(initialValue: item?.type ?? "activity")
+        _title = State(initialValue: item?.title ?? "")
+        _location = State(initialValue: item?.location ?? "")
+        _hasStart = State(initialValue: startTime != nil)
+        _start = State(initialValue: startTime ?? Date())
+        _hasEnd = State(initialValue: endTime != nil)
+        _end = State(initialValue: endTime ?? startTime ?? Date())
+        _status = State(initialValue: item?.status ?? "planned")
+        _notes = State(initialValue: item?.notes ?? "")
+        _provider = State(initialValue: item?.provider ?? "")
+        _code = State(initialValue: item?.confirmationCode ?? "")
+        _amount = State(initialValue: (item?.amount ?? 0) > 0 ? (item?.amount ?? 0).formatted(.number.precision(.fractionLength(0...2)).grouping(.never)) : "")
+        _currency = State(initialValue: item?.currency ?? "JPY")
+    }
+
+    private var typeChoices: [(id: String, label: String)] {
+        itineraryTypeChoices.contains(where: { $0.id == type }) ? itineraryTypeChoices : itineraryTypeChoices + [(type, type)]
+    }
+    private var canSave: Bool { !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 14) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "calendar").foregroundColor(.brand300)
+                        Text(["วันที่ \(day.dayNumber)", day.date, day.city].compactMap { $0 }.joined(separator: " · "))
+                            .font(.system(size: 12, weight: .semibold)).foregroundColor(FormTheme.muted)
+                        Spacer()
+                    }
+
+                    FormCard(title: "ประเภท", icon: "square.grid.2x2.fill") {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(typeChoices, id: \.id) { choice in
+                                    FormChip(title: choice.label, icon: journeyItemStyle(choice.id).icon, selected: type == choice.id) { type = choice.id }
+                                }
+                            }
+                        }
+                    }
+
+                    FormCard(title: "รายละเอียด", icon: "text.alignleft") {
+                        FormField(label: "ชื่อรายการ") { FormTextField(placeholder: "เช่น Kushida Shrine", text: $title) }
+                        FormField(label: "สถานที่") { FormTextField(placeholder: "ชื่อสถานที่หรือที่อยู่ (ใช้ปักหมุดบนแผนที่)", text: $location) }
+                        FormField(label: "หมายเหตุ") { FormTextField(placeholder: "ที่จอดรถ ค่าเข้า สิ่งที่ต้องเตรียม", text: $notes, axis: .vertical) }
+                    }
+
+                    FormCard(title: "เวลา", icon: "clock.fill") {
+                        FormToggleRow(title: "กำหนดเวลาเริ่ม", isOn: $hasStart)
+                        if hasStart {
+                            DatePicker("เริ่ม", selection: $start, displayedComponents: .hourAndMinute)
+                                .font(.system(size: 13)).foregroundColor(.white).tint(.brand300)
+                            FormToggleRow(title: "กำหนดเวลาสิ้นสุด", isOn: $hasEnd)
+                            if hasEnd {
+                                DatePicker("สิ้นสุด", selection: $end, displayedComponents: .hourAndMinute)
+                                    .font(.system(size: 13)).foregroundColor(.white).tint(.brand300)
+                            }
+                        }
+                    }
+
+                    FormCard(title: "สถานะ", icon: "checkmark.seal.fill") {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(itineraryStatusChoices, id: \.id) { choice in
+                                    FormChip(title: choice.label, selected: status == choice.id) { status = choice.id }
+                                }
+                            }
+                        }
+                    }
+
+                    FormCard(title: "รายละเอียดการจอง (ถ้ามี)", icon: "ticket.fill") {
+                        FormField(label: "ผู้ให้บริการ") { FormTextField(placeholder: "เช่น AVIS, JR Kyushu", text: $provider) }
+                        FormField(label: "เลขยืนยัน") { FormTextField(placeholder: "Confirmation / Booking number", text: $code) }
+                        FormField(label: "ยอดเงิน") {
+                            HStack(spacing: 8) {
+                                FormTextField(placeholder: "0", text: $amount, keyboard: .decimalPad)
+                                HStack(spacing: 4) {
+                                    FormChip(title: "¥", selected: currency == "JPY") { currency = "JPY" }
+                                    FormChip(title: "฿", selected: currency == "THB") { currency = "THB" }
+                                }
+                            }
+                        }
+                    }
+
+                    FormSaveBar(title: item == nil ? "เพิ่มในแผน" : "บันทึกการแก้ไข", saving: saving, enabled: canSave, errorText: errorText) {
+                        Task { await save() }
+                    }
+
+                    if item != nil {
+                        Button { confirmDelete = true } label: {
+                            Label("ลบรายการนี้", systemImage: "trash").font(.system(size: 13, weight: .semibold)).foregroundColor(.red)
+                                .frame(maxWidth: .infinity).padding(.vertical, 10)
+                        }
+                    }
+                }
+                .padding(16)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .background(FormTheme.page.ignoresSafeArea())
+            .navigationTitle(item == nil ? "เพิ่มรายการ" : "แก้ไขรายการ").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("ปิด") { dismiss() } } }
+            .confirmationDialog("ลบรายการนี้?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                Button("ลบ", role: .destructive) {
+                    guard let item else { return }
+                    Task {
+                        saving = true; defer { saving = false }
+                        do { try await actions.removeItem(item.id); dismiss() } catch { errorText = error.localizedDescription }
+                    }
+                }
+                Button("ยกเลิก", role: .cancel) {}
+            }
+        }
+        .preferredColorScheme(.dark)
+        .presentationDragIndicator(.visible)
+    }
+
+    private func clean(_ text: String) -> String? {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+
+    private func save() async {
+        saving = true; errorText = nil
+        defer { saving = false }
+        let fields = TripsViewModel.TripItemFields(
+            type: type,
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+            location: clean(location),
+            timeFrom: hasStart ? formatClock(start) : nil,
+            timeTo: hasStart && hasEnd ? formatClock(end) : nil,
+            status: status,
+            notes: clean(notes),
+            provider: clean(provider),
+            confirmationCode: clean(code),
+            amount: Double(amount.replacingOccurrences(of: ",", with: "").trimmingCharacters(in: .whitespaces)),
+            currency: currency)
+        do {
+            if let item { try await actions.updateItem(item.id, fields) }
+            else { try await actions.addItem(day.id, fields) }
+            hapticSuccess()
+            dismiss()
+        } catch { errorText = error.localizedDescription }
+    }
+}
+
+/// Add a day, or edit a day's date, title, city and summary.
+private struct DayEditorSheet: View {
+    let day: TripItineraryDay?
+    let actions: ItineraryActions
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var hasDate: Bool
+    @State private var date: Date
+    @State private var title: String
+    @State private var city: String
+    @State private var summary: String
+    @State private var saving = false
+    @State private var errorText: String?
+
+    private static let formatter: DateFormatter = {
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"; return f
+    }()
+
+    init(day: TripItineraryDay?, actions: ItineraryActions) {
+        self.day = day
+        self.actions = actions
+        let parsed = day?.date.flatMap { Self.formatter.date(from: $0) }
+        _hasDate = State(initialValue: day == nil || parsed != nil)
+        _date = State(initialValue: parsed ?? Date())
+        _title = State(initialValue: day?.title ?? "")
+        _city = State(initialValue: day?.city ?? "")
+        _summary = State(initialValue: day?.summary ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 14) {
+                    FormCard(title: "วัน", icon: "calendar") {
+                        FormToggleRow(title: "ระบุวันที่", isOn: $hasDate)
+                        if hasDate {
+                            DatePicker("วันที่", selection: $date, displayedComponents: .date)
+                                .font(.system(size: 13)).foregroundColor(.white).tint(.brand300)
+                        }
+                        FormField(label: "ชื่อวัน") { FormTextField(placeholder: "เช่น Fukuoka old town & Nakasu", text: $title) }
+                        FormField(label: "เมือง") { FormTextField(placeholder: "เช่น Fukuoka (ใช้เลือกรูปประจำวัน)", text: $city) }
+                        FormField(label: "สรุปของวัน") { FormTextField(placeholder: "เส้นทางและไฮไลต์ของวัน", text: $summary, axis: .vertical) }
+                    }
+                    FormSaveBar(title: day == nil ? "เพิ่มวัน" : "บันทึกการแก้ไข", saving: saving, enabled: true, errorText: errorText) {
+                        Task { await save() }
+                    }
+                }
+                .padding(16)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .background(FormTheme.page.ignoresSafeArea())
+            .navigationTitle(day == nil ? "เพิ่มวัน" : "แก้ไขวัน").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("ปิด") { dismiss() } } }
+        }
+        .preferredColorScheme(.dark)
+        .presentationDragIndicator(.visible)
+    }
+
+    private func save() async {
+        saving = true; errorText = nil
+        defer { saving = false }
+        func clean(_ text: String) -> String? {
+            let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return value.isEmpty ? nil : value
+        }
+        let draft = DayDraft(date: hasDate ? Self.formatter.string(from: date) : nil,
+                             title: clean(title), city: clean(city), summary: clean(summary))
+        do {
+            if let day { try await actions.updateDay(day.id, draft) } else { try await actions.addDay(draft) }
+            hapticSuccess()
+            dismiss()
+        } catch { errorText = error.localizedDescription }
     }
 }
