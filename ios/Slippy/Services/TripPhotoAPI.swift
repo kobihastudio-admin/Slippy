@@ -101,3 +101,119 @@ enum TripPeopleAPI {
     }
 }
 
+
+/// Identity tags (name, animal, picture per traveller) — `trip_identity_tags`
+/// (migration 20261012070714). One row per (trip, member_key).
+struct TripIdentityTagRow: Codable {
+    let memberKey: String
+    let name: String?
+    let animal: String?
+    let imagePath: String?
+
+    enum CodingKeys: String, CodingKey {
+        case name, animal
+        case memberKey = "member_key"
+        case imagePath = "image_path"
+    }
+}
+
+@MainActor
+enum TripIdentityTagAPI {
+    private static var db: SupabaseClient { SupabaseManager.shared.client }
+
+    static func load(journeyId: String) async throws -> [TripIdentityTagRow] {
+        try await db.from("trip_identity_tags")
+            .select("member_key, name, animal, image_path")
+            .eq("journey_id", value: journeyId)
+            .execute().value
+    }
+
+    static func save(journeyId: String, memberKey: String, participantId: String?,
+                     name: String, animal: String, imagePath: String?) async throws {
+        struct Row: Encodable {
+            let journey_id: String; let member_key: String; let participant_id: String?
+            let name: String; let animal: String; let image_path: String?
+        }
+        try await db.from("trip_identity_tags")
+            .upsert(Row(journey_id: journeyId, member_key: memberKey, participant_id: participantId,
+                        name: name, animal: animal, image_path: imagePath),
+                    onConflict: "journey_id,member_key")
+            .execute()
+    }
+
+    static func remove(journeyId: String, memberKey: String) async throws {
+        try await db.from("trip_identity_tags").delete()
+            .eq("journey_id", value: journeyId).eq("member_key", value: memberKey).execute()
+    }
+}
+
+/// A place, restaurant or souvenir the group is choosing between — `trip_place_candidates`
+/// and `trip_place_votes`.
+struct TripPlaceCandidate: Codable, Identifiable {
+    let id: String
+    let kind: String
+    let dayNumber: Int?
+    let title: String
+    let note: String?
+    let mapsUrl: String?
+    let priceHint: String?
+    let needsBooking: Bool
+    var status: String
+    let sortOrder: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, title, note, status
+        case dayNumber = "day_number"
+        case mapsUrl = "maps_url"
+        case priceHint = "price_hint"
+        case needsBooking = "needs_booking"
+        case sortOrder = "sort_order"
+    }
+}
+
+struct TripPlaceVote: Codable, Hashable {
+    let candidateId: String
+    let participantId: String
+
+    enum CodingKeys: String, CodingKey {
+        case candidateId = "candidate_id"
+        case participantId = "participant_id"
+    }
+}
+
+@MainActor
+enum TripPlacesAPI {
+    private static var db: SupabaseClient { SupabaseManager.shared.client }
+
+    static func load(journeyId: String) async throws -> (candidates: [TripPlaceCandidate], votes: [TripPlaceVote]) {
+        async let candidates: [TripPlaceCandidate] = db.from("trip_place_candidates")
+            .select("id, kind, day_number, title, note, maps_url, price_hint, needs_booking, status, sort_order")
+            .eq("journey_id", value: journeyId)
+            .order("sort_order", ascending: true)
+            .execute().value
+        async let votes: [TripPlaceVote] = db.from("trip_place_votes")
+            .select("candidate_id, participant_id")
+            .eq("journey_id", value: journeyId)
+            .execute().value
+        return try await (candidates, votes)
+    }
+
+    static func setVote(journeyId: String, candidateId: String, participantId: String, on: Bool) async throws {
+        if on {
+            struct Row: Encodable { let candidate_id: String; let participant_id: String; let journey_id: String }
+            try await db.from("trip_place_votes")
+                .upsert(Row(candidate_id: candidateId, participant_id: participantId, journey_id: journeyId),
+                        onConflict: "candidate_id,participant_id")
+                .execute()
+        } else {
+            try await db.from("trip_place_votes").delete()
+                .eq("candidate_id", value: candidateId).eq("participant_id", value: participantId).execute()
+        }
+    }
+
+    static func setStatus(candidateId: String, status: String) async throws {
+        struct Patch: Encodable { let status: String }
+        try await db.from("trip_place_candidates").update(Patch(status: status))
+            .eq("id", value: candidateId).execute()
+    }
+}

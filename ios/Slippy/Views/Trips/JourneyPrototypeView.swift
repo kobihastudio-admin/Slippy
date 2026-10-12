@@ -555,6 +555,8 @@ struct JourneyWorkspaceView: View {
     @State private var selectedTag: KyushuCrew?
     @State private var pager: PagerRequest?
     @State private var pendingPlanDelete: TripItineraryItem?
+    @State private var identityRows: [String: TripIdentityTagRow] = [:]
+    @State private var showPlaces = false
     @State private var showChecklist = false
     @State private var showNotes = false
     @State private var remindersOn = false
@@ -648,6 +650,9 @@ struct JourneyWorkspaceView: View {
                              reset: { try await resetTag(crew) })
         }
         .sheet(isPresented: $showChecklist) { TripChecklistSheet(trip: trip) }
+        .sheet(isPresented: $showPlaces) {
+            TripPlacesSheet(trip: trip, people: people, days: vm.itineraryDays, actions: itineraryActions)
+        }
         .sheet(isPresented: $showNotes) { TripNotesView(trip: trip) }
         .fullScreenCover(item: $pager) { request in
             TripImagePager(items: request.items, start: request.start)
@@ -681,6 +686,9 @@ struct JourneyWorkspaceView: View {
     private func loadExtras() async {
         if let loaded = try? await TripMetadataAPI.load(journeyId: trip.id) { metadata = loaded }
         if let photos = try? await TripPhotoAPI.list(journeyId: trip.id) { tripPhotos = photos }
+        if let rows = try? await TripIdentityTagAPI.load(journeyId: trip.id) {
+            identityRows = Dictionary(uniqueKeysWithValues: rows.map { ($0.memberKey, $0) })
+        }
         remindersOn = TripReminderScheduler.isEnabled(tripId: trip.id)
         if remindersOn { await TripReminderScheduler.resync(tripId: trip.id, reminders: reminders) }
     }
@@ -797,37 +805,35 @@ struct JourneyWorkspaceView: View {
     }
 
     private func tagState(_ crew: KyushuCrew) -> IdentityTagState {
-        let entry = metadata["identity_tags"]?.objectValue?[crew.id]?.objectValue
+        // Rows live in trip_identity_tags; metadata.identity_tags is only read as a legacy fallback.
+        let legacy = metadata["identity_tags"]?.objectValue?[crew.id]?.objectValue
+        let row = identityRows[crew.id]
+        let path = row?.imagePath ?? legacy?["image_path"]?.stringValue
         return IdentityTagState(
-            name: entry?["name"]?.stringValue ?? crew.name,
-            animal: entry?["animal"]?.stringValue ?? crew.animal,
-            imageURL: entry?["image_path"]?.stringValue.flatMap { TripPhotoAPI.publicURL(path: $0) },
-            isCustomImage: entry?["image_path"]?.stringValue != nil
+            name: row?.name ?? legacy?["name"]?.stringValue ?? crew.name,
+            animal: row?.animal ?? legacy?["animal"]?.stringValue ?? crew.animal,
+            imageURL: path.flatMap { TripPhotoAPI.publicURL(path: $0) },
+            isCustomImage: path != nil
         )
     }
 
     @MainActor
     private func saveTag(_ crew: KyushuCrew, name: String, animal: String, imageData: Data?) async throws {
-        var tags = metadata["identity_tags"]?.objectValue ?? [:]
-        var entry = tags[crew.id]?.objectValue ?? [:]
-        entry["name"] = .string(name)
-        entry["animal"] = .string(animal)
+        var imagePath = identityRows[crew.id]?.imagePath
         if let imageData {
             let photo = try await TripPhotoAPI.upload(journeyId: trip.id, itemId: nil, data: imageData, caption: "Trip identity tag")
-            entry["image_path"] = .string(photo.storagePath)
+            imagePath = photo.storagePath
         }
-        tags[crew.id] = .object(entry)
-        try await TripMetadataAPI.set(journeyId: trip.id, key: "identity_tags", value: .object(tags))
-        metadata["identity_tags"] = .object(tags)
+        try await TripIdentityTagAPI.save(journeyId: trip.id, memberKey: crew.id, participantId: participant(for: crew)?.id,
+                                          name: name, animal: animal, imagePath: imagePath)
+        identityRows[crew.id] = TripIdentityTagRow(memberKey: crew.id, name: name, animal: animal, imagePath: imagePath)
         hapticSuccess()
     }
 
     @MainActor
     private func resetTag(_ crew: KyushuCrew) async throws {
-        var tags = metadata["identity_tags"]?.objectValue ?? [:]
-        tags.removeValue(forKey: crew.id)
-        try await TripMetadataAPI.set(journeyId: trip.id, key: "identity_tags", value: tags.isEmpty ? nil : .object(tags))
-        metadata["identity_tags"] = tags.isEmpty ? nil : .object(tags)
+        try await TripIdentityTagAPI.remove(journeyId: trip.id, memberKey: crew.id)
+        identityRows[crew.id] = nil
     }
 
     /// The day the "next moment" card describes: the first day that has not
@@ -1190,6 +1196,14 @@ struct JourneyWorkspaceView: View {
                 .buttonStyle(.plain)
                 Button { showGallery = true } label: {
                     JourneyManagementAction(title: "แกลเลอรี", detail: "ดูรูป · เพิ่มรูป", icon: "photo.on.rectangle.angled", tint: .statusPushed)
+                }
+                .buttonStyle(.plain)
+                Button { showPlaces = true } label: {
+                    JourneyManagementAction(title: "โหวตสถานที่", detail: "ที่เที่ยว · ร้านอาหาร · ของฝาก", icon: "hand.thumbsup.fill", tint: .orange)
+                }
+                .buttonStyle(.plain)
+                Button { tab = 2 } label: {
+                    JourneyManagementAction(title: "แผนที่", detail: "เส้นทาง · Google Maps", icon: "map.fill", tint: .brand400)
                 }
                 .buttonStyle(.plain)
             }
@@ -3682,6 +3696,224 @@ private struct DayEditorSheet: View {
             if let day { try await actions.updateDay(day.id, draft) } else { try await actions.addDay(draft) }
             hapticSuccess()
             dismiss()
+        } catch { errorText = error.localizedDescription }
+    }
+}
+
+// MARK: – Places & restaurants the group votes on (trip_place_candidates / trip_place_votes)
+
+/// Only https Google Maps links are opened from a place's `maps_url`: the column is writable by every
+/// participant of the trip, so anything else (another host, tel:, a custom scheme) is not offered.
+private func safeGoogleMapsURL(_ raw: String?) -> URL? {
+    guard let raw, let url = URL(string: raw), url.scheme?.lowercased() == "https",
+          let host = url.host?.lowercased() else { return nil }
+    let path = url.path.lowercased()
+    switch host {
+    case "www.google.com", "google.com": return path.hasPrefix("/maps") ? url : nil
+    case "maps.google.com", "maps.app.goo.gl": return url
+    case "goo.gl": return path.hasPrefix("/maps") ? url : nil
+    default: return nil
+    }
+}
+
+private struct TripPlacesSheet: View {
+    let trip: Trip
+    let people: [TripParticipant]
+    let days: [TripItineraryDay]
+    let actions: ItineraryActions
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var candidates: [TripPlaceCandidate] = []
+    @State private var votes: Set<TripPlaceVote> = []
+    @State private var loading = true
+    @State private var kind = "place"
+    @State private var dayFilter: Int?
+    @State private var onlyBooking = false
+    @State private var message: String?
+    @State private var errorText: String?
+
+    private let kinds: [(id: String, label: String, icon: String)] = [
+        ("place", "ที่เที่ยว", "mappin.and.ellipse"), ("food", "ร้านอาหาร", "fork.knife"), ("souvenir", "ของฝาก", "gift.fill"),
+    ]
+
+    private var shown: [TripPlaceCandidate] {
+        candidates.filter { item in
+            item.kind == kind
+                && (dayFilter == nil || item.dayNumber == dayFilter)
+                && (!onlyBooking || item.needsBooking)
+        }
+    }
+
+    private func voters(_ item: TripPlaceCandidate) -> Set<String> {
+        Set(votes.filter { $0.candidateId == item.id }.map(\.participantId))
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 12) {
+                    HStack(spacing: 6) {
+                        ForEach(kinds, id: \.id) { entry in
+                            FormChip(title: entry.label, icon: entry.icon, selected: kind == entry.id) { kind = entry.id }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            FormChip(title: "ทุกวัน", selected: dayFilter == nil) { dayFilter = nil }
+                            ForEach(days) { day in
+                                FormChip(title: "วัน \(day.dayNumber)", selected: dayFilter == day.dayNumber) { dayFilter = day.dayNumber }
+                            }
+                            FormChip(title: "ต้องจอง", icon: "calendar.badge.exclamationmark", selected: onlyBooking) { onlyBooking.toggle() }
+                        }
+                    }
+                    if let message {
+                        Text(message).font(.system(size: 11, weight: .medium)).foregroundColor(.green)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    if loading {
+                        ProgressView().tint(.white).padding(.top, 40)
+                    } else if shown.isEmpty {
+                        Text("ไม่มีรายการในตัวกรองนี้").font(.system(size: 12)).foregroundColor(FormTheme.muted).padding(.top, 40)
+                    } else {
+                        ForEach(shown) { item in card(item) }
+                    }
+                }
+                .padding(16)
+            }
+            .background(FormTheme.page.ignoresSafeArea())
+            .navigationTitle("โหวตสถานที่").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("ปิด") { dismiss() } } }
+            .alert("ทำรายการไม่สำเร็จ", isPresented: .constant(errorText != nil)) {
+                Button("ตกลง") { errorText = nil }
+            } message: { Text(errorText ?? "") }
+            .task { await load() }
+            .refreshable { await load() }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private func card(_ item: TripPlaceCandidate) -> some View {
+        let count = voters(item).count
+        return VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.title).font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
+                    if let note = item.note, !note.isEmpty {
+                        Text(note).font(.system(size: 11)).foregroundColor(FormTheme.muted).lineLimit(3)
+                    }
+                    HStack(spacing: 6) {
+                        if let day = item.dayNumber {
+                            tag("วัน \(day)", .brand300)
+                        }
+                        if let price = item.priceHint, !price.isEmpty { tag(price, FormTheme.muted) }
+                        if item.needsBooking { tag("ต้องจอง", .orange) }
+                    }
+                }
+                Spacer(minLength: 4)
+                if let url = safeGoogleMapsURL(item.mapsUrl) {
+                    Button { GoogleMapsLinks.open(url) } label: {
+                        Image(systemName: "location.north.circle.fill").font(.system(size: 22)).foregroundColor(.brand300)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("เปิดใน Google Maps")
+                }
+            }
+            HStack(spacing: 6) {
+                ForEach(people) { person in
+                    let on = voters(item).contains(person.id)
+                    Button { Task { await toggle(item, person: person, on: !on) } } label: {
+                        Text(String(person.displayName.prefix(1)).uppercased())
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(on ? .white : FormTheme.muted)
+                            .frame(width: 30, height: 30)
+                            .background(on ? Color.brand500 : FormTheme.field, in: Circle())
+                            .overlay(Circle().stroke(on ? Color.brand300 : Color.clear, lineWidth: 1.5))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(person.displayName) \(on ? "โหวตแล้ว" : "ยังไม่โหวต")")
+                }
+                Text("\(count)/\(max(people.count, 1))").font(.system(size: 11, weight: .semibold)).foregroundColor(FormTheme.muted)
+                Spacer(minLength: 0)
+                Menu {
+                    ForEach([("open", "รอตัดสิน"), ("wanted", "อยากไป"), ("chosen", "เลือกแล้ว"), ("dropped", "ตัดออก")], id: \.0) { status in
+                        Button(status.1) { Task { await setStatus(item, status.0) } }
+                    }
+                } label: { statusChip(item.status) }
+                Menu {
+                    ForEach(days) { day in
+                        Button("วัน \(day.dayNumber) · \(day.title ?? day.date ?? "")") { Task { await addToPlan(item, day: day) } }
+                    }
+                } label: {
+                    Image(systemName: "calendar.badge.plus").font(.system(size: 15, weight: .semibold)).foregroundColor(.brand300)
+                        .frame(width: 30, height: 30)
+                }
+                .accessibilityLabel("เพิ่มลงแผน")
+            }
+        }
+        .padding(13)
+        .background(FormTheme.card, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(item.status == "chosen" ? Color.green.opacity(0.5) : Color.clear, lineWidth: 1))
+        .opacity(item.status == "dropped" ? 0.5 : 1)
+    }
+
+    private func tag(_ text: String, _ color: Color) -> some View {
+        Text(text).font(.system(size: 9, weight: .bold)).foregroundColor(color)
+            .padding(.horizontal, 7).padding(.vertical, 2.5).background(color.opacity(0.16), in: Capsule())
+    }
+
+    private func statusChip(_ status: String) -> some View {
+        let info: (String, Color) = {
+            switch status {
+            case "wanted": return ("อยากไป", .brand300)
+            case "chosen": return ("เลือกแล้ว", .green)
+            case "dropped": return ("ตัดออก", .red)
+            default: return ("รอตัดสิน", FormTheme.muted)
+            }
+        }()
+        return Text(info.0).font(.system(size: 10, weight: .bold)).foregroundColor(info.1)
+            .padding(.horizontal, 9).padding(.vertical, 5).background(info.1.opacity(0.16), in: Capsule())
+    }
+
+    private func load() async {
+        loading = candidates.isEmpty
+        defer { loading = false }
+        do {
+            let result = try await TripPlacesAPI.load(journeyId: trip.id)
+            candidates = result.candidates
+            votes = Set(result.votes)
+        } catch { errorText = error.localizedDescription }
+    }
+
+    private func toggle(_ item: TripPlaceCandidate, person: TripParticipant, on: Bool) async {
+        let vote = TripPlaceVote(candidateId: item.id, participantId: person.id)
+        if on { votes.insert(vote) } else { votes.remove(vote) }   // optimistic
+        hapticLight()
+        do { try await TripPlacesAPI.setVote(journeyId: trip.id, candidateId: item.id, participantId: person.id, on: on) }
+        catch {
+            if on { votes.remove(vote) } else { votes.insert(vote) }
+            errorText = error.localizedDescription
+        }
+    }
+
+    private func setStatus(_ item: TripPlaceCandidate, _ status: String) async {
+        guard let index = candidates.firstIndex(where: { $0.id == item.id }) else { return }
+        let before = candidates[index].status
+        candidates[index].status = status
+        do { try await TripPlacesAPI.setStatus(candidateId: item.id, status: status) }
+        catch { candidates[index].status = before; errorText = error.localizedDescription }
+    }
+
+    private func addToPlan(_ item: TripPlaceCandidate, day: TripItineraryDay) async {
+        let type = item.kind == "food" ? "meal" : item.kind == "souvenir" ? "shopping" : "activity"
+        let fields = TripsViewModel.TripItemFields(
+            type: type, title: item.title, location: item.title, timeFrom: nil, timeTo: nil, status: "planned",
+            notes: [item.note, item.priceHint].compactMap { $0 }.joined(separator: " · ").nilIfBlank,
+            provider: nil, confirmationCode: nil, amount: nil, currency: nil)
+        do {
+            try await actions.addItem(day.id, fields)
+            hapticSuccess()
+            message = "เพิ่ม \"\(item.title)\" ลงวัน \(day.dayNumber) แล้ว"
         } catch { errorText = error.localizedDescription }
     }
 }
