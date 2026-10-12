@@ -157,6 +157,7 @@ enum ImageViewerOrientation {
         #if DEBUG
         guard ProcessInfo.processInfo.environment["SLIPPY_ORIENTATION_TRACE"] == "1" else { return }
         print("[SlippyOrientation] \(event) enabled=\(isEnabled) mask=\(supportedOrientations.rawValue)")
+        fflush(stdout)
         #endif
     }
 }
