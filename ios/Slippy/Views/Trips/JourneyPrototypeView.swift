@@ -2,6 +2,8 @@ import SwiftUI
 import MapKit
 import UIKit
 import PhotosUI
+import Supabase
+import UserNotifications
 
 /// Additive, local-only prototype for the future Trip & Journey module.
 /// This view intentionally does not call Supabase or mutate production trip data.
@@ -534,8 +536,7 @@ struct JourneyWorkspaceView: View {
     /// stack one step at a time and only leaves the trip from the overview.
     @State private var tabHistory: [Int] = []
     @State private var steppingBack = false
-    @State private var showAddDay = false
-    @State private var addItemDay: TripItineraryDay?
+    @State private var editorTarget: ItineraryEditorTarget?
     @State private var showFriendPicker = false
     @State private var isPreparingShare = false
     @State private var showTravelImport = false
@@ -544,6 +545,32 @@ struct JourneyWorkspaceView: View {
     @State private var showKyushuTemplateConfirmation = false
     @State private var applyingKyushuTemplate = false
     @State private var setupError: String?
+    @State private var metadata: [String: AnyJSON] = [:]
+    @State private var tripPhotos: [TripPhoto] = []
+    @State private var livePeople: [TripParticipant]?
+    @State private var showCover = false
+    @State private var showGallery = false
+    @State private var momentRequest: MomentRequest?
+    @State private var selectedCrew: KyushuCrew?
+    @State private var selectedTag: KyushuCrew?
+    @State private var pager: PagerRequest?
+    @State private var pendingPlanDelete: TripItineraryItem?
+    @State private var showChecklist = false
+    @State private var showNotes = false
+    @State private var remindersOn = false
+    @State private var reminderMessage: String?
+
+    private var itineraryActions: ItineraryActions {
+        ItineraryActions(
+            addItem: { dayId, fields in try await vm.addItineraryItem(dayId: dayId, fields: fields) },
+            updateItem: { itemId, fields in try await vm.updateItineraryItem(itemId: itemId, journeyId: trip.id, fields: fields) },
+            removeItem: { itemId in try await vm.removeItineraryItem(itemId, journeyId: trip.id) },
+            addDay: { day in try await vm.addItineraryDay(journeyId: trip.id, date: day.date, title: day.title, city: day.city, summary: day.summary) },
+            updateDay: { dayId, day in try await vm.updateItineraryDay(dayId: dayId, journeyId: trip.id, date: day.date, title: day.title, city: day.city, summary: day.summary) })
+    }
+
+    /// Participants as last fetched; falls back to what the trip list loaded.
+    private var people: [TripParticipant] { livePeople ?? trip.participants ?? [] }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -555,7 +582,7 @@ struct JourneyWorkspaceView: View {
                 case 0: overview
                 case 1: itinerary
                 case 2: TripRouteMapView(trip: trip, days: vm.itineraryDays)
-                case 3: TripDetailView(trip: trip).environmentObject(authVM)
+                case 3: TripMoneyView(trip: trip).environmentObject(authVM)
                 default: collaboration
                 }
             }
@@ -568,20 +595,12 @@ struct JourneyWorkspaceView: View {
         .background(Color(hex: "#080C1A").ignoresSafeArea())
         .preferredColorScheme(.dark)
         .navigationTitle("").navigationBarTitleDisplayMode(.inline)
-        // On the overview the system back button leaves the trip as usual. On
-        // any other tab it is replaced by one that steps back to the tab the
-        // user came from (the swipe-back edge gesture is off while it is hidden).
-        .navigationBarBackButtonHidden(!tabHistory.isEmpty)
-        .toolbar {
-            if !tabHistory.isEmpty {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { stepBack() } label: {
-                        Image(systemName: "chevron.left").font(.system(size: 16, weight: .semibold))
-                    }
-                    .accessibilityLabel("ย้อนกลับ")
-                }
-            }
-        }
+        // The system navigation bar is hidden to give the page the whole screen;
+        // the header carries its own back button, which steps back to the tab the
+        // user came from and leaves the trip from the overview. (The edge-swipe
+        // back gesture is not available while the bar is hidden.)
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         .onChange(of: tab) { old, new in
             if steppingBack { steppingBack = false; return }
             guard old != new else { return }
@@ -592,13 +611,9 @@ struct JourneyWorkspaceView: View {
         .task {
             await vm.loadItinerary(journeyId: trip.id)
             await vm.loadTripConversation(journeyId: trip.id)
+            await loadExtras()
         }
-        .sheet(isPresented: $showAddDay) { AddItineraryDaySheet { date, title in
-            try await vm.addItineraryDay(journeyId: trip.id, date: date, title: title)
-        }}
-        .sheet(item: $addItemDay) { day in AddItineraryItemSheet(day: day) { type, title, location, time, notes in
-            try await vm.addItineraryItem(dayId: day.id, type: type, title: title, location: location, timeFrom: time, notes: notes)
-        }}
+        .itineraryEditor(target: $editorTarget, actions: itineraryActions)
         .sheet(isPresented: $showFriendPicker) { TripFriendPicker(friends: socialVM.friends) { friend in
             try await vm.addFriendToTrip(journeyId: trip.id, friendId: friend.id)
         }}
@@ -609,21 +624,33 @@ struct JourneyWorkspaceView: View {
             TripDocumentsView(trip: trip)
         }
         .sheet(isPresented: $showTripProfileManager) {
-            TripProfileManagerSheet(participants: trip.participants ?? []) { participantId, name, role, emergencyContact, avatarData, sharedWithTrip in
-                var avatarURL: String?
-                if let avatarData {
-                    let photo = try await TripPhotoAPI.upload(
-                        journeyId: trip.id, itemId: nil, data: avatarData,
-                        caption: "Trip profile avatar"
-                    )
-                    avatarURL = TripPhotoAPI.publicURL(photo)?.absoluteString
-                }
-                try await vm.updateTripProfile(
-                    participantId: participantId, displayName: name,
-                    tripRole: role, emergencyContact: emergencyContact,
-                    avatarUrl: avatarURL, profileSharedWithTrip: sharedWithTrip
-                )
-            }
+            TripProfileManagerSheet(participants: people, save: saveTripProfile)
+        }
+        .sheet(isPresented: $showGallery, onDismiss: { Task { await loadExtras() } }) {
+            TripGalleryView(trip: trip, days: vm.itineraryDays)
+        }
+        .fullScreenCover(isPresented: $showCover) {
+            CoverViewerSheet(url: coverURL, onPick: changeCover, onReset: resetCover)
+        }
+        .sheet(item: $momentRequest) { request in
+            DayDetailSheet(
+                day: vm.itineraryDays.first(where: { $0.id == request.dayId }),
+                imageName: request.imageName,
+                actions: itineraryActions,
+                onOpenPlan: { momentRequest = nil; tab = 1 })
+        }
+        .sheet(item: $selectedCrew) { crew in
+            CrewProfileSheet(crew: crew, participant: participant(for: crew), avatarURL: visibleAvatarURL(participant(for: crew)), save: saveTripProfile)
+        }
+        .sheet(item: $selectedTag) { crew in
+            IdentityTagSheet(crew: crew, state: tagState(crew),
+                             save: { name, animal, data in try await saveTag(crew, name: name, animal: animal, imageData: data) },
+                             reset: { try await resetTag(crew) })
+        }
+        .sheet(isPresented: $showChecklist) { TripChecklistSheet(trip: trip) }
+        .sheet(isPresented: $showNotes) { TripNotesView(trip: trip) }
+        .fullScreenCover(item: $pager) { request in
+            TripImagePager(items: request.items, start: request.start)
         }
         .confirmationDialog("ใช้แผน Kyushu 21–28 พ.ย. 2026?", isPresented: $showKyushuTemplateConfirmation) {
             Button("เพิ่มแผน 8 วัน") { Task { await applyKyushuTemplate() } }
@@ -636,6 +663,181 @@ struct JourneyWorkspaceView: View {
         } message: { Text(setupError ?? "") }
     }
 
+    // MARK: – Trip page data (cover, gallery, identity tags, profiles)
+
+    private var coverURL: URL? {
+        metadata["cover_path"]?.stringValue.flatMap { TripPhotoAPI.publicURL(path: $0) }
+    }
+
+    /// Real photos only — the cover, profile avatars and tag pictures are stored
+    /// in the same table and must not show up as "trip photos".
+    private var galleryPhotos: [TripPhoto] {
+        tripPhotos.filter { photo in
+            let caption = photo.caption ?? ""
+            return caption != "Trip cover" && caption != "Trip profile avatar" && !caption.hasPrefix("Trip identity tag")
+        }
+    }
+
+    private func loadExtras() async {
+        if let loaded = try? await TripMetadataAPI.load(journeyId: trip.id) { metadata = loaded }
+        if let photos = try? await TripPhotoAPI.list(journeyId: trip.id) { tripPhotos = photos }
+        remindersOn = TripReminderScheduler.isEnabled(tripId: trip.id)
+        if remindersOn { await TripReminderScheduler.resync(tripId: trip.id, reminders: reminders) }
+    }
+
+    private var reminders: [TripReminderScheduler.Reminder] {
+        TripReminderScheduler.parse(metadata["reminders"])
+    }
+
+    private var budgetPlanCard: some View {
+        Group {
+            if let plan = metadata["budget_plan"]?.objectValue { BudgetPlanView(plan: plan) }
+        }
+    }
+
+    private var remindersCard: some View {
+        let upcoming = reminders.filter { $0.fireAt > Date() }
+        return Group {
+            if !reminders.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Label("การเตือนสำคัญ", systemImage: "bell.badge.fill")
+                            .font(.system(size: 16, weight: .bold)).foregroundColor(.white)
+                        Spacer()
+                        Toggle("", isOn: Binding(
+                            get: { remindersOn },
+                            set: { newValue in Task { await setReminders(newValue) } }
+                        ))
+                        .labelsHidden().tint(.brand500)
+                    }
+                    Text(remindersOn ? "เตือนบนเครื่องนี้แล้ว \(upcoming.count) รายการ" : "เปิดเพื่อให้ iPhone เตือน IDP, เส้นตายจ่ายที่พัก Yufuin และการจองร้าน")
+                        .font(.system(size: 11)).foregroundColor(.textSecondary)
+                    ForEach(upcoming.prefix(4)) { item in
+                        HStack(alignment: .top, spacing: 10) {
+                            Text(item.fireAt.formatted(.dateTime.day().month(.abbreviated)))
+                                .font(.system(size: 11, weight: .bold)).foregroundColor(.brand300)
+                                .frame(width: 52, alignment: .leading)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.title).font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
+                                Text(item.body).font(.system(size: 10)).foregroundColor(Color(hex: "#9CA9C4")).lineLimit(2)
+                            }
+                        }
+                    }
+                    if let reminderMessage {
+                        Text(reminderMessage).font(.system(size: 11, weight: .medium)).foregroundColor(.orange)
+                    }
+                }
+                .padding(14).background(Color(hex: "#0E1527")).clipShape(RoundedRectangle(cornerRadius: 18))
+            }
+        }
+    }
+
+    @MainActor
+    private func setReminders(_ on: Bool) async {
+        reminderMessage = nil
+        if on {
+            let granted = await TripReminderScheduler.enable(tripId: trip.id, reminders: reminders)
+            remindersOn = granted
+            if !granted { reminderMessage = "ต้องอนุญาตการแจ้งเตือนใน Settings › Slippy ก่อน" }
+        } else {
+            TripReminderScheduler.disable(tripId: trip.id)
+            remindersOn = false
+        }
+    }
+
+    @MainActor
+    private func changeCover(_ data: Data) async throws {
+        let photo = try await TripPhotoAPI.upload(journeyId: trip.id, itemId: nil, data: data, caption: "Trip cover")
+        try await TripMetadataAPI.set(journeyId: trip.id, key: "cover_path", value: .string(photo.storagePath))
+        metadata["cover_path"] = .string(photo.storagePath)
+        hapticSuccess()
+    }
+
+    @MainActor
+    private func resetCover() async throws {
+        try await TripMetadataAPI.set(journeyId: trip.id, key: "cover_path", value: nil)
+        metadata["cover_path"] = nil
+    }
+
+    /// Matches a crew card to a trip participant: exact display name first
+    /// (covers short Thai nicknames such as "วิ"), then a substring match for
+    /// longer aliases.
+    private func participant(for crew: KyushuCrew) -> TripParticipant? {
+        let names = people.map { ($0, $0.displayName.trimmingCharacters(in: .whitespaces).lowercased()) }
+        if let exact = names.first(where: { pair in crew.aliases.contains(pair.1) }) { return exact.0 }
+        return names.first(where: { pair in crew.aliases.contains { $0.count >= 3 && pair.1.contains($0) } })?.0
+    }
+
+    @MainActor
+    private func saveTripProfile(participantId: String, name: String, role: String?, emergencyContact: String?,
+                                 avatarData: Data?, sharedWithTrip: Bool) async throws {
+        var avatarURL: String?
+        if let avatarData {
+            let photo = try await TripPhotoAPI.upload(
+                journeyId: trip.id, itemId: nil, data: avatarData, caption: "Trip profile avatar"
+            )
+            avatarURL = TripPhotoAPI.publicURL(photo)?.absoluteString
+        }
+        try await vm.updateTripProfile(
+            participantId: participantId, displayName: name,
+            tripRole: role, emergencyContact: emergencyContact,
+            avatarUrl: avatarURL, profileSharedWithTrip: sharedWithTrip
+        )
+        if let rows = try? await TripPeopleAPI.fetch(journeyId: trip.id) { livePeople = rows }
+    }
+
+    /// A member's photo is shown when they chose to share it with the trip, to
+    /// the member themselves, and to the host for members who have no account.
+    private func visibleAvatarURL(_ member: TripParticipant?) -> URL? {
+        guard let member, let raw = member.avatarUrl, let url = URL(string: raw) else { return nil }
+        let me = authVM.session?.user.id.uuidString.lowercased()
+        let iAmHost = people.contains { $0.isHost && $0.userId?.lowercased() == me }
+        if member.profileSharedWithTrip || member.userId?.lowercased() == me || (member.userId == nil && iAmHost) { return url }
+        return nil
+    }
+
+    private func tagState(_ crew: KyushuCrew) -> IdentityTagState {
+        let entry = metadata["identity_tags"]?.objectValue?[crew.id]?.objectValue
+        return IdentityTagState(
+            name: entry?["name"]?.stringValue ?? crew.name,
+            animal: entry?["animal"]?.stringValue ?? crew.animal,
+            imageURL: entry?["image_path"]?.stringValue.flatMap { TripPhotoAPI.publicURL(path: $0) },
+            isCustomImage: entry?["image_path"]?.stringValue != nil
+        )
+    }
+
+    @MainActor
+    private func saveTag(_ crew: KyushuCrew, name: String, animal: String, imageData: Data?) async throws {
+        var tags = metadata["identity_tags"]?.objectValue ?? [:]
+        var entry = tags[crew.id]?.objectValue ?? [:]
+        entry["name"] = .string(name)
+        entry["animal"] = .string(animal)
+        if let imageData {
+            let photo = try await TripPhotoAPI.upload(journeyId: trip.id, itemId: nil, data: imageData, caption: "Trip identity tag")
+            entry["image_path"] = .string(photo.storagePath)
+        }
+        tags[crew.id] = .object(entry)
+        try await TripMetadataAPI.set(journeyId: trip.id, key: "identity_tags", value: .object(tags))
+        metadata["identity_tags"] = .object(tags)
+        hapticSuccess()
+    }
+
+    @MainActor
+    private func resetTag(_ crew: KyushuCrew) async throws {
+        var tags = metadata["identity_tags"]?.objectValue ?? [:]
+        tags.removeValue(forKey: crew.id)
+        try await TripMetadataAPI.set(journeyId: trip.id, key: "identity_tags", value: tags.isEmpty ? nil : .object(tags))
+        metadata["identity_tags"] = tags.isEmpty ? nil : .object(tags)
+    }
+
+    /// The day the "next moment" card describes: the first day that has not
+    /// passed yet, else the first day of the plan.
+    private var upcomingDay: TripItineraryDay? {
+        let today = ISO8601DateFormatter.string(from: Date(), timeZone: .current,
+                                                formatOptions: [.withFullDate, .withDashSeparatorInDate])
+        return vm.itineraryDays.first(where: { ($0.date ?? "") >= today }) ?? vm.itineraryDays.first
+    }
+
     private func stepBack() {
         guard let previous = tabHistory.popLast() else { dismiss(); return }
         guard previous != tab else { return }
@@ -645,20 +847,31 @@ struct JourneyWorkspaceView: View {
 
     private var journeyHeader: some View {
         HStack(spacing: 12) {
+            Button { stepBack() } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 15, weight: .semibold)).foregroundColor(.white)
+                    .frame(width: 34, height: 34)
+                    .background(Color(hex: "#1B2540"), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("ย้อนกลับ")
             Image(systemName: "sparkles")
                 .font(.system(size: 14, weight: .bold))
                 .foregroundColor(Color.brand300)
                 .frame(width: 34, height: 34)
                 .background(Color.brand600.opacity(0.55), in: Circle())
+                .onTapGesture { showCover = true }
             VStack(alignment: .leading, spacing: 3) {
                 Text(trip.title).font(.system(size: 20, weight: .bold)).foregroundColor(.white).lineLimit(1)
                 Text([trip.destination, "\(vm.itineraryDays.count) วัน"].compactMap { $0 }.joined(separator: " · "))
                     .font(.system(size: 11)).foregroundColor(Color(hex: "#94A3B8"))
             }
+            .contentShape(Rectangle())
+            .onTapGesture { showCover = true }   // view the full background, or change it
             Spacer()
             HStack(spacing: -7) {
                 JourneyAvatar(url: authVM.profile?.avatarUrl, initials: authVM.profile?.initials ?? "ฉ", tint: .brand500, name: authVM.profile?.displayName)
-                ForEach(Array((trip.participants ?? []).prefix(3).enumerated()), id: \.offset) { index, member in
+                ForEach(Array(people.prefix(3).enumerated()), id: \.offset) { index, member in
                     JourneyAvatar(url: member.profileSharedWithTrip ? member.avatarUrl : nil, initials: String(member.displayName.prefix(1)), tint: [Color.statusProcessing, .statusApproved, .statusPushed][index], name: member.displayName)
                 }
             }
@@ -669,8 +882,8 @@ struct JourneyWorkspaceView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 18).padding(.vertical, 12)
-        .background(Color(hex: "#0E1527"))
+        .padding(.horizontal, 14).padding(.vertical, 8)
+        .background(Color(hex: "#0E1527").ignoresSafeArea(edges: .top))
     }
 
     private var journeyTabBar: some View {
@@ -682,7 +895,7 @@ struct JourneyWorkspaceView: View {
                 journeyTab("ค่าใช้จ่าย", icon: "wallet.pass", index: 3)
                 journeyTab("ทีม", icon: "person.2", index: 4)
             }
-            .padding(.horizontal, 16).padding(.vertical, 11)
+            .padding(.horizontal, 16).padding(.vertical, 8)
         }
         .background(Color(hex: "#0B1120"))
     }
@@ -709,9 +922,11 @@ struct JourneyWorkspaceView: View {
 
                 HStack(spacing: 10) {
                     workspaceStat("วัน", "\(vm.itineraryDays.count)", "calendar")
-                    workspaceStat("ผู้ร่วม", "\(trip.participants?.count ?? 0)", "person.2")
+                    workspaceStat("ผู้ร่วม", "\(people.count)", "person.2")
                     workspaceStat("ค่าใช้จ่าย", fmtTHB(trip.computedTotal), "wallet.pass")
                 }
+                budgetPlanCard
+                remindersCard
                 kyushuGallery
                 travelCommandCenter
                 Button { tab = 1 } label: {
@@ -722,6 +937,10 @@ struct JourneyWorkspaceView: View {
                 }
             }.padding(16)
         }
+        // This page is drawn on fixed dark cards. Resolve adaptive colours (and
+        // default text) as dark here so a light system appearance cannot turn
+        // section titles black on the dark background.
+        .environment(\.colorScheme, .dark)
     }
 
     private var journeyHero: some View {
@@ -733,7 +952,7 @@ struct JourneyWorkspaceView: View {
             // image is only drawn, never measured, so the hero takes the width
             // it is offered and the picture is cropped to it.
             Color.clear
-                .overlay(Image("KyushuTripCover").resizable().scaledToFill())
+                .overlay(heroImage)
                 .clipped()
             LinearGradient(
                 colors: [Color(hex: "#071126").opacity(0.96), Color(hex: "#111C46").opacity(0.72), .clear],
@@ -750,10 +969,10 @@ struct JourneyWorkspaceView: View {
                 }
                 HStack(spacing: -7) {
                     JourneyAvatar(url: authVM.profile?.avatarUrl, initials: authVM.profile?.initials ?? "ฉ", tint: .brand900, name: authVM.profile?.displayName)
-                    ForEach(Array((trip.participants ?? []).prefix(3).enumerated()), id: \.offset) { index, member in
+                    ForEach(Array(people.prefix(3).enumerated()), id: \.offset) { index, member in
                         JourneyAvatar(url: member.profileSharedWithTrip ? member.avatarUrl : nil, initials: String(member.displayName.prefix(1)), tint: [Color.statusProcessing, .statusApproved, .statusPushed][index], name: member.displayName)
                     }
-                    Text("  \(trip.participants?.count ?? 1) ผู้ร่วมเดินทาง").font(.system(size: 11, weight: .semibold)).foregroundColor(.brand100)
+                    Text("  \(people.count) ผู้ร่วมเดินทาง").font(.system(size: 11, weight: .semibold)).foregroundColor(.brand100)
                 }
             }
             .font(.system(size: 13)).foregroundColor(.brand100)
@@ -762,45 +981,92 @@ struct JourneyWorkspaceView: View {
         .frame(height: 250)
         .clipShape(RoundedRectangle(cornerRadius: 22))
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.brand300.opacity(0.45), lineWidth: 1))
+        .overlay(alignment: .topTrailing) {
+            Image(systemName: "photo.badge.plus")
+                .font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
+                .frame(width: 32, height: 32).background(.black.opacity(0.38), in: Circle())
+                .padding(12)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 22))
+        .onTapGesture { showCover = true }
+    }
+
+    /// The custom cover when one was chosen, else the bundled Kyushu cover.
+    @ViewBuilder private var heroImage: some View {
+        if let coverURL {
+            AsyncImage(url: coverURL) { phase in
+                if let image = phase.image { image.resizable().scaledToFill() }
+                else { Image("KyushuTripCover").resizable().scaledToFill() }
+            }
+        } else {
+            Image("KyushuTripCover").resizable().scaledToFill()
+        }
+    }
+
+    private static let animeMoments: [(name: String, title: String, subtitle: String)] = [
+        ("KyushuFukuoka", "Fukuoka at night", "Canal City · yatai lights"),
+        ("KyushuKumamoto", "Kumamoto & Aso", "Castle · one-piece route"),
+        ("KyushuYufuin", "Yufuin morning", "Lake · ryokan · mist"),
+        ("KyushuShrine", "Temple day", "Maple · shrine · calm"),
+    ]
+
+    /// The team's own photos first, then the mood images.
+    private var galleryItems: [PagerItem] {
+        let real: [PagerItem] = galleryPhotos.compactMap { photo in
+            TripPhotoAPI.publicURL(photo).map { PagerItem.remote(url: $0, title: photo.caption) }
+        }
+        return real + Self.animeMoments.map { PagerItem.asset(name: $0.name, title: $0.title, subtitle: $0.subtitle) }
     }
 
     private var kyushuGallery: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let items = galleryItems
+        let accents: [Color] = [.brand400, .statusProcessing, .statusApproved, .statusPushed]
+        return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Label("Kyushu visual diary", systemImage: "photo.stack.fill")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(size: 16, weight: .bold)).foregroundColor(.white)
                 Spacer()
-                Text("Anime gallery")
-                    .font(.system(size: 11, weight: .semibold)).foregroundColor(.brand300)
+                Button { showGallery = true } label: {
+                    Label("แกลเลอรี · เพิ่มรูป", systemImage: "plus.circle.fill")
+                        .font(.system(size: 11, weight: .semibold)).foregroundColor(.brand300)
+                }
+                .buttonStyle(.plain)
             }
-            Text("เก็บบรรยากาศแต่ละช่วงของทริปไว้เป็นแรงบันดาลใจ ก่อนเพิ่มภาพจริงของทีม")
+            Text("เก็บบรรยากาศแต่ละช่วงของทริปไว้เป็นแรงบันดาลใจ ก่อนเพิ่มภาพจริงของทีม · แตะเพื่อดูและปัดเพื่อเลื่อน")
                 .font(.system(size: 11)).foregroundColor(.textSecondary)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
-                    KyushuMomentCard(imageName: "KyushuFukuoka", title: "Fukuoka at night", subtitle: "Canal City · yatai lights", accent: .brand400)
-                    KyushuMomentCard(imageName: "KyushuKumamoto", title: "Kumamoto & Aso", subtitle: "Castle · one-piece route", accent: .statusProcessing)
-                    KyushuMomentCard(imageName: "KyushuYufuin", title: "Yufuin morning", subtitle: "Lake · ryokan · mist", accent: .statusApproved)
-                    KyushuMomentCard(imageName: "KyushuShrine", title: "Temple day", subtitle: "Maple · shrine · calm", accent: .statusPushed)
+                    ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                        KyushuMomentCard(item: item, accent: accents[index % accents.count])
+                            .onTapGesture { pager = PagerRequest(items: items, start: index) }
+                    }
                 }
             }
         }
         .padding(15).background(Color(hex: "#0E1527")).clipShape(RoundedRectangle(cornerRadius: 18))
     }
 
+    private func sharedAvatarURL(_ crew: KyushuCrew) -> URL? {
+        visibleAvatarURL(participant(for: crew))
+    }
+
     private var kyushuTravelCrew: some View {
-        let sharedProfiles = (trip.participants ?? []).filter(\.profileSharedWithTrip)
+        let sharedProfiles = people.filter(\.profileSharedWithTrip)
         return VStack(alignment: .leading, spacing: 9) {
             HStack {
                 Label("Kyushu travel crew", systemImage: "person.3.sequence.fill")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(size: 16, weight: .bold)).foregroundColor(.white)
                 Spacer()
                 Text("Nov 2026").font(.system(size: 11, weight: .semibold)).foregroundColor(.brand300)
             }
+            Text("แตะรูปเพื่อดู Profile ดูรูปใหญ่ เปลี่ยนรูป และแก้ไขข้อมูล")
+                .font(.system(size: 11)).foregroundColor(.textSecondary)
             HStack(spacing: 8) {
-                KyushuCrewBadge(imageName: "KyushuDrTom", name: "Dr. Tom", role: "Mentor")
-                KyushuCrewBadge(imageName: "KyushuDrJoey", name: "Dr. Joey", role: "Navigator")
-                KyushuCrewBadge(imageName: "KyushuNancy", name: "Nancy", role: "Planner")
-                KyushuCrewBadge(imageName: "KyushuVivi", name: "Vivi", role: "Story")
+                ForEach(kyushuCrew) { crew in
+                    KyushuCrewBadge(crew: crew, avatarURL: sharedAvatarURL(crew))
+                        .contentShape(Rectangle())
+                        .onTapGesture { selectedCrew = crew }
+                }
             }
             if !sharedProfiles.isEmpty {
                 Divider().overlay(Color(hex: "#27324D"))
@@ -822,18 +1088,20 @@ struct JourneyWorkspaceView: View {
         VStack(alignment: .leading, spacing: 9) {
             HStack {
                 Label("Travel identity tags", systemImage: "tag.fill")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(size: 16, weight: .bold)).foregroundColor(.white)
                 Spacer()
                 Text("พร้อมติดกระเป๋า").font(.system(size: 11, weight: .semibold)).foregroundColor(.brand300)
             }
-            Text("บัตรสัมภาระเฉพาะตัวของทีม · กดดูเพื่อเก็บเป็นความทรงจำของทริป")
+            Text("บัตรสัมภาระเฉพาะตัวของทีม · แตะเพื่อดูรูปใหญ่และแก้ไขชื่อ สัตว์ประจำตัว หรือรูป")
                 .font(.system(size: 11)).foregroundColor(.textSecondary)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
-                    KyushuMascotIdentityTag(imageName: "KyushuMascotTom", name: "Dr. Tom", animal: "Shiba Inu")
-                    KyushuMascotIdentityTag(imageName: "KyushuMascotJoey", name: "Dr. Joey", animal: "Wise Owl")
-                    KyushuMascotIdentityTag(imageName: "KyushuMascotNancy", name: "Nancy", animal: "Red Panda")
-                    KyushuMascotIdentityTag(imageName: "KyushuMascotVivi", name: "Vivi", animal: "Lucky Rabbit")
+                    ForEach(kyushuCrew) { crew in
+                        let state = tagState(crew)
+                        KyushuMascotIdentityTag(imageName: crew.mascotImage, imageURL: state.imageURL,
+                                                name: state.name, animal: state.animal)
+                            .onTapGesture { selectedTag = crew }
+                    }
                 }
             }
         }
@@ -841,13 +1109,13 @@ struct JourneyWorkspaceView: View {
     }
 
     private var nextKyushuMoment: some View {
-        let day = vm.itineraryDays.first
+        let day = upcomingDay
         let title = day?.title ?? "เริ่มสร้างตอนแรกของการเดินทาง"
         let detail = day?.items?.first?.title ?? "เพิ่มจุดหมายแรก แล้ว Slippy จะรวมแผน เอกสาร และการนำทางไว้ให้"
 
         return HStack(spacing: 13) {
             ZStack {
-                Image("KyushuShrine")
+                Image(dayImageName(day))
                     .resizable().scaledToFill()
                     .frame(width: 82, height: 96).clipped()
                 LinearGradient(colors: [.clear, Color(hex: "#071126").opacity(0.65)], startPoint: .top, endPoint: .bottom)
@@ -855,6 +1123,7 @@ struct JourneyWorkspaceView: View {
                     .font(.system(size: 20, weight: .bold)).foregroundColor(.white)
             }
             .clipShape(RoundedRectangle(cornerRadius: 15))
+            .onTapGesture { momentRequest = MomentRequest(dayId: day?.id, imageName: dayImageName(day)) }
 
             VStack(alignment: .leading, spacing: 5) {
                 Text("NEXT KYUSHU MOMENT")
@@ -862,6 +1131,8 @@ struct JourneyWorkspaceView: View {
                 Text(title).font(.system(size: 15, weight: .bold)).foregroundColor(.white).lineLimit(1)
                 Text(detail).font(.system(size: 11)).foregroundColor(Color(hex: "#B8C2D9")).lineLimit(2)
             }
+            .contentShape(Rectangle())
+            .onTapGesture { momentRequest = MomentRequest(dayId: day?.id, imageName: dayImageName(day)) }
             Spacer(minLength: 0)
             Button { tab = 1 } label: {
                 Image(systemName: "arrow.right")
@@ -879,7 +1150,7 @@ struct JourneyWorkspaceView: View {
         VStack(alignment: .leading, spacing: 11) {
             HStack {
                 Label("จัดการทริป", systemImage: "slider.horizontal.3")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(size: 16, weight: .bold)).foregroundColor(.white)
                 Spacer()
                 Text("ทุกอย่างในที่เดียว")
                     .font(.system(size: 11, weight: .semibold))
@@ -909,6 +1180,18 @@ struct JourneyWorkspaceView: View {
                     JourneyManagementAction(title: "Profile ทริป", detail: "รูป · บทบาท · ติดต่อ", icon: "person.crop.circle.badge.pencil", tint: .brand400)
                 }
                 .buttonStyle(.plain)
+                Button { showChecklist = true } label: {
+                    JourneyManagementAction(title: "เช็กลิสต์", detail: "ก่อนเดินทาง · ต้องจอง", icon: "checklist", tint: .statusApproved)
+                }
+                .buttonStyle(.plain)
+                Button { showNotes = true } label: {
+                    JourneyManagementAction(title: "โน้ตทริป", detail: "ที่พัก · รถเช่า · งบ", icon: "note.text", tint: .statusProcessing)
+                }
+                .buttonStyle(.plain)
+                Button { showGallery = true } label: {
+                    JourneyManagementAction(title: "แกลเลอรี", detail: "ดูรูป · เพิ่มรูป", icon: "photo.on.rectangle.angled", tint: .statusPushed)
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(14).background(Color(hex: "#0E1527")).clipShape(RoundedRectangle(cornerRadius: 18))
@@ -921,7 +1204,7 @@ struct JourneyWorkspaceView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Label("Travel Command Center", systemImage: "suitcase.rolling.fill")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(size: 16, weight: .bold)).foregroundColor(.white)
                 Spacer()
                 if applyingKyushuTemplate { ProgressView().controlSize(.small) }
             }
@@ -948,7 +1231,7 @@ struct JourneyWorkspaceView: View {
                 .disabled(!vm.itineraryDays.isEmpty || applyingKyushuTemplate)
             }
 
-            Label("รถเช่า 23–25 พ.ย. ยังเป็นรอตัดสินใจ: ยืนยันจุดรับรถ/คืนรถและจำนวนผู้โดยสารก่อนกดจอง", systemImage: "exclamationmark.triangle.fill")
+            Label("รถเช่า AVIS จองและจ่ายแล้ว (23 พ.ย. Kumamoto · 24–26 พ.ย. Hakata) — พก IDP ตัวจริงทุกคนที่ขับ · ที่พัก Yufuin ยังไม่จ่าย ยกเลิกฟรีถึง 20 พ.ย.", systemImage: "exclamationmark.triangle.fill")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundColor(Color(hex: "#9A3412"))
                 .padding(10)
@@ -961,7 +1244,7 @@ struct JourneyWorkspaceView: View {
     private func commandAction(_ title: String, _ subtitle: String, _ icon: String) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             Image(systemName: icon).font(.system(size: 17, weight: .semibold)).foregroundColor(.brand300)
-            Text(title).font(.system(size: 12, weight: .semibold)).foregroundColor(.textPrimary)
+            Text(title).font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
             Text(subtitle).font(.system(size: 10)).foregroundColor(.textSecondary).lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading).padding(11)
@@ -1051,33 +1334,77 @@ struct JourneyWorkspaceView: View {
     }
 
     private func workspaceStat(_ label: String, _ value: String, _ icon: String) -> some View {
-        VStack(spacing: 6) { Image(systemName: icon).foregroundColor(.brand400); Text(value).font(.system(size: 14, weight: .bold)).lineLimit(1).minimumScaleFactor(0.7); Text(label).font(.system(size: 10)).foregroundColor(Color(hex: "#94A3B8")) }
+        VStack(spacing: 6) { Image(systemName: icon).foregroundColor(.brand400); Text(value).font(.system(size: 14, weight: .bold)).foregroundColor(.white).lineLimit(1).minimumScaleFactor(0.7); Text(label).font(.system(size: 10)).foregroundColor(Color(hex: "#94A3B8")) }
             .frame(maxWidth: .infinity).padding(.vertical, 14).background(Color(hex: "#0E1527")).clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
     private var itinerary: some View {
         ScrollView {
-            VStack(spacing: 12) {
-                HStack { Text("แผนรายวัน").font(.system(size: 18, weight: .bold)); Spacer(); Button { showAddDay = true } label: { Label("เพิ่มวัน", systemImage: "plus") } }
+            VStack(spacing: 16) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("แผนรายวัน").font(.system(size: 20, weight: .bold)).foregroundColor(.white)
+                        Text("\(vm.itineraryDays.count) วัน · \(vm.itineraryDays.reduce(0) { $0 + ($1.items?.count ?? 0) }) รายการ")
+                            .font(.system(size: 11)).foregroundColor(Color(hex: "#9CA9C4"))
+                    }
+                    Spacer()
+                    Button { editorTarget = .addDay } label: {
+                        Label("เพิ่มวัน", systemImage: "plus")
+                            .font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
+                            .padding(.horizontal, 13).padding(.vertical, 8)
+                            .background(Color.brand500, in: Capsule())
+                    }
+                }
                 if vm.itineraryDays.isEmpty {
-                    ContentUnavailableView("ยังไม่มีแผน", systemImage: "calendar.badge.plus", description: Text("เพิ่มวันแรก แล้วบันทึกสถานที่ อาหาร โรงแรม หรือการเดินทาง"))
+                    ContentUnavailableView("ยังไม่มีแผน", systemImage: "calendar.badge.plus",
+                                           description: Text("เพิ่มวันแรก แล้วบันทึกสถานที่ อาหาร โรงแรม หรือการเดินทาง"))
                         .frame(minHeight: 300)
                 } else {
                     ForEach(vm.itineraryDays) { day in
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack { VStack(alignment: .leading) { Text("วันที่ \(day.dayNumber)").font(.headline); Text(day.title ?? day.date ?? "ยังไม่ระบุ").font(.caption).foregroundColor(.textSecondary) }; Spacer(); Button { addItemDay = day } label: { Image(systemName: "plus.circle.fill").font(.title3) } }
-                            ForEach(day.items ?? []) { item in
-                                HStack(alignment: .top, spacing: 10) {
-                                    Image(systemName: itineraryIcon(item.type)).foregroundColor(Color(hex: "#08783F")).frame(width: 22)
-                                    VStack(alignment: .leading, spacing: 3) { Text(item.title).font(.system(size: 14, weight: .semibold)); HStack { if let time = item.timeFrom { Text(String(time.prefix(5))) }; if let location = item.location { Text(location) } }.font(.caption).foregroundColor(.textSecondary) }
-                                    Spacer()
-                                    Button(role: .destructive) { Task { try? await vm.removeItineraryItem(item.id, journeyId: trip.id) } } label: { Image(systemName: "trash") }
-                                }.padding(10).background(Color.background).clipShape(RoundedRectangle(cornerRadius: 10))
+                        VStack(spacing: 0) {
+                            DayHeroView(day: day, imageName: dayImageName(day), height: 140)
+                                .contentShape(Rectangle())
+                                .onTapGesture { momentRequest = MomentRequest(dayId: day.id, imageName: dayImageName(day)) }
+                                .overlay(alignment: .topTrailing) {
+                                    Button { editorTarget = .editDay(day) } label: {
+                                        Image(systemName: "pencil")
+                                            .font(.system(size: 12, weight: .bold)).foregroundColor(.white)
+                                            .frame(width: 30, height: 30).background(.black.opacity(0.45), in: Circle())
+                                    }
+                                    .buttonStyle(.plain).padding(10)
+                                    .accessibilityLabel("แก้ไขวัน")
+                                }
+                            VStack(spacing: 8) {
+                                ForEach(day.items ?? []) { item in
+                                    DayItemRow(item: item, onEdit: { editorTarget = .editItem(item, day) }) { pendingPlanDelete = item }
+                                }
+                                Button { editorTarget = .addItem(day) } label: {
+                                    Label("เพิ่มรายการ", systemImage: "plus.circle.fill")
+                                        .font(.system(size: 12, weight: .semibold)).foregroundColor(.brand300)
+                                        .frame(maxWidth: .infinity).padding(.vertical, 10)
+                                        .background(Color(hex: "#151D32").opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
+                                }
+                                .buttonStyle(.plain)
                             }
-                        }.padding(14).background(Color.surface).clipShape(RoundedRectangle(cornerRadius: 16))
+                            .padding(12)
+                        }
+                        .background(Color(hex: "#0E1527"))
+                        .clipShape(RoundedRectangle(cornerRadius: 20))
+                        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.brand300.opacity(0.18), lineWidth: 1))
                     }
                 }
             }.padding(16)
+        }
+        .environment(\.colorScheme, .dark)
+        .confirmationDialog("ลบรายการนี้?", isPresented: Binding(
+            get: { pendingPlanDelete != nil }, set: { if !$0 { pendingPlanDelete = nil } }), titleVisibility: .visible) {
+            Button("ลบ \(pendingPlanDelete?.title ?? "")", role: .destructive) {
+                if let target = pendingPlanDelete {
+                    Task { try? await vm.removeItineraryItem(target.id, journeyId: trip.id) }
+                }
+                pendingPlanDelete = nil
+            }
+            Button("ยกเลิก", role: .cancel) { pendingPlanDelete = nil }
         }
     }
 
@@ -1183,76 +1510,128 @@ private struct JourneyAvatar: View {
     }
 }
 
-/// A reusable visual-diary tile. Generated travel mood images stay separate
-/// from a traveller's private uploads in the real photo gallery.
+/// A reusable visual-diary tile (a bundled mood image or one of the team's photos).
 private struct KyushuMomentCard: View {
-    let imageName: String
-    let title: String
-    let subtitle: String
+    let item: PagerItem
     let accent: Color
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            Image(imageName)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 208, height: 142)
+            Color(hex: "#151D32")
+                .overlay(photo)
                 .clipped()
             LinearGradient(colors: [.clear, Color(hex: "#071126").opacity(0.92)], startPoint: .top, endPoint: .bottom)
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.system(size: 14, weight: .bold)).foregroundColor(.white)
-                Text(subtitle).font(.system(size: 10, weight: .medium)).foregroundColor(.white.opacity(0.82))
+                Text(item.title ?? "Trip photo").font(.system(size: 14, weight: .bold)).foregroundColor(.white).lineLimit(1)
+                if let subtitle = item.subtitle {
+                    Text(subtitle).font(.system(size: 10, weight: .medium)).foregroundColor(.white.opacity(0.82)).lineLimit(1)
+                }
             }
             .padding(12)
         }
         .frame(width: 208, height: 142)
         .clipShape(RoundedRectangle(cornerRadius: 15))
         .overlay(RoundedRectangle(cornerRadius: 15).stroke(accent.opacity(0.75), lineWidth: 1))
+        .contentShape(RoundedRectangle(cornerRadius: 15))
+    }
+
+    @ViewBuilder private var photo: some View {
+        switch item {
+        case .asset(let name, _, _):
+            Image(name).resizable().scaledToFill()
+        case .remote(let url, _):
+            AsyncImage(url: url) { phase in
+                if let image = phase.image { image.resizable().scaledToFill() } else { ProgressView().tint(.white) }
+            }
+        }
+    }
+}
+
+/// A circular crop of a full-length portrait, zoomed onto the face. (A plain
+/// `scaledToFill` in a small circle shows the middle of a 2:3 figure — torso, no head.)
+private struct CrewPortrait: View {
+    let crew: KyushuCrew
+    let diameter: CGFloat
+    var zoom: CGFloat = 2.5
+
+    var body: some View {
+        let size = UIImage(named: crew.imageName)?.size ?? CGSize(width: 2, height: 3)
+        let width = diameter * zoom
+        let height = width * size.height / max(size.width, 1)
+        Color.clear
+            .frame(width: diameter, height: diameter)
+            .overlay(alignment: .topLeading) {
+                Image(crew.imageName)
+                    .resizable()
+                    .frame(width: width, height: height)
+                    .offset(x: diameter / 2 - crew.face.x * width, y: diameter / 2 - crew.face.y * height)
+            }
+            .clipShape(Circle())
     }
 }
 
 private struct KyushuCrewBadge: View {
-    let imageName: String
-    let name: String
-    let role: String
+    let crew: KyushuCrew
+    let avatarURL: URL?
 
     var body: some View {
         VStack(spacing: 3) {
-            Image(imageName)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 68, height: 68, alignment: .top)
-                .clipped()
-                .clipShape(Circle())
+            portrait
                 .overlay(Circle().stroke(Color.brand300.opacity(0.65), lineWidth: 1.5))
                 .frame(maxWidth: .infinity)
-            Text(name).font(.system(size: 10, weight: .bold)).foregroundColor(.white).lineLimit(1)
-            Text(role).font(.system(size: 8, weight: .medium)).foregroundColor(Color(hex: "#94A3B8")).lineLimit(1)
+            Text(crew.name).font(.system(size: 10, weight: .bold)).foregroundColor(.white).lineLimit(1)
+            Text(crew.role).font(.system(size: 8, weight: .medium)).foregroundColor(Color(hex: "#94A3B8")).lineLimit(1)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder private var portrait: some View {
+        if let avatarURL {
+            Color.clear
+                .frame(width: 68, height: 68)
+                .overlay(
+                    AsyncImage(url: avatarURL) { phase in
+                        if let image = phase.image { image.resizable().scaledToFill() }
+                        else { CrewPortrait(crew: crew, diameter: 68) }
+                    }
+                )
+                .clipShape(Circle())
+        } else {
+            CrewPortrait(crew: crew, diameter: 68)
+        }
     }
 }
 
 private struct KyushuMascotIdentityTag: View {
     let imageName: String
+    let imageURL: URL?
     let name: String
     let animal: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Image(imageName)
-                .resizable()
-                .scaledToFit()
+            Color(hex: "#181F3A")
                 .frame(width: 104, height: 104)
-                .clipped()
+                .overlay(picture)
                 .clipShape(RoundedRectangle(cornerRadius: 13))
-                .background(Color(hex: "#181F3A"), in: RoundedRectangle(cornerRadius: 13))
-            Text(name).font(.system(size: 11, weight: .bold)).foregroundColor(.white)
-            Text(animal).font(.system(size: 9, weight: .medium)).foregroundColor(.brand300)
+            Text(name).font(.system(size: 11, weight: .bold)).foregroundColor(.white).lineLimit(1)
+            Text(animal).font(.system(size: 9, weight: .medium)).foregroundColor(.brand300).lineLimit(1)
         }
         .padding(9)
         .frame(width: 122, alignment: .leading)
         .background(Color(hex: "#151D32"), in: RoundedRectangle(cornerRadius: 16))
+        .contentShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    @ViewBuilder private var picture: some View {
+        if let imageURL {
+            AsyncImage(url: imageURL) { phase in
+                if let image = phase.image { image.resizable().scaledToFill() }
+                else { Image(imageName).resizable().scaledToFit() }
+            }
+        } else {
+            Image(imageName).resizable().scaledToFit()
+        }
     }
 }
 
@@ -1474,20 +1853,6 @@ private extension String {
     }
 }
 
-private struct AddItineraryDaySheet: View {
-    let save: (String?, String?) async throws -> Void
-    @Environment(\.dismiss) private var dismiss
-    @State private var date = Date(); @State private var title = ""; @State private var saving = false
-    var body: some View { NavigationStack { Form { DatePicker("วันที่", selection: $date, displayedComponents: .date); TextField("ชื่อวัน เช่น Kyoto", text: $title); Button(saving ? "กำลังบันทึก…" : "เพิ่มวัน") { saving = true; Task { let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; try? await save(f.string(from: date), title.isEmpty ? nil : title); dismiss() } }.disabled(saving) }.navigationTitle("เพิ่มวัน").toolbar { Button("ยกเลิก") { dismiss() } } } }
-}
-
-private struct AddItineraryItemSheet: View {
-    let day: TripItineraryDay; let save: (String, String, String?, String?, String?) async throws -> Void
-    @Environment(\.dismiss) private var dismiss
-    @State private var type = "activity"; @State private var title = ""; @State private var location = ""; @State private var time = Date(); @State private var notes = ""; @State private var saving = false
-    var body: some View { NavigationStack { Form { Picker("ประเภท", selection: $type) { ForEach(["activity", "meal", "transport", "hotel", "booking", "other"], id: \.self) { Text($0).tag($0) } }; TextField("ชื่อรายการ", text: $title); TextField("สถานที่", text: $location); DatePicker("เวลา", selection: $time, displayedComponents: .hourAndMinute); TextField("หมายเหตุ", text: $notes, axis: .vertical); Button(saving ? "กำลังบันทึก…" : "เพิ่มในแผน") { saving = true; Task { let f = DateFormatter(); f.dateFormat = "HH:mm:ss"; try? await save(type, title, location.isEmpty ? nil : location, f.string(from: time), notes.isEmpty ? nil : notes); dismiss() } }.disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || saving) }.navigationTitle("วันที่ \(day.dayNumber)").toolbar { Button("ยกเลิก") { dismiss() } } } }
-}
-
 private struct TripFriendPicker: View {
     let friends: [UserProfile]; let add: (UserProfile) async throws -> Void
     @Environment(\.dismiss) private var dismiss
@@ -1499,71 +1864,1824 @@ private struct TripFriendPicker: View {
 }
 
 private struct TripMapPin: Identifiable {
-    let id = UUID(); let title: String; let subtitle: String; let coordinate: CLLocationCoordinate2D
+    let id = UUID()
+    let dayNumber: Int
+    let order: Int
+    let title: String
+    let subtitle: String
+    let type: String
+    let coordinate: CLLocationCoordinate2D
 }
 
-/// Resolves itinerary place names through MapKit and displays real Apple Maps.
+/// Plans the trip on a map: stops resolved through MapKit search, filtered by day,
+/// drawn in order, with Google Maps one tap away for every stop and for the day's
+/// route. (Embedding Google's own map would need the Google Maps SDK and an API key
+/// — see GoogleMapsLinks for why the app hands off with links instead.)
 /// No location permission is requested because this maps planned places, not the user.
 private struct TripRouteMapView: View {
     let trip: Trip; let days: [TripItineraryDay]
     @State private var pins: [TripMapPin] = []
     @State private var position: MapCameraPosition = .automatic
     @State private var loading = false
+    @State private var selectedDay: Int?
+
+    private static var cache: [String: CLLocationCoordinate2D] = [:]
+
+    private var shown: [TripMapPin] { selectedDay == nil ? pins : pins.filter { $0.dayNumber == selectedDay } }
 
     var body: some View {
         ZStack(alignment: .bottom) {
             Map(position: $position) {
-                ForEach(pins) { pin in Marker(pin.title, systemImage: "mappin.circle.fill", coordinate: pin.coordinate).tint(Color(hex: "#08783F")) }
-            }.mapControls { MapCompass(); MapScaleView(); MapPitchToggle() }
-            if loading { ProgressView("กำลังค้นหาสถานที่…").padding(12).background(.ultraThinMaterial).clipShape(Capsule()) }
-            else if pins.isEmpty {
-                ContentUnavailableView("ยังไม่มีตำแหน่งบนแผนที่", systemImage: "map", description: Text("เพิ่มชื่อสถานที่ในแผนรายวันก่อน"))
-                    .padding().background(.ultraThinMaterial).clipShape(RoundedRectangle(cornerRadius: 18)).padding()
+                if selectedDay != nil, shown.count > 1 {
+                    MapPolyline(coordinates: shown.map(\.coordinate))
+                        .stroke(Color.brand400.opacity(0.9), style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [7, 5]))
+                }
+                ForEach(shown) { pin in
+                    Marker(selectedDay == nil ? pin.title : "\(pin.order). \(pin.title)",
+                           systemImage: journeyItemStyle(pin.type).icon, coordinate: pin.coordinate)
+                        .tint(journeyItemStyle(pin.type).tint)
+                }
+            }
+            .mapControls { MapCompass(); MapScaleView() }
+            .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .including([.restaurant, .hotel, .park, .museum, .nationalPark, .publicTransport])))
+
+            panel
+        }
+        .task(id: signature) { await resolvePins() }
+        .onChange(of: selectedDay) { _, _ in withAnimation { position = .automatic } }
+    }
+
+    private var signature: String {
+        days.flatMap { day in (day.items ?? []).map { "\(day.dayNumber)|\($0.location ?? "")" } }.joined(separator: ";")
+    }
+
+    private var panel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    dayChip("ทั้งหมด", day: nil)
+                    ForEach(days) { day in dayChip("วัน \(day.dayNumber)", day: day.dayNumber) }
+                }
+            }
+            if loading && pins.isEmpty {
+                HStack(spacing: 8) { ProgressView().tint(.white); Text("กำลังค้นหาสถานที่…").font(.system(size: 12)).foregroundColor(.white) }
+            } else if shown.isEmpty {
+                Text(pins.isEmpty ? "ยังไม่มีสถานที่ — เพิ่มชื่อสถานที่ในรายการของแผน แล้วจะแสดงบนแผนที่" : "วันนี้ยังไม่มีสถานที่ที่ระบุตำแหน่งได้")
+                    .font(.system(size: 12)).foregroundColor(Color(hex: "#9CA9C4"))
             } else {
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text("\(pins.count) สถานที่").font(.headline)
-                        Text("เลือก Apple Maps หรือ Google Maps สำหรับนำทาง").font(.caption).foregroundColor(.textSecondary)
-                    }
-                    Spacer()
-                    Menu {
-                        Button("Apple Maps") { openFirstPin() }
-                        Button("Google Maps") { openFirstPinInGoogleMaps() }
-                    } label: {
-                        Label("นำทาง", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
+                ScrollView {
+                    VStack(spacing: 6) {
+                        ForEach(shown) { pin in stopRow(pin) }
                     }
                 }
-                    .padding(14).background(.ultraThinMaterial).clipShape(RoundedRectangle(cornerRadius: 16)).padding()
+                .frame(maxHeight: 150)
+                HStack(spacing: 8) {
+                    Button { openRouteInGoogleMaps() } label: {
+                        Label("เส้นทางใน Google Maps", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
+                            .font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
+                            .frame(maxWidth: .infinity).padding(.vertical, 10)
+                            .background(Color.brand500, in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    Button { openFirstInAppleMaps() } label: {
+                        Label("Apple Maps", systemImage: "map")
+                            .font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
+                            .padding(.horizontal, 14).padding(.vertical, 10)
+                            .background(.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
+                    }
+                }
+                if shown.count > 5 {
+                    Text("Google Maps รับจุดแวะสูงสุด 3 จุดต่อลิงก์ — เส้นทางจะใช้จุดแรก จุดสุดท้าย และอีก 3 จุดระหว่างทาง")
+                        .font(.system(size: 9)).foregroundColor(Color(hex: "#9CA9C4"))
+                }
             }
-        }.task(id: days.flatMap { $0.items ?? [] }.map(\.location).description) { await resolvePins() }
+        }
+        .padding(12)
+        .background(Color(hex: "#0B1120").opacity(0.94), in: RoundedRectangle(cornerRadius: 20))
+        .padding(.horizontal, 10).padding(.bottom, 8)
+        .environment(\.colorScheme, .dark)
+    }
+
+    private func dayChip(_ title: String, day: Int?) -> some View {
+        Button { selectedDay = day } label: {
+            Text(title).font(.system(size: 11, weight: .semibold))
+                .foregroundColor(selectedDay == day ? .white : Color(hex: "#9CA9C4"))
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(selectedDay == day ? Color.brand500 : Color(hex: "#151D32"), in: Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func stopRow(_ pin: TripMapPin) -> some View {
+        let style = journeyItemStyle(pin.type)
+        return HStack(spacing: 10) {
+            Image(systemName: style.icon).font(.system(size: 11, weight: .bold)).foregroundColor(style.tint)
+                .frame(width: 26, height: 26).background(style.tint.opacity(0.16), in: Circle())
+            VStack(alignment: .leading, spacing: 1) {
+                Text((selectedDay == nil ? "D\(pin.dayNumber) · " : "\(pin.order). ") + pin.title)
+                    .font(.system(size: 12, weight: .semibold)).foregroundColor(.white).lineLimit(1)
+                Text(pin.subtitle).font(.system(size: 9)).foregroundColor(Color(hex: "#9CA9C4")).lineLimit(1)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation {
+                    position = .region(MKCoordinateRegion(center: pin.coordinate,
+                                                          span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)))
+                }
+            }
+            Spacer(minLength: 0)
+            Button {
+                GoogleMapsLinks.open(GoogleMapsLinks.pinURL((pin.coordinate.latitude, pin.coordinate.longitude), label: pin.title))
+            } label: {
+                Image(systemName: "location.north.circle.fill").font(.system(size: 20)).foregroundColor(.brand300)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("เปิดใน Google Maps")
+        }
+        .padding(8)
+        .background(Color(hex: "#151D32"), in: RoundedRectangle(cornerRadius: 12))
     }
 
     private func resolvePins() async {
-        let located = days.flatMap { day in (day.items ?? []).compactMap { item -> (String, String)? in
-            guard let place = item.location?.trimmingCharacters(in: .whitespacesAndNewlines), !place.isEmpty else { return nil }
-            return (item.title, place + (trip.destination.map { ", \($0)" } ?? ""))
-        }}
-        loading = true; defer { loading = false }
-        var output: [TripMapPin] = []
-        for entry in located.prefix(20) {
-            let request = MKLocalSearch.Request(); request.naturalLanguageQuery = entry.1
-            if let mapItem = try? await MKLocalSearch(request: request).start().mapItems.first {
-                output.append(TripMapPin(title: entry.0, subtitle: entry.1, coordinate: mapItem.placemark.coordinate))
+        var wanted: [(day: Int, order: Int, title: String, query: String, type: String, place: String)] = []
+        for day in days {
+            var order = 0
+            var seen = Set<String>()
+            for item in day.items ?? [] {
+                guard let place = item.location?.trimmingCharacters(in: .whitespacesAndNewlines), !place.isEmpty,
+                      seen.insert(place).inserted else { continue }
+                order += 1
+                wanted.append((day.dayNumber, order, item.title, place + (trip.destination.map { ", \($0)" } ?? ""), item.type, place))
             }
         }
-        pins = output; if !output.isEmpty { position = .automatic }
+        loading = true; defer { loading = false }
+        var output: [TripMapPin] = []
+        for entry in wanted.prefix(60) {
+            var coordinate = Self.cache[entry.query]
+            if coordinate == nil {
+                let request = MKLocalSearch.Request(); request.naturalLanguageQuery = entry.query
+                coordinate = (try? await MKLocalSearch(request: request).start().mapItems.first)?.placemark.coordinate
+                if let coordinate { Self.cache[entry.query] = coordinate }
+            }
+            if let coordinate {
+                output.append(TripMapPin(dayNumber: entry.day, order: entry.order, title: entry.title,
+                                         subtitle: entry.place, type: entry.type, coordinate: coordinate))
+            }
+        }
+        pins = output
+        position = .automatic
     }
 
-    private func openFirstPin() {
-        guard let pin = pins.first else { return }
-        MKMapItem(placemark: MKPlacemark(coordinate: pin.coordinate)).openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving])
+    private func openRouteInGoogleMaps() {
+        let stops = shown
+        guard let first = stops.first, let last = stops.last else { return }
+        func c(_ pin: TripMapPin) -> GoogleMapsLinks.Coordinate { (pin.coordinate.latitude, pin.coordinate.longitude) }
+        if stops.count == 1 { GoogleMapsLinks.open(GoogleMapsLinks.directionsURL(destination: c(first))); return }
+        let middle = Array(stops.dropFirst().dropLast().prefix(3)).map(c)
+        GoogleMapsLinks.open(GoogleMapsLinks.directionsURL(origin: c(first), destination: c(last), waypoints: middle))
     }
 
-    private func openFirstPinInGoogleMaps() {
-        guard let pin = pins.first else { return }
-        // A universal Maps URL hands off to the Google Maps app when installed,
-        // but keeps a safe browser fallback for travellers without it.
-        GoogleMapsLinks.open(GoogleMapsLinks.directionsURL(
-            destination: (pin.coordinate.latitude, pin.coordinate.longitude), mode: .driving))
+    private func openFirstInAppleMaps() {
+        guard let pin = shown.first else { return }
+        MKMapItem(placemark: MKPlacemark(coordinate: pin.coordinate)).openInMaps()
+    }
+}
+
+// MARK: – Trip page: crew, identity tags, viewers and detail sheets
+
+/// One of the four travellers on the Kyushu trip card. `aliases` (lower-case)
+/// tie the card to a real trip participant by display name.
+private struct KyushuCrew: Identifiable, Hashable {
+    let id: String
+    let imageName: String
+    let name: String
+    let role: String
+    let mascotImage: String
+    let animal: String
+    let aliases: [String]
+    /// Where the face sits in the (full-length) portrait, as fractions of its
+    /// width/height — used to crop the circle onto the head.
+    let face: CGPoint
+}
+
+private let kyushuCrew: [KyushuCrew] = [
+    .init(id: "tom", imageName: "KyushuDrTom", name: "Dr. Tom", role: "Mentor",
+          mascotImage: "KyushuMascotTom", animal: "Shiba Inu", aliases: ["tom", "ทอม", "ชายนิมิต"],
+          face: CGPoint(x: 0.49, y: 0.135)),
+    .init(id: "joey", imageName: "KyushuDrJoey", name: "Dr. Joey", role: "Navigator",
+          mascotImage: "KyushuMascotJoey", animal: "Wise Owl", aliases: ["joey", "โจ้"],
+          face: CGPoint(x: 0.47, y: 0.14)),
+    .init(id: "nancy", imageName: "KyushuNancy", name: "Nancy", role: "Planner",
+          mascotImage: "KyushuMascotNancy", animal: "Red Panda", aliases: ["nancy", "แนน"],
+          face: CGPoint(x: 0.50, y: 0.145)),
+    .init(id: "vivi", imageName: "KyushuVivi", name: "Vivi", role: "Story",
+          mascotImage: "KyushuMascotVivi", animal: "Lucky Rabbit", aliases: ["vivi", "วิ"],
+          face: CGPoint(x: 0.49, y: 0.145)),
+]
+
+private struct IdentityTagState {
+    let name: String
+    let animal: String
+    let imageURL: URL?
+    let isCustomImage: Bool
+}
+
+private enum PagerItem {
+    case asset(name: String, title: String, subtitle: String)
+    case remote(url: URL, title: String?)
+
+    var title: String? {
+        switch self {
+        case .asset(_, let title, _): return title
+        case .remote(_, let title): return title
+        }
+    }
+    var subtitle: String? {
+        if case .asset(_, _, let subtitle) = self { return subtitle }
+        return nil
+    }
+}
+
+private struct PagerRequest: Identifiable {
+    let id = UUID()
+    let items: [PagerItem]
+    let start: Int
+}
+
+private struct MomentRequest: Identifiable {
+    let id = UUID()
+    let dayId: String?
+    let imageName: String
+}
+
+/// Picture for a day of the trip, chosen from its city/title (bundled mood images).
+private func dayImageName(_ day: TripItineraryDay?) -> String {
+    let text = ((day?.city ?? "") + " " + (day?.title ?? "")).lowercased()
+    if text.contains("depart") { return "KyushuTripCover" }
+    if text.contains("temple") { return "KyushuShrine" }
+    if text.contains("yufuin") { return "KyushuYufuin" }
+    if text.contains("kumamoto") { return "KyushuKumamoto" }
+    return "KyushuFukuoka"
+}
+
+private func journeyItemStyle(_ type: String) -> (icon: String, tint: Color) {
+    switch type {
+    case "hotel": return ("bed.double.fill", .statusPushed)
+    case "meal", "restaurant": return ("fork.knife", .orange)
+    case "shinkansen", "train", "transport", "subway", "bus": return ("tram.fill", .statusProcessing)
+    case "car_rental", "taxi": return ("car.fill", .statusProcessing)
+    case "flight": return ("airplane", .brand400)
+    case "shopping": return ("bag.fill", .pink)
+    case "booking": return ("ticket.fill", .statusApproved)
+    case "onsen": return ("drop.fill", .cyan)
+    default: return ("sparkles", .brand300)
+    }
+}
+
+/// Re-encodes a picked photo as a JPEG no larger than `maxSide` on its long
+/// edge, so a 12 MP library photo does not become a 6 MB upload.
+private func downscaledJPEG(_ data: Data, maxSide: CGFloat = 2000, quality: CGFloat = 0.82) -> Data? {
+    guard let image = UIImage(data: data) else { return nil }
+    let longest = max(image.size.width, image.size.height)
+    guard longest > maxSide else { return image.jpegData(compressionQuality: quality) }
+    let ratio = maxSide / longest
+    let size = CGSize(width: image.size.width * ratio, height: image.size.height * ratio)
+    let resized = UIGraphicsImageRenderer(size: size).image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
+    return resized.jpegData(compressionQuality: quality)
+}
+
+/// Full-screen view of the trip's background with a way to replace it.
+private struct CoverViewerSheet: View {
+    let url: URL?
+    let onPick: (Data) async throws -> Void
+    let onReset: () async throws -> Void
+
+    @State private var pick: PhotosPickerItem?
+    @State private var busy = false
+    @State private var message: String?
+
+    var body: some View {
+        ProfileImageViewer(url: url, assetName: url == nil ? "KyushuTripCover" : nil,
+                           title: busy ? "กำลังอัปโหลด…" : message) {
+            HStack(spacing: 10) {
+                PhotosPicker(selection: $pick, matching: .images) {
+                    Label("เปลี่ยนรูปพื้นหลัง", systemImage: "photo.badge.plus")
+                        .font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                        .background(Color.brand500, in: Capsule())
+                }
+                .disabled(busy)
+                if url != nil {
+                    Button {
+                        Task {
+                            busy = true; defer { busy = false }
+                            do { try await onReset(); message = nil } catch { message = error.localizedDescription }
+                        }
+                    } label: {
+                        Label("ใช้รูปเริ่มต้น", systemImage: "arrow.uturn.backward")
+                            .font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
+                            .padding(.horizontal, 14).padding(.vertical, 10)
+                            .background(.white.opacity(0.18), in: Capsule())
+                    }
+                    .disabled(busy)
+                }
+            }
+        }
+        .onChange(of: pick) { _, item in
+            guard let item else { return }
+            Task {
+                busy = true
+                defer { busy = false; pick = nil }
+                guard let raw = try? await item.loadTransferable(type: Data.self),
+                      let jpeg = downscaledJPEG(raw) else { message = "อ่านรูปไม่สำเร็จ"; return }
+                do { try await onPick(jpeg); message = nil } catch { message = error.localizedDescription }
+            }
+        }
+    }
+}
+
+/// Photo header for a day: the picture, a gradient and "DAY n · date · city" with the title.
+private struct DayHeroView: View {
+    let day: TripItineraryDay
+    let imageName: String
+    var height: CGFloat = 150
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            Color(hex: "#151D32")
+                .overlay(Image(imageName).resizable().scaledToFill())
+                .clipped()
+            LinearGradient(colors: [.clear, Color(hex: "#071126").opacity(0.55), Color(hex: "#071126").opacity(0.94)],
+                           startPoint: .top, endPoint: .bottom)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(["DAY \(day.dayNumber)", day.date, day.city].compactMap { $0 }.joined(separator: " · ").uppercased())
+                    .font(.system(size: 10, weight: .bold)).tracking(0.8).foregroundColor(.brand300)
+                Text(day.title ?? "วันที่ \(day.dayNumber)")
+                    .font(.system(size: 20, weight: .bold)).foregroundColor(.white).lineLimit(2)
+            }
+            .padding(14)
+        }
+        .frame(height: height)
+        .frame(maxWidth: .infinity)
+        .clipped()
+    }
+}
+
+/// One itinerary line in the plan: icon, time, title, place, notes, status and (for bookings) the amount.
+private struct DayItemRow: View {
+    let item: TripItineraryItem
+    var onEdit: (() -> Void)? = nil
+    let onDelete: () -> Void
+
+    private var statusLabel: (text: String, tint: Color)? {
+        switch item.status {
+        case "confirmed": return ("ยืนยันแล้ว", .green)
+        case "optional": return ("ตัวเลือก", .orange)
+        case "cancelled": return ("ยกเลิก", .red)
+        default: return nil
+        }
+    }
+
+    var body: some View {
+        let style = journeyItemStyle(item.type)
+        HStack(alignment: .top, spacing: 11) {
+            Image(systemName: style.icon)
+                .font(.system(size: 14, weight: .bold)).foregroundColor(style.tint)
+                .frame(width: 32, height: 32)
+                .background(style.tint.opacity(0.16), in: RoundedRectangle(cornerRadius: 10))
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    if let time = item.timeFrom {
+                        Text(String(time.prefix(5))).font(.system(size: 11, weight: .bold)).foregroundColor(.brand300)
+                    }
+                    Text(item.title).font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
+                }
+                if let place = item.location, !place.isEmpty {
+                    Text(place).font(.system(size: 11)).foregroundColor(Color(hex: "#9CA9C4")).lineLimit(1)
+                }
+                if let notes = item.notes, !notes.isEmpty {
+                    Text(notes).font(.system(size: 11)).foregroundColor(Color(hex: "#C9D3E8")).lineLimit(3)
+                }
+                HStack(spacing: 6) {
+                    if let status = statusLabel {
+                        Text(status.text).font(.system(size: 9, weight: .bold)).foregroundColor(status.tint)
+                            .padding(.horizontal, 7).padding(.vertical, 2.5)
+                            .background(status.tint.opacity(0.16), in: Capsule())
+                    }
+                    if let amount = item.amount, amount > 0 {
+                        Text((item.currency == "JPY" ? "¥" : "") + amount.formatted(.number.precision(.fractionLength(0))))
+                            .font(.system(size: 10, weight: .semibold)).foregroundColor(Color(hex: "#9CA9C4"))
+                    }
+                    if let code = item.confirmationCode, !code.isEmpty {
+                        Text("#\(code)").font(.system(size: 10, weight: .medium)).foregroundColor(.brand300)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+            if onEdit != nil {
+                Image(systemName: "pencil").font(.system(size: 11, weight: .semibold)).foregroundColor(Color(hex: "#7C879F"))
+                    .frame(width: 24, height: 30)
+            }
+            Button(action: onDelete) {
+                Image(systemName: "trash").font(.system(size: 12)).foregroundColor(Color(hex: "#7C879F"))
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("ลบรายการ")
+        }
+        .padding(11)
+        .background(Color(hex: "#151D32"), in: RoundedRectangle(cornerRadius: 14))
+        .contentShape(RoundedRectangle(cornerRadius: 14))
+        .onTapGesture { onEdit?() }
+    }
+}
+
+/// A day's full page: big picture on top, the day's plan underneath, with
+/// the same add / remove controls as the plan tab.
+private struct DayDetailSheet: View {
+    let day: TripItineraryDay?
+    let imageName: String
+    let actions: ItineraryActions
+    let onOpenPlan: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var showImage = false
+    @State private var editorTarget: ItineraryEditorTarget?
+    @State private var pendingDelete: TripItineraryItem?
+    @State private var errorText: String?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    if let day {
+                        DayHeroView(day: day, imageName: imageName, height: 260)
+                            .clipShape(RoundedRectangle(cornerRadius: 18))
+                            .overlay(alignment: .topTrailing) {
+                                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                    .font(.system(size: 12, weight: .bold)).foregroundColor(.white)
+                                    .frame(width: 30, height: 30).background(.black.opacity(0.45), in: Circle())
+                                    .padding(10)
+                            }
+                            .overlay(alignment: .topLeading) {
+                                Button { editorTarget = .editDay(day) } label: {
+                                    Label("แก้ไขวัน", systemImage: "pencil")
+                                        .font(.system(size: 11, weight: .semibold)).foregroundColor(.white)
+                                        .padding(.horizontal, 10).padding(.vertical, 6)
+                                        .background(.black.opacity(0.45), in: Capsule())
+                                }
+                                .buttonStyle(.plain).padding(10)
+                            }
+                            .onTapGesture { showImage = true }
+
+                        if let summary = day.summary, !summary.isEmpty {
+                            Text(summary).font(.system(size: 13)).foregroundColor(Color(hex: "#C9D3E8"))
+                        }
+
+                        HStack {
+                            Text("รายการของวัน (\((day.items ?? []).count))")
+                                .font(.system(size: 15, weight: .bold)).foregroundColor(.white)
+                            Spacer()
+                            Button { editorTarget = .addItem(day) } label: {
+                                Label("เพิ่มรายการ", systemImage: "plus.circle.fill")
+                                    .font(.system(size: 12, weight: .semibold)).foregroundColor(.brand300)
+                            }
+                        }
+                        VStack(spacing: 8) {
+                            ForEach(day.items ?? []) { item in
+                                DayItemRow(item: item, onEdit: { editorTarget = .editItem(item, day) }) { pendingDelete = item }
+                            }
+                            if (day.items ?? []).isEmpty {
+                                Text("ยังไม่มีรายการในวันนี้").font(.system(size: 12)).foregroundColor(Color(hex: "#9CA9C4"))
+                                    .frame(maxWidth: .infinity).padding(.vertical, 18)
+                            }
+                        }
+                        Button { onOpenPlan() } label: {
+                            Label("เปิดแผนทั้งหมด", systemImage: "calendar")
+                                .font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
+                                .frame(maxWidth: .infinity).padding(13)
+                                .background(Color.brand500, in: RoundedRectangle(cornerRadius: 14))
+                        }
+                    } else {
+                        Text("ยังไม่มีแผนเดินทาง").font(.system(size: 18, weight: .bold)).foregroundColor(.white)
+                        Text("เพิ่มวันแรกในแท็บแผน แล้วรายละเอียดของวันจะแสดงที่นี่")
+                            .font(.system(size: 13)).foregroundColor(Color(hex: "#9CA9C4"))
+                    }
+                }
+                .padding(16)
+            }
+            .background(Color(hex: "#080C1A").ignoresSafeArea())
+            .navigationTitle("รายละเอียดวัน").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("ปิด") { dismiss() } } }
+            .fullScreenCover(isPresented: $showImage) {
+                ProfileImageViewer(assetName: imageName, title: day?.title)
+            }
+            .itineraryEditor(target: $editorTarget, actions: actions)
+            .confirmationDialog("ลบรายการนี้?", isPresented: Binding(
+                get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }), titleVisibility: .visible) {
+                Button("ลบ \(pendingDelete?.title ?? "")", role: .destructive) {
+                    if let target = pendingDelete {
+                        Task { do { try await actions.removeItem(target.id) } catch { errorText = error.localizedDescription } }
+                    }
+                    pendingDelete = nil
+                }
+                Button("ยกเลิก", role: .cancel) { pendingDelete = nil }
+            }
+            .alert("ทำรายการไม่สำเร็จ", isPresented: .constant(errorText != nil)) {
+                Button("ตกลง") { errorText = nil }
+            } message: { Text(errorText ?? "") }
+        }
+        .preferredColorScheme(.dark)
+    }
+}
+
+/// A traveller's profile page: the photo (tap for full screen), their role, and
+/// editing of the photo, name, role and share setting.
+private struct CrewProfileSheet: View {
+    let crew: KyushuCrew
+    let participant: TripParticipant?
+    let avatarURL: URL?
+    let save: (String, String, String?, String?, Data?, Bool) async throws -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var showViewer = false
+    @State private var editing: TripParticipant?
+
+    private var role: String { participant?.tripRole.flatMap { $0.isEmpty ? nil : $0 } ?? crew.role }
+    private var displayName: String { participant?.displayName ?? crew.name }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 16) {
+                    portrait
+                        .overlay(Circle().stroke(Color.brand300.opacity(0.7), lineWidth: 2))
+                        .shadow(color: .black.opacity(0.35), radius: 14, y: 6)
+                        .overlay(alignment: .bottomTrailing) {
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .font(.system(size: 12, weight: .bold)).foregroundColor(.white)
+                                .frame(width: 32, height: 32).background(Color.brand500, in: Circle())
+                        }
+                        .onTapGesture { showViewer = true }
+                        .padding(.top, 8)
+
+                    VStack(spacing: 4) {
+                        Text(crew.name).font(.system(size: 24, weight: .bold)).foregroundColor(.white)
+                        if displayName != crew.name {
+                            Text(displayName).font(.system(size: 13)).foregroundColor(Color(hex: "#9CA9C4"))
+                        }
+                        Text(role).font(.system(size: 12, weight: .semibold)).foregroundColor(.brand300)
+                            .padding(.horizontal, 12).padding(.vertical, 5)
+                            .background(Color.brand500.opacity(0.18), in: Capsule())
+                    }
+
+                    if let participant {
+                        VStack(alignment: .leading, spacing: 10) {
+                            infoRow("person.crop.circle", participant.isHost ? "Host ของทริป" : "ผู้ร่วมเดินทาง")
+                            infoRow(participant.profileSharedWithTrip ? "eye.fill" : "eye.slash.fill",
+                                    participant.profileSharedWithTrip ? "แชร์รูปและบทบาทให้ทีม" : "รูปและบทบาทแสดงเฉพาะเจ้าของ/โฮสต์")
+                        }
+                        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(hex: "#151D32"), in: RoundedRectangle(cornerRadius: 15))
+
+                        Button { editing = participant } label: {
+                            Label("เปลี่ยนรูป / แก้ไข Profile", systemImage: "pencil.circle.fill")
+                                .font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
+                                .frame(maxWidth: .infinity).padding(13)
+                                .background(Color.brand500, in: RoundedRectangle(cornerRadius: 14))
+                        }
+                    } else {
+                        Text("ยังไม่พบสมาชิกในทริปที่ตรงกับ \(crew.name) — เพิ่มสมาชิกที่แท็บทีมก่อน จึงจะเปลี่ยนรูปหรือแก้ไข Profile ได้")
+                            .font(.system(size: 12)).foregroundColor(Color(hex: "#9CA9C4"))
+                            .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color(hex: "#151D32"), in: RoundedRectangle(cornerRadius: 15))
+                    }
+                }
+                .padding(16)
+            }
+            .background(Color(hex: "#080C1A").ignoresSafeArea())
+            .navigationTitle("Profile").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("ปิด") { dismiss() } } }
+            .fullScreenCover(isPresented: $showViewer) {
+                if let avatarURL { ProfileImageViewer(url: avatarURL, title: crew.name) }
+                else { ProfileImageViewer(assetName: crew.imageName, title: crew.name) }
+            }
+            .sheet(item: $editing) { member in
+                TripProfileEditorSheet(member: member, save: save)
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    @ViewBuilder private var portrait: some View {
+        if let avatarURL {
+            Color(hex: "#151D32")
+                .frame(width: 190, height: 190)
+                .overlay(
+                    AsyncImage(url: avatarURL) { phase in
+                        if let image = phase.image { image.resizable().scaledToFill() }
+                        else { CrewPortrait(crew: crew, diameter: 190, zoom: 1.9) }
+                    }
+                )
+                .clipShape(Circle())
+        } else {
+            CrewPortrait(crew: crew, diameter: 190, zoom: 1.9)
+        }
+    }
+
+    private func infoRow(_ icon: String, _ text: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon).foregroundColor(.brand300).frame(width: 22)
+            Text(text).font(.system(size: 13)).foregroundColor(.white)
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+/// An identity tag, enlarged, with its name, animal and picture editable.
+private struct IdentityTagSheet: View {
+    let crew: KyushuCrew
+    let state: IdentityTagState
+    let save: (String, String, Data?) async throws -> Void
+    let reset: () async throws -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String
+    @State private var animal: String
+    @State private var pick: PhotosPickerItem?
+    @State private var picked: UIImage?
+    @State private var pickedData: Data?
+    @State private var showViewer = false
+    @State private var saving = false
+    @State private var errorText: String?
+
+    init(crew: KyushuCrew, state: IdentityTagState,
+         save: @escaping (String, String, Data?) async throws -> Void,
+         reset: @escaping () async throws -> Void) {
+        self.crew = crew
+        self.state = state
+        self.save = save
+        self.reset = reset
+        _name = State(initialValue: state.name)
+        _animal = State(initialValue: state.animal)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    HStack {
+                        Spacer()
+                        Color(hex: "#181F3A")
+                            .frame(width: 220, height: 220)
+                            .overlay(picture)
+                            .clipShape(RoundedRectangle(cornerRadius: 20))
+                            .overlay(alignment: .bottomTrailing) {
+                                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                    .font(.system(size: 12, weight: .bold)).foregroundColor(.white)
+                                    .frame(width: 30, height: 30).background(.black.opacity(0.5), in: Circle())
+                                    .padding(8)
+                            }
+                            .onTapGesture { showViewer = true }
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
+                    PhotosPicker(selection: $pick, matching: .images) {
+                        Label("เปลี่ยนรูปแท็ก", systemImage: "photo.badge.plus")
+                    }
+                    if state.isCustomImage || pickedData != nil {
+                        Button("กลับไปใช้รูปเริ่มต้น", role: .destructive) {
+                            Task {
+                                saving = true; defer { saving = false }
+                                do { try await reset(); dismiss() } catch { errorText = error.localizedDescription }
+                            }
+                        }
+                    }
+                }
+                Section("ข้อมูลแท็ก") {
+                    TextField("ชื่อบนแท็ก", text: $name)
+                    TextField("สัตว์ประจำตัว", text: $animal)
+                }
+                if let errorText { Section { Text(errorText).foregroundColor(.red) } }
+            }
+            .navigationTitle("Identity tag").navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("ปิด") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(saving ? "กำลังบันทึก…" : "บันทึก") {
+                        Task {
+                            saving = true; defer { saving = false }
+                            do {
+                                try await save(name.trimmingCharacters(in: .whitespacesAndNewlines),
+                                               animal.trimmingCharacters(in: .whitespacesAndNewlines), pickedData)
+                                dismiss()
+                            } catch { errorText = error.localizedDescription }
+                        }
+                    }
+                    .disabled(saving || name.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            .fullScreenCover(isPresented: $showViewer) {
+                if let picked { PickedImageViewer(image: picked, title: name) }
+                else if let url = state.imageURL { ProfileImageViewer(url: url, title: name) }
+                else { ProfileImageViewer(assetName: crew.mascotImage, title: name) }
+            }
+            .onChange(of: pick) { _, item in
+                Task {
+                    guard let raw = try? await item?.loadTransferable(type: Data.self),
+                          let jpeg = downscaledJPEG(raw, maxSide: 1400), let image = UIImage(data: jpeg) else { return }
+                    picked = image
+                    pickedData = jpeg
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var picture: some View {
+        if let picked {
+            Image(uiImage: picked).resizable().scaledToFit()
+        } else if let url = state.imageURL {
+            AsyncImage(url: url) { phase in
+                if let image = phase.image { image.resizable().scaledToFit() }
+                else { Image(crew.mascotImage).resizable().scaledToFit() }
+            }
+        } else {
+            Image(crew.mascotImage).resizable().scaledToFit()
+        }
+    }
+}
+
+/// Full-screen zoomable view of an image that is still only in memory.
+private struct PickedImageViewer: View {
+    let image: UIImage
+    let title: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+            ZoomableImage(image: image)
+            Button { dismiss() } label: {
+                Image(systemName: "xmark.circle.fill").font(.system(size: 30))
+                    .symbolRenderingMode(.palette).foregroundStyle(.white, .white.opacity(0.28))
+            }
+            .padding(16)
+        }
+    }
+}
+
+/// Swipe through the gallery images, one per page.
+private struct TripImagePager: View {
+    let items: [PagerItem]
+    @State private var index: Int
+    @Environment(\.dismiss) private var dismiss
+
+    init(items: [PagerItem], start: Int) {
+        self.items = items
+        _index = State(initialValue: min(max(start, 0), max(items.count - 1, 0)))
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            TabView(selection: $index) {
+                ForEach(Array(items.enumerated()), id: \.offset) { position, item in
+                    page(item).tag(position)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .automatic))
+            .ignoresSafeArea()
+
+            VStack {
+                HStack {
+                    Text("\(index + 1) / \(items.count)")
+                        .font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
+                        .padding(.horizontal, 10).padding(.vertical, 5).background(.black.opacity(0.45), in: Capsule())
+                    Spacer()
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark.circle.fill").font(.system(size: 30))
+                            .symbolRenderingMode(.palette).foregroundStyle(.white, .white.opacity(0.28))
+                    }
+                }
+                .padding(.horizontal, 16).padding(.top, 8)
+                Spacer()
+                if items.indices.contains(index) {
+                    VStack(spacing: 3) {
+                        if let title = items[index].title, !title.isEmpty {
+                            Text(title).font(.system(size: 16, weight: .semibold)).foregroundColor(.white)
+                        }
+                        if let subtitle = items[index].subtitle {
+                            Text(subtitle).font(.system(size: 12)).foregroundColor(.white.opacity(0.8))
+                        }
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 8)
+                    .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.bottom, 44)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func page(_ item: PagerItem) -> some View {
+        switch item {
+        case .asset(let name, _, _):
+            Image(name).resizable().scaledToFit()
+        case .remote(let url, _):
+            AsyncImage(url: url) { phase in
+                if let image = phase.image { image.resizable().scaledToFit() }
+                else if phase.error != nil { Image(systemName: "photo.badge.exclamationmark").font(.system(size: 40)).foregroundColor(.white.opacity(0.7)) }
+                else { ProgressView().tint(.white) }
+            }
+        }
+    }
+}
+
+// MARK: – Checklist, budget and reminders
+
+/// Pre-trip checklist grouped by category; tapping a row toggles it.
+private struct TripChecklistSheet: View {
+    let trip: Trip
+    @Environment(\.dismiss) private var dismiss
+    @State private var items: [TripChecklistItem] = []
+    @State private var loading = true
+    @State private var errorText: String?
+
+    private var categories: [String] {
+        var seen: [String] = []
+        for item in items.sorted(by: { $0.sortOrder < $1.sortOrder }) {
+            let name = item.category ?? "อื่นๆ"
+            if !seen.contains(name) { seen.append(name) }
+        }
+        return seen
+    }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if loading {
+                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if items.isEmpty {
+                    ContentUnavailableView("ยังไม่มีเช็กลิสต์", systemImage: "checklist")
+                } else {
+                    List {
+                        Section {
+                            let done = items.filter(\.isDone).count
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("เสร็จแล้ว \(done) / \(items.count)").font(.system(size: 14, weight: .semibold))
+                                ProgressView(value: Double(done), total: Double(max(items.count, 1))).tint(.green)
+                            }
+                        }
+                        ForEach(categories, id: \.self) { category in
+                            Section(category) {
+                                ForEach(items.filter { ($0.category ?? "อื่นๆ") == category }.sorted { $0.sortOrder < $1.sortOrder }) { item in
+                                    Button { Task { await toggle(item) } } label: {
+                                        HStack(alignment: .top, spacing: 10) {
+                                            Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
+                                                .foregroundColor(item.isDone ? .green : .secondary)
+                                            Text(item.title)
+                                                .font(.system(size: 14))
+                                                .strikethrough(item.isDone)
+                                                .foregroundColor(item.isDone ? .secondary : .primary)
+                                                .multilineTextAlignment(.leading)
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("เช็กลิสต์").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("ปิด") { dismiss() } } }
+            .alert("บันทึกไม่สำเร็จ", isPresented: .constant(errorText != nil)) {
+                Button("ตกลง") { errorText = nil }
+            } message: { Text(errorText ?? "") }
+            .task { await load() }
+        }
+    }
+
+    private func load() async {
+        loading = true
+        defer { loading = false }
+        do { items = try await TripItineraryAPI.loadChecklist(journeyId: trip.id) }
+        catch { errorText = error.localizedDescription }
+    }
+
+    private func toggle(_ item: TripChecklistItem) async {
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        let newValue = !items[index].isDone
+        items[index].isDone = newValue
+        hapticLight()
+        do { try await TripItineraryAPI.setChecked(itemId: item.id, done: newValue) }
+        catch {
+            items[index].isDone = !newValue
+            errorText = error.localizedDescription
+        }
+    }
+}
+
+/// Planned budget (from `life_journeys.metadata.budget_plan`), shown beside the
+/// settlement figures; it is a plan, not recorded spending.
+private struct BudgetPlanView: View {
+    let plan: [String: AnyJSON]
+
+    private func number(_ value: AnyJSON?) -> Double? { value?.doubleValue ?? value?.intValue.map(Double.init) }
+    private func thb(_ value: Double?) -> String { value.map { "฿" + $0.formatted(.number.precision(.fractionLength(0))) } ?? "—" }
+
+    var body: some View {
+        let items = plan["items"]?.arrayValue?.compactMap(\.objectValue) ?? []
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("งบประมาณทริป", systemImage: "banknote.fill")
+                    .font(.system(size: 16, weight: .bold)).foregroundColor(.white)
+                Spacer()
+                Text("\(plan["people"]?.intValue ?? 0) คน").font(.system(size: 11, weight: .semibold)).foregroundColor(.brand300)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(thb(number(plan["total_thb_min"]))) – \(thb(number(plan["total_thb_max"])))")
+                    .font(.system(size: 20, weight: .heavy)).foregroundColor(.white)
+                Text("ต่อคน \(thb(number(plan["per_person_thb_min"]))) – \(thb(number(plan["per_person_thb_max"])))")
+                    .font(.system(size: 11)).foregroundColor(Color(hex: "#9CA9C4"))
+            }
+            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                let status = item["status"]?.stringValue ?? "estimate"
+                let low = number(item["thb_min"]), high = number(item["thb_max"])
+                HStack {
+                    Text(item["label"]?.stringValue ?? "").font(.system(size: 12)).foregroundColor(.white)
+                    Spacer()
+                    Text(low == high ? thb(low) : "\(thb(low)) – \(thb(high))")
+                        .font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
+                    Text(status == "paid" ? "จ่ายแล้ว" : status == "unpaid" ? "ยังไม่จ่าย" : "ประมาณ")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(status == "paid" ? .green : status == "unpaid" ? .orange : Color(hex: "#9CA9C4"))
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background((status == "paid" ? Color.green : status == "unpaid" ? Color.orange : Color.gray).opacity(0.16), in: Capsule())
+                }
+            }
+            if let note = plan["note"]?.stringValue {
+                Text(note).font(.system(size: 10)).foregroundColor(Color(hex: "#9CA9C4"))
+            }
+        }
+        .padding(14).background(Color(hex: "#0E1527")).clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+}
+
+/// Local (on-device) notifications for the trip's reminders. They live in
+/// `life_journeys.metadata.reminders`; turning the switch on schedules the ones
+/// still in the future, turning it off removes them. Nothing is sent to a server.
+@MainActor
+enum TripReminderScheduler {
+    struct Reminder: Identifiable {
+        let id: String
+        let title: String
+        let body: String
+        let fireAt: Date
+    }
+
+    static func parse(_ json: AnyJSON?) -> [Reminder] {
+        let formatter = ISO8601DateFormatter()
+        return (json?.arrayValue ?? []).compactMap { entry -> Reminder? in
+            guard let object = entry.objectValue,
+                  let id = object["id"]?.stringValue,
+                  let title = object["title"]?.stringValue,
+                  let when = object["fire_at"]?.stringValue,
+                  let date = formatter.date(from: when) else { return nil }
+            return Reminder(id: id, title: title, body: object["body"]?.stringValue ?? "", fireAt: date)
+        }
+        .sorted { $0.fireAt < $1.fireAt }
+    }
+
+    private static func key(_ tripId: String) -> String { "tripReminders.\(tripId)" }
+    private static func identifier(_ tripId: String, _ id: String) -> String { "trip.\(tripId).\(id)" }
+
+    static func isEnabled(tripId: String) -> Bool { UserDefaults.standard.bool(forKey: key(tripId)) }
+
+    static func enable(tripId: String, reminders: [Reminder]) async -> Bool {
+        let center = UNUserNotificationCenter.current()
+        let granted = (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+        guard granted else { return false }
+        UserDefaults.standard.set(true, forKey: key(tripId))
+        await resync(tripId: tripId, reminders: reminders)
+        return true
+    }
+
+    static func disable(tripId: String) {
+        UserDefaults.standard.set(false, forKey: key(tripId))
+        let center = UNUserNotificationCenter.current()
+        Task {
+            let pending = await center.pendingNotificationRequests()
+            center.removePendingNotificationRequests(
+                withIdentifiers: pending.map(\.identifier).filter { $0.hasPrefix("trip.\(tripId).") })
+        }
+    }
+
+    /// Replaces this trip's pending reminders with the current list.
+    static func resync(tripId: String, reminders: [Reminder]) async {
+        let center = UNUserNotificationCenter.current()
+        let pending = await center.pendingNotificationRequests()
+        center.removePendingNotificationRequests(
+            withIdentifiers: pending.map(\.identifier).filter { $0.hasPrefix("trip.\(tripId).") })
+        for reminder in reminders where reminder.fireAt > Date() {
+            let content = UNMutableNotificationContent()
+            content.title = reminder.title
+            content.body = reminder.body
+            content.sound = .default
+            let parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: reminder.fireAt)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: parts, repeats: false)
+            try? await center.add(UNNotificationRequest(identifier: identifier(tripId, reminder.id), content: content, trigger: trigger))
+        }
+    }
+}
+
+
+// MARK: – Trip money page (expenses, settlement, travellers) in the trip's dark theme
+
+/// The workspace's "ค่าใช้จ่าย" tab. Same data and sheets as the older
+/// TripDetailView (add expense, record/confirm payments, add traveller) in the
+/// same navy cards as the overview and plan, instead of the light adaptive page.
+private struct TripMoneyView: View {
+    @EnvironmentObject private var authVM: AuthViewModel
+    @StateObject private var vm = TripsViewModel()
+    @State private var trip: Trip
+    @State private var section: MoneySection = .expenses
+    @State private var expandedId: String?
+    @State private var showAddExpense = false
+    @State private var showAddParticipant = false
+    @State private var payTarget: TripDetailView.PayTarget?
+
+    enum MoneySection: String, CaseIterable, Identifiable {
+        case expenses = "รายจ่าย", settlement = "สรุปยอด", people = "ผู้ร่วมทริป"
+        var id: String { rawValue }
+    }
+
+    init(trip: Trip) { _trip = State(initialValue: trip) }
+
+    private let card = Color(hex: "#0E1527")
+    private let inner = Color(hex: "#151D32")
+    private let muted = Color(hex: "#9CA9C4")
+
+    private var participants: [TripParticipant] { trip.participants ?? [] }
+    private var expenses: [TripExpense] { trip.expenses ?? [] }
+    private var byId: [String: TripParticipant] { Dictionary(uniqueKeysWithValues: participants.map { ($0.id, $0) }) }
+    private var isSettled: Bool { vm.settlement.isEmpty && trip.computedTotal > 0 }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 14) {
+                hero
+                pills
+                switch section {
+                case .expenses: expensesSection
+                case .settlement: settlementSection
+                case .people: peopleSection
+                }
+                NavigationLink { TripDetailView(trip: trip).environmentObject(authVM) } label: {
+                    Label("เครื่องมืออื่น: นำเข้าเอกสาร · ส่งออก PDF · โทรกลุ่ม", systemImage: "wrench.and.screwdriver")
+                        .font(.system(size: 11, weight: .medium)).foregroundColor(muted)
+                        .frame(maxWidth: .infinity).padding(.vertical, 12)
+                        .background(card.opacity(0.7), in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(16)
+        }
+        .environment(\.colorScheme, .dark)
+        .sheet(isPresented: $showAddExpense) {
+            AddExpenseSheet(journeyId: trip.id, userId: authVM.session?.user.id.uuidString ?? "", participants: participants) {
+                Task { await reload() }
+            }
+        }
+        .sheet(isPresented: $showAddParticipant) {
+            TripAddParticipantSheet(journeyId: trip.id, totalExpenses: trip.computedTotal, participantCount: participants.count) { _ in
+                Task { await reload() }
+            }
+        }
+        .sheet(item: $payTarget) { target in
+            PaySheet(target: target) { note in
+                Task {
+                    try? await vm.recordPayment(journeyId: trip.id, from: target.from.id, to: target.to.id, amount: target.amount, note: note)
+                    payTarget = nil
+                    await reload()
+                }
+            }
+        }
+        .task { await reload() }
+        .refreshable { await reload() }
+    }
+
+    // MARK: – Hero
+
+    private var hero: some View {
+        let total = trip.computedTotal
+        let paid = trip.totalPaid
+        let share = participants.isEmpty ? 0 : total / Double(participants.count)
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("รวมค่าใช้จ่ายทั้งทริป").font(.system(size: 10, weight: .bold)).tracking(1).foregroundColor(.brand300)
+                Spacer()
+                Text("\(participants.count) คน").font(.system(size: 11, weight: .semibold)).foregroundColor(muted)
+            }
+            Text(fmtTHB(total)).font(.system(size: 34, weight: .heavy)).foregroundColor(.white)
+            ProgressView(value: min(paid, max(total, 1)), total: max(total, 1)).tint(.green)
+            HStack(spacing: 8) {
+                stat("จ่ายแล้ว", fmtTHB(paid), .green)
+                stat("ค้างชำระ", fmtTHB(trip.totalRemaining), trip.totalRemaining > 0 ? .orange : .green)
+                stat("เฉลี่ยต่อคน", fmtTHB(share), .brand300)
+            }
+        }
+        .padding(16)
+        .background(LinearGradient(colors: [Color(hex: "#18244A"), card], startPoint: .topLeading, endPoint: .bottomTrailing),
+                    in: RoundedRectangle(cornerRadius: 22))
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.brand300.opacity(0.3), lineWidth: 1))
+    }
+
+    private func stat(_ label: String, _ value: String, _ tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value).font(.system(size: 14, weight: .bold)).foregroundColor(tint).lineLimit(1).minimumScaleFactor(0.7)
+            Text(label).font(.system(size: 10)).foregroundColor(muted)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10).background(inner, in: RoundedRectangle(cornerRadius: 13))
+    }
+
+    private var pills: some View {
+        HStack(spacing: 6) {
+            ForEach(MoneySection.allCases) { item in
+                Button { withAnimation(.easeInOut(duration: 0.18)) { section = item } } label: {
+                    Text(item.rawValue).font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(section == item ? .white : muted)
+                        .frame(maxWidth: .infinity).padding(.vertical, 9)
+                        .background(section == item ? Color.brand500 : inner, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func sectionHeader(_ title: String, _ action: String, _ icon: String, _ run: @escaping () -> Void) -> some View {
+        HStack {
+            Text(title).font(.system(size: 15, weight: .bold)).foregroundColor(.white)
+            Spacer()
+            Button { hapticLight(); run() } label: {
+                Label(action, systemImage: icon).font(.system(size: 12, weight: .semibold)).foregroundColor(.brand300)
+            }
+        }
+    }
+
+    private func empty(_ icon: String, _ text: String) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon).font(.system(size: 26)).foregroundColor(muted)
+            Text(text).font(.system(size: 12)).foregroundColor(muted)
+        }
+        .frame(maxWidth: .infinity).padding(.vertical, 28)
+        .background(card, in: RoundedRectangle(cornerRadius: 18))
+    }
+
+    // MARK: – Expenses
+
+    private func categoryStyle(_ category: String?) -> (icon: String, tint: Color) {
+        switch category {
+        case "food": return ("fork.knife", .orange)
+        case "transport": return ("tram.fill", .statusProcessing)
+        case "accommodation", "hotel": return ("bed.double.fill", .statusPushed)
+        case "shopping": return ("bag.fill", .pink)
+        case "activity", "ticket": return ("ticket.fill", .statusApproved)
+        default: return ("creditcard.fill", .brand300)
+        }
+    }
+
+    private var expensesSection: some View {
+        VStack(spacing: 10) {
+            sectionHeader("รายจ่าย (\(expenses.count))", "เพิ่มรายจ่าย", "plus.circle.fill") { showAddExpense = true }
+            if expenses.isEmpty {
+                empty("receipt", "ยังไม่มีรายจ่าย — เพิ่มรายการแรกเพื่อเริ่มหารค่าใช้จ่าย")
+            } else {
+                ForEach(expenses) { expense in expenseCard(expense) }
+            }
+        }
+    }
+
+    private func expenseCard(_ expense: TripExpense) -> some View {
+        let style = categoryStyle(expense.category)
+        return VStack(spacing: 0) {
+            Button { hapticLight(); withAnimation { expandedId = expandedId == expense.id ? nil : expense.id } } label: {
+                HStack(spacing: 11) {
+                    Image(systemName: style.icon).font(.system(size: 14, weight: .bold)).foregroundColor(style.tint)
+                        .frame(width: 36, height: 36).background(style.tint.opacity(0.16), in: RoundedRectangle(cornerRadius: 11))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(expense.title).font(.system(size: 14, weight: .semibold)).foregroundColor(.white).lineLimit(2)
+                        Text("\(byId[expense.paidById ?? ""]?.displayName ?? "—") จ่าย · \(String(expense.createdAt.prefix(10)))")
+                            .font(.system(size: 11)).foregroundColor(muted)
+                    }
+                    Spacer(minLength: 6)
+                    VStack(alignment: .trailing, spacing: 2) {
+                        // baseAmount, not amount: a ¥35,600 ticket must not read as "฿35,600".
+                        Text(fmtTHB(expense.baseAmount)).font(.system(size: 14, weight: .bold)).foregroundColor(.white)
+                        if let original = expense.originalAmount(tripCurrency: trip.baseCurrency ?? "THB") {
+                            Text(original).font(.system(size: 10)).foregroundColor(muted)
+                        }
+                    }
+                    Image(systemName: expandedId == expense.id ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10)).foregroundColor(muted)
+                }
+                .padding(13)
+            }
+            .buttonStyle(.plain)
+
+            if expandedId == expense.id {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("แบ่งกัน \(expense.splitModeLabel)").font(.system(size: 11, weight: .semibold)).foregroundColor(.brand300)
+                    ForEach(expense.expenseSplits ?? []) { split in
+                        HStack {
+                            Text(byId[split.participantId]?.displayName ?? "—")
+                                .font(.system(size: 12)).foregroundColor(split.isPaid ? muted : .white)
+                                .strikethrough(split.isPaid)
+                            Spacer()
+                            Text(fmtTHB(split.amount)).font(.system(size: 12, weight: .semibold)).foregroundColor(split.isPaid ? muted : .white)
+                        }
+                    }
+                }
+                .padding(.horizontal, 13).padding(.bottom, 13)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .background(card, in: RoundedRectangle(cornerRadius: 18))
+    }
+
+    // MARK: – Settlement
+
+    private var settlementSection: some View {
+        VStack(spacing: 10) {
+            if isSettled {
+                VStack(spacing: 6) {
+                    Text("🎉").font(.system(size: 40))
+                    Text("เคลียร์แล้วทุกคน!").font(.system(size: 16, weight: .bold)).foregroundColor(.green)
+                }
+                .frame(maxWidth: .infinity).padding(.vertical, 36)
+                .background(card, in: RoundedRectangle(cornerRadius: 18))
+            } else if vm.settlement.isEmpty {
+                empty("arrow.left.arrow.right", "ยังไม่มียอดต้องโอน")
+            } else {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "lightbulb.fill").font(.system(size: 12)).foregroundColor(.orange)
+                    Text("ยอดโอนที่น้อยที่สุดเพื่อเคลียร์หนี้ทั้งทริป — แตะรายการเมื่อโอนแล้วเพื่อบันทึก")
+                        .font(.system(size: 11)).foregroundColor(.orange)
+                }
+                .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                ForEach(vm.settlement) { row in settlementRow(row) }
+            }
+            if !vm.payments.isEmpty { paymentsHistory }
+        }
+    }
+
+    private func initials(_ name: String) -> some View {
+        Text(String(name.prefix(1)).uppercased()).font(.system(size: 12, weight: .bold)).foregroundColor(.white)
+            .frame(width: 32, height: 32).background(Color.brand600, in: Circle())
+    }
+
+    private func settlementRow(_ row: TripSettlement) -> some View {
+        let from = byId[row.fromId], to = byId[row.toId]
+        return Button {
+            guard let from, let to else { return }
+            hapticLight()
+            payTarget = TripDetailView.PayTarget(from: from, to: to, amount: row.amount)
+        } label: {
+            HStack(spacing: 10) {
+                initials(row.fromName)
+                Image(systemName: "arrow.right").font(.system(size: 11, weight: .bold)).foregroundColor(.brand300)
+                initials(row.toName)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("\(row.fromName) → \(row.toName)").font(.system(size: 13, weight: .semibold)).foregroundColor(.white).lineLimit(1)
+                    Text("แตะเพื่อบันทึกการโอน").font(.system(size: 10)).foregroundColor(muted)
+                }
+                Spacer(minLength: 4)
+                Text(fmtTHB(row.amount)).font(.system(size: 15, weight: .heavy)).foregroundColor(.brand300)
+            }
+            .padding(13).background(card, in: RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+        .disabled(from == nil || to == nil)
+    }
+
+    private var paymentsHistory: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("ประวัติการโอน").font(.system(size: 12, weight: .semibold)).foregroundColor(muted).padding(.top, 6)
+            ForEach(vm.payments) { payment in
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(byId[payment.fromParticipant]?.displayName ?? "—") → \(byId[payment.toParticipant]?.displayName ?? "—")")
+                            .font(.system(size: 13, weight: .medium)).foregroundColor(.white)
+                        Text(payment.status == "confirmed" ? "ยืนยันแล้ว" : "รอยืนยัน")
+                            .font(.system(size: 11)).foregroundColor(payment.status == "confirmed" ? .green : .orange)
+                    }
+                    Spacer()
+                    Text(fmtTHB(payment.amount)).font(.system(size: 13, weight: .bold)).foregroundColor(.white)
+                    if payment.status == "pending" {
+                        Button("ยืนยันรับ") {
+                            Task {
+                                try? await vm.confirmPayment(paymentId: payment.id, fromParticipantId: payment.fromParticipant,
+                                                             amount: payment.amount, journeyId: trip.id)
+                                await reload()
+                            }
+                        }
+                        .font(.system(size: 11, weight: .semibold)).foregroundColor(.brand300)
+                    }
+                }
+                .padding(12).background(card, in: RoundedRectangle(cornerRadius: 14))
+            }
+        }
+    }
+
+    // MARK: – Travellers
+
+    private var peopleSection: some View {
+        VStack(spacing: 10) {
+            sectionHeader("ผู้ร่วมทริป (\(participants.count))", "เพิ่มคน", "person.badge.plus") { showAddParticipant = true }
+            if participants.isEmpty {
+                empty("person.2.slash", "ยังไม่มีผู้ร่วมทริป")
+            } else {
+                ForEach(participants) { person in personCard(person) }
+            }
+        }
+    }
+
+    private func personCard(_ person: TripParticipant) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 11) {
+                initials(person.displayName)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(person.displayName).font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
+                        if person.isHost {
+                            Text("โฮสต์").font(.system(size: 9, weight: .bold)).foregroundColor(.brand300)
+                                .padding(.horizontal, 6).padding(.vertical, 2).background(Color.brand500.opacity(0.2), in: Capsule())
+                        }
+                    }
+                    Text(person.amountOwed > 0 ? "ต้องจ่าย \(fmtTHB(person.amountOwed))" : "ยังไม่มียอดต้องจ่าย")
+                        .font(.system(size: 11)).foregroundColor(muted)
+                }
+                Spacer()
+                if person.amountOwed > 0 {
+                    if person.isPaid {
+                        Label("จ่ายแล้ว", systemImage: "checkmark.circle.fill").font(.system(size: 11, weight: .semibold)).foregroundColor(.green)
+                    } else {
+                        Text("ค้าง \(fmtTHB(person.remaining))").font(.system(size: 12, weight: .bold)).foregroundColor(.orange)
+                    }
+                }
+            }
+            if person.amountOwed > 0 {
+                ProgressView(value: min(person.amountPaid, person.amountOwed), total: person.amountOwed)
+                    .tint(person.isPaid ? .green : .brand500)
+            }
+        }
+        .padding(13).background(card, in: RoundedRectangle(cornerRadius: 18))
+    }
+
+    private func reload() async {
+        guard let orgId = authVM.org?.id else { return }
+        await vm.load(orgId: orgId)
+        if let updated = vm.trips.first(where: { $0.id == trip.id }) { trip = updated }
+        await vm.loadSettlement(journeyId: trip.id)
+        await vm.loadPayments(journeyId: trip.id)
+    }
+}
+
+// MARK: – Itinerary editor (add / edit a day or a line) in the trip's dark theme
+
+private enum ItineraryEditorTarget: Identifiable {
+    case addDay
+    case editDay(TripItineraryDay)
+    case addItem(TripItineraryDay)
+    case editItem(TripItineraryItem, TripItineraryDay)
+
+    var id: String {
+        switch self {
+        case .addDay: return "addDay"
+        case .editDay(let day): return "editDay-\(day.id)"
+        case .addItem(let day): return "addItem-\(day.id)"
+        case .editItem(let item, _): return "editItem-\(item.id)"
+        }
+    }
+}
+
+private struct DayDraft {
+    var date: String?
+    var title: String?
+    var city: String?
+    var summary: String?
+}
+
+private struct ItineraryActions {
+    let addItem: (String, TripsViewModel.TripItemFields) async throws -> Void
+    let updateItem: (String, TripsViewModel.TripItemFields) async throws -> Void
+    let removeItem: (String) async throws -> Void
+    let addDay: (DayDraft) async throws -> Void
+    let updateDay: (String, DayDraft) async throws -> Void
+}
+
+private extension View {
+    func itineraryEditor(target: Binding<ItineraryEditorTarget?>, actions: ItineraryActions) -> some View {
+        sheet(item: target) { current in
+            switch current {
+            case .addDay: DayEditorSheet(day: nil, actions: actions)
+            case .editDay(let day): DayEditorSheet(day: day, actions: actions)
+            case .addItem(let day): ItemEditorSheet(day: day, item: nil, actions: actions)
+            case .editItem(let item, let day): ItemEditorSheet(day: day, item: item, actions: actions)
+            }
+        }
+    }
+}
+
+private let itineraryTypeChoices: [(id: String, label: String)] = [
+    ("activity", "กิจกรรม"), ("meal", "อาหาร"), ("shopping", "ช้อปปิ้ง"), ("transport", "เดินทาง"),
+    ("shinkansen", "ชินคันเซ็น"), ("car_rental", "รถเช่า"), ("flight", "เที่ยวบิน"), ("hotel", "ที่พัก"),
+    ("booking", "การจอง"), ("other", "อื่นๆ"),
+]
+private let itineraryStatusChoices: [(id: String, label: String)] = [
+    ("planned", "วางแผน"), ("confirmed", "ยืนยันแล้ว"), ("optional", "ตัวเลือก"), ("cancelled", "ยกเลิก"),
+]
+
+private enum FormTheme {
+    static let page = Color(hex: "#080C1A")
+    static let card = Color(hex: "#0E1527")
+    static let field = Color(hex: "#151D32")
+    static let muted = Color(hex: "#9CA9C4")
+}
+
+/// A titled navy card holding form fields.
+private struct FormCard<Content: View>: View {
+    let title: String
+    var icon: String? = nil
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 7) {
+                if let icon { Image(systemName: icon).font(.system(size: 12, weight: .bold)).foregroundColor(.brand300) }
+                Text(title).font(.system(size: 14, weight: .bold)).foregroundColor(.white)
+            }
+            content
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(FormTheme.card, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.brand300.opacity(0.12), lineWidth: 1))
+    }
+}
+
+/// A caption above an input box, in the same sizes used across the trip pages.
+private struct FormField<Content: View>: View {
+    let label: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label).font(.system(size: 11, weight: .semibold)).foregroundColor(FormTheme.muted)
+            content
+        }
+    }
+}
+
+private struct FormTextField: View {
+    let placeholder: String
+    @Binding var text: String
+    var axis: Axis = .horizontal
+    var keyboard: UIKeyboardType = .default
+
+    var body: some View {
+        TextField("", text: $text,
+                  prompt: Text(placeholder).foregroundColor(Color(hex: "#5F6B85")), axis: axis)
+            .font(.system(size: 14)).foregroundColor(.white).tint(.brand300)
+            .keyboardType(keyboard)
+            .lineLimit(axis == .vertical ? 1...5 : 1...1)
+            .padding(12)
+            .background(FormTheme.field, in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+private struct FormChip: View {
+    let title: String
+    var icon: String? = nil
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                if let icon { Image(systemName: icon).font(.system(size: 11, weight: .bold)) }
+                Text(title).font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundColor(selected ? .white : FormTheme.muted)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(selected ? Color.brand500 : FormTheme.field, in: Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct FormToggleRow: View {
+    let title: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            Text(title).font(.system(size: 13, weight: .medium)).foregroundColor(.white)
+        }
+        .tint(.brand500)
+    }
+}
+
+private struct FormSaveBar: View {
+    let title: String
+    let saving: Bool
+    let enabled: Bool
+    let errorText: String?
+    let action: () -> Void
+
+    var body: some View {
+        VStack(spacing: 8) {
+            if let errorText {
+                Text(errorText).font(.system(size: 11, weight: .medium)).foregroundColor(.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Button(action: action) {
+                HStack(spacing: 8) {
+                    if saving { ProgressView().tint(.white) }
+                    Text(saving ? "กำลังบันทึก…" : title).font(.system(size: 15, weight: .semibold))
+                }
+                .foregroundColor(.white).frame(maxWidth: .infinity).padding(14)
+                .background(enabled ? Color.brand500 : Color.brand500.opacity(0.4), in: RoundedRectangle(cornerRadius: 14))
+            }
+            .disabled(!enabled || saving)
+        }
+    }
+}
+
+private func parseClock(_ value: String?) -> Date? {
+    guard let value, value.count >= 5 else { return nil }
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = value.count >= 8 ? "HH:mm:ss" : "HH:mm"
+    guard let time = formatter.date(from: String(value.prefix(value.count >= 8 ? 8 : 5))) else { return nil }
+    // Put the time on today's date so the DatePicker has a sensible full Date.
+    let parts = Calendar.current.dateComponents([.hour, .minute], from: time)
+    return Calendar.current.date(bySettingHour: parts.hour ?? 0, minute: parts.minute ?? 0, second: 0, of: Date())
+}
+
+private func formatClock(_ date: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "HH:mm:ss"
+    return formatter.string(from: date)
+}
+
+/// Add a line to a day, or edit one (every field, including booking details).
+private struct ItemEditorSheet: View {
+    let day: TripItineraryDay
+    let item: TripItineraryItem?
+    let actions: ItineraryActions
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var type: String
+    @State private var title: String
+    @State private var location: String
+    @State private var hasStart: Bool
+    @State private var start: Date
+    @State private var hasEnd: Bool
+    @State private var end: Date
+    @State private var status: String
+    @State private var notes: String
+    @State private var provider: String
+    @State private var code: String
+    @State private var amount: String
+    @State private var currency: String
+    @State private var saving = false
+    @State private var errorText: String?
+    @State private var confirmDelete = false
+
+    init(day: TripItineraryDay, item: TripItineraryItem?, actions: ItineraryActions) {
+        self.day = day
+        self.item = item
+        self.actions = actions
+        let startTime = parseClock(item?.timeFrom)
+        let endTime = parseClock(item?.timeTo)
+        _type = State(initialValue: item?.type ?? "activity")
+        _title = State(initialValue: item?.title ?? "")
+        _location = State(initialValue: item?.location ?? "")
+        _hasStart = State(initialValue: startTime != nil)
+        _start = State(initialValue: startTime ?? Date())
+        _hasEnd = State(initialValue: endTime != nil)
+        _end = State(initialValue: endTime ?? startTime ?? Date())
+        _status = State(initialValue: item?.status ?? "planned")
+        _notes = State(initialValue: item?.notes ?? "")
+        _provider = State(initialValue: item?.provider ?? "")
+        _code = State(initialValue: item?.confirmationCode ?? "")
+        _amount = State(initialValue: (item?.amount ?? 0) > 0 ? (item?.amount ?? 0).formatted(.number.precision(.fractionLength(0...2)).grouping(.never)) : "")
+        _currency = State(initialValue: item?.currency ?? "JPY")
+    }
+
+    private var typeChoices: [(id: String, label: String)] {
+        itineraryTypeChoices.contains(where: { $0.id == type }) ? itineraryTypeChoices : itineraryTypeChoices + [(type, type)]
+    }
+    private var canSave: Bool { !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 14) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "calendar").foregroundColor(.brand300)
+                        Text(["วันที่ \(day.dayNumber)", day.date, day.city].compactMap { $0 }.joined(separator: " · "))
+                            .font(.system(size: 12, weight: .semibold)).foregroundColor(FormTheme.muted)
+                        Spacer()
+                    }
+
+                    FormCard(title: "ประเภท", icon: "square.grid.2x2.fill") {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(typeChoices, id: \.id) { choice in
+                                    FormChip(title: choice.label, icon: journeyItemStyle(choice.id).icon, selected: type == choice.id) { type = choice.id }
+                                }
+                            }
+                        }
+                    }
+
+                    FormCard(title: "รายละเอียด", icon: "text.alignleft") {
+                        FormField(label: "ชื่อรายการ") { FormTextField(placeholder: "เช่น Kushida Shrine", text: $title) }
+                        FormField(label: "สถานที่") { FormTextField(placeholder: "ชื่อสถานที่หรือที่อยู่ (ใช้ปักหมุดบนแผนที่)", text: $location) }
+                        FormField(label: "หมายเหตุ") { FormTextField(placeholder: "ที่จอดรถ ค่าเข้า สิ่งที่ต้องเตรียม", text: $notes, axis: .vertical) }
+                    }
+
+                    FormCard(title: "เวลา", icon: "clock.fill") {
+                        FormToggleRow(title: "กำหนดเวลาเริ่ม", isOn: $hasStart)
+                        if hasStart {
+                            DatePicker("เริ่ม", selection: $start, displayedComponents: .hourAndMinute)
+                                .font(.system(size: 13)).foregroundColor(.white).tint(.brand300)
+                            FormToggleRow(title: "กำหนดเวลาสิ้นสุด", isOn: $hasEnd)
+                            if hasEnd {
+                                DatePicker("สิ้นสุด", selection: $end, displayedComponents: .hourAndMinute)
+                                    .font(.system(size: 13)).foregroundColor(.white).tint(.brand300)
+                            }
+                        }
+                    }
+
+                    FormCard(title: "สถานะ", icon: "checkmark.seal.fill") {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(itineraryStatusChoices, id: \.id) { choice in
+                                    FormChip(title: choice.label, selected: status == choice.id) { status = choice.id }
+                                }
+                            }
+                        }
+                    }
+
+                    FormCard(title: "รายละเอียดการจอง (ถ้ามี)", icon: "ticket.fill") {
+                        FormField(label: "ผู้ให้บริการ") { FormTextField(placeholder: "เช่น AVIS, JR Kyushu", text: $provider) }
+                        FormField(label: "เลขยืนยัน") { FormTextField(placeholder: "Confirmation / Booking number", text: $code) }
+                        FormField(label: "ยอดเงิน") {
+                            HStack(spacing: 8) {
+                                FormTextField(placeholder: "0", text: $amount, keyboard: .decimalPad)
+                                HStack(spacing: 4) {
+                                    FormChip(title: "¥", selected: currency == "JPY") { currency = "JPY" }
+                                    FormChip(title: "฿", selected: currency == "THB") { currency = "THB" }
+                                }
+                            }
+                        }
+                    }
+
+                    FormSaveBar(title: item == nil ? "เพิ่มในแผน" : "บันทึกการแก้ไข", saving: saving, enabled: canSave, errorText: errorText) {
+                        Task { await save() }
+                    }
+
+                    if item != nil {
+                        Button { confirmDelete = true } label: {
+                            Label("ลบรายการนี้", systemImage: "trash").font(.system(size: 13, weight: .semibold)).foregroundColor(.red)
+                                .frame(maxWidth: .infinity).padding(.vertical, 10)
+                        }
+                    }
+                }
+                .padding(16)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .background(FormTheme.page.ignoresSafeArea())
+            .navigationTitle(item == nil ? "เพิ่มรายการ" : "แก้ไขรายการ").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("ปิด") { dismiss() } } }
+            .confirmationDialog("ลบรายการนี้?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                Button("ลบ", role: .destructive) {
+                    guard let item else { return }
+                    Task {
+                        saving = true; defer { saving = false }
+                        do { try await actions.removeItem(item.id); dismiss() } catch { errorText = error.localizedDescription }
+                    }
+                }
+                Button("ยกเลิก", role: .cancel) {}
+            }
+        }
+        .preferredColorScheme(.dark)
+        .presentationDragIndicator(.visible)
+    }
+
+    private func clean(_ text: String) -> String? {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+
+    private func save() async {
+        saving = true; errorText = nil
+        defer { saving = false }
+        let fields = TripsViewModel.TripItemFields(
+            type: type,
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+            location: clean(location),
+            timeFrom: hasStart ? formatClock(start) : nil,
+            timeTo: hasStart && hasEnd ? formatClock(end) : nil,
+            status: status,
+            notes: clean(notes),
+            provider: clean(provider),
+            confirmationCode: clean(code),
+            amount: Double(amount.replacingOccurrences(of: ",", with: "").trimmingCharacters(in: .whitespaces)),
+            currency: currency)
+        do {
+            if let item { try await actions.updateItem(item.id, fields) }
+            else { try await actions.addItem(day.id, fields) }
+            hapticSuccess()
+            dismiss()
+        } catch { errorText = error.localizedDescription }
+    }
+}
+
+/// Add a day, or edit a day's date, title, city and summary.
+private struct DayEditorSheet: View {
+    let day: TripItineraryDay?
+    let actions: ItineraryActions
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var hasDate: Bool
+    @State private var date: Date
+    @State private var title: String
+    @State private var city: String
+    @State private var summary: String
+    @State private var saving = false
+    @State private var errorText: String?
+
+    private static let formatter: DateFormatter = {
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"; return f
+    }()
+
+    init(day: TripItineraryDay?, actions: ItineraryActions) {
+        self.day = day
+        self.actions = actions
+        let parsed = day?.date.flatMap { Self.formatter.date(from: $0) }
+        _hasDate = State(initialValue: day == nil || parsed != nil)
+        _date = State(initialValue: parsed ?? Date())
+        _title = State(initialValue: day?.title ?? "")
+        _city = State(initialValue: day?.city ?? "")
+        _summary = State(initialValue: day?.summary ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 14) {
+                    FormCard(title: "วัน", icon: "calendar") {
+                        FormToggleRow(title: "ระบุวันที่", isOn: $hasDate)
+                        if hasDate {
+                            DatePicker("วันที่", selection: $date, displayedComponents: .date)
+                                .font(.system(size: 13)).foregroundColor(.white).tint(.brand300)
+                        }
+                        FormField(label: "ชื่อวัน") { FormTextField(placeholder: "เช่น Fukuoka old town & Nakasu", text: $title) }
+                        FormField(label: "เมือง") { FormTextField(placeholder: "เช่น Fukuoka (ใช้เลือกรูปประจำวัน)", text: $city) }
+                        FormField(label: "สรุปของวัน") { FormTextField(placeholder: "เส้นทางและไฮไลต์ของวัน", text: $summary, axis: .vertical) }
+                    }
+                    FormSaveBar(title: day == nil ? "เพิ่มวัน" : "บันทึกการแก้ไข", saving: saving, enabled: true, errorText: errorText) {
+                        Task { await save() }
+                    }
+                }
+                .padding(16)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .background(FormTheme.page.ignoresSafeArea())
+            .navigationTitle(day == nil ? "เพิ่มวัน" : "แก้ไขวัน").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("ปิด") { dismiss() } } }
+        }
+        .preferredColorScheme(.dark)
+        .presentationDragIndicator(.visible)
+    }
+
+    private func save() async {
+        saving = true; errorText = nil
+        defer { saving = false }
+        func clean(_ text: String) -> String? {
+            let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return value.isEmpty ? nil : value
+        }
+        let draft = DayDraft(date: hasDate ? Self.formatter.string(from: date) : nil,
+                             title: clean(title), city: clean(city), summary: clean(summary))
+        do {
+            if let day { try await actions.updateDay(day.id, draft) } else { try await actions.addDay(draft) }
+            hapticSuccess()
+            dismiss()
+        } catch { errorText = error.localizedDescription }
     }
 }

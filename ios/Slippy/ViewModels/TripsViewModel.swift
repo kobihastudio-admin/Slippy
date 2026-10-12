@@ -109,6 +109,93 @@ final class TripsViewModel: ObservableObject {
         if let journeyId = itineraryDays.first(where: { $0.id == dayId })?.journeyId { await loadItinerary(journeyId: journeyId) }
     }
 
+    /// Everything an itinerary line can carry. Optional values are written as
+    /// explicit nulls on update, so clearing a field in the editor really clears it.
+    struct TripItemFields {
+        var type: String
+        var title: String
+        var location: String?
+        var timeFrom: String?
+        var timeTo: String?
+        var status: String
+        var notes: String?
+        var provider: String?
+        var confirmationCode: String?
+        var amount: Double?
+        var currency: String?
+    }
+
+    private struct ItemRow: Encodable {
+        let day_id: String?
+        let sort_order: Int?
+        let f: TripItemFields
+
+        enum Keys: String, CodingKey {
+            case day_id, sort_order, type, title, location, time_from, time_to, status, notes, provider, confirmation_code, amount, currency
+        }
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: Keys.self)
+            try c.encodeIfPresent(day_id, forKey: .day_id)
+            try c.encodeIfPresent(sort_order, forKey: .sort_order)
+            try c.encode(f.type, forKey: .type)
+            try c.encode(f.title, forKey: .title)
+            try c.encode(f.location, forKey: .location)
+            try c.encode(f.timeFrom, forKey: .time_from)
+            try c.encode(f.timeTo, forKey: .time_to)
+            try c.encode(f.status, forKey: .status)
+            try c.encode(f.notes, forKey: .notes)
+            try c.encode(f.provider, forKey: .provider)
+            try c.encode(f.confirmationCode, forKey: .confirmation_code)
+            try c.encode(f.amount ?? 0, forKey: .amount)
+            try c.encode(f.currency ?? "JPY", forKey: .currency)
+        }
+    }
+
+    func addItineraryItem(dayId: String, fields: TripItemFields) async throws {
+        let current = itineraryDays.first(where: { $0.id == dayId })?.items ?? []
+        let row = ItemRow(day_id: dayId, sort_order: (current.map(\.sortOrder).max() ?? -1) + 1, f: fields)
+        try await db.from("trip_itinerary_items").insert(row).execute()
+        if let journeyId = itineraryDays.first(where: { $0.id == dayId })?.journeyId { await loadItinerary(journeyId: journeyId) }
+    }
+
+    func updateItineraryItem(itemId: String, journeyId: String, fields: TripItemFields) async throws {
+        try await db.from("trip_itinerary_items")
+            .update(ItemRow(day_id: nil, sort_order: nil, f: fields))
+            .eq("id", value: itemId).execute()
+        // Best effort: keep the Activity Graph mirror (activities.trip_itinerary_item_id) in step.
+        // Times are left alone — the trip's time zone is not known here — and a participant who
+        // does not own the activity is simply refused by RLS, which is fine.
+        struct Mirror: Encodable { let title: String; let category: String; let location_name: String? }
+        _ = try? await db.from("activities")
+            .update(Mirror(title: fields.title, category: fields.type, location_name: fields.location))
+            .eq("trip_itinerary_item_id", value: itemId).execute()
+        await loadItinerary(journeyId: journeyId)
+    }
+
+    func addItineraryDay(journeyId: String, date: String?, title: String?, city: String?, summary: String?) async throws {
+        struct Row: Encodable { let journey_id: String; let day_number: Int; let date: String?; let title: String?; let city: String?; let summary: String? }
+        let next = (itineraryDays.map(\.dayNumber).max() ?? 0) + 1
+        try await db.from("trip_itinerary_days")
+            .insert(Row(journey_id: journeyId, day_number: next, date: date, title: title, city: city, summary: summary)).execute()
+        await loadItinerary(journeyId: journeyId)
+    }
+
+    func updateItineraryDay(dayId: String, journeyId: String, date: String?, title: String?, city: String?, summary: String?) async throws {
+        struct Row: Encodable {
+            let date: String?; let title: String?; let city: String?; let summary: String?
+            enum Keys: String, CodingKey { case date, title, city, summary }
+            func encode(to encoder: Encoder) throws {
+                var c = encoder.container(keyedBy: Keys.self)
+                try c.encode(date, forKey: .date); try c.encode(title, forKey: .title)
+                try c.encode(city, forKey: .city); try c.encode(summary, forKey: .summary)
+            }
+        }
+        try await db.from("trip_itinerary_days")
+            .update(Row(date: date, title: title, city: city, summary: summary))
+            .eq("id", value: dayId).execute()
+        await loadItinerary(journeyId: journeyId)
+    }
+
     func removeItineraryItem(_ itemId: String, journeyId: String) async throws {
         try await db.from("trip_itinerary_items").delete().eq("id", value: itemId).execute()
         await loadItinerary(journeyId: journeyId)
