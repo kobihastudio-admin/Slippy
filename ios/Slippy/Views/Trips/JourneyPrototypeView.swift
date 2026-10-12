@@ -528,7 +528,12 @@ struct JourneyWorkspaceView: View {
     @StateObject private var vm = TripsViewModel()
     @StateObject private var messagesVM = MessagesViewModel()
     @StateObject private var socialVM = SocialViewModel()
+    @Environment(\.dismiss) private var dismiss
     @State private var tab = 0
+    /// Tabs visited before the current one, oldest first. Back walks this
+    /// stack one step at a time and only leaves the trip from the overview.
+    @State private var tabHistory: [Int] = []
+    @State private var steppingBack = false
     @State private var showAddDay = false
     @State private var addItemDay: TripItineraryDay?
     @State private var showFriendPicker = false
@@ -554,10 +559,36 @@ struct JourneyWorkspaceView: View {
                 default: collaboration
                 }
             }
+
+            // MainTabView draws its floating bar over the content area (it
+            // ignores the bottom safe area), so without this the last cards of
+            // every tab here sat underneath the bar.
+            Color.clear.frame(height: FloatingTabBar.clearance)
         }
         .background(Color(hex: "#080C1A").ignoresSafeArea())
         .preferredColorScheme(.dark)
         .navigationTitle("").navigationBarTitleDisplayMode(.inline)
+        // On the overview the system back button leaves the trip as usual. On
+        // any other tab it is replaced by one that steps back to the tab the
+        // user came from (the swipe-back edge gesture is off while it is hidden).
+        .navigationBarBackButtonHidden(!tabHistory.isEmpty)
+        .toolbar {
+            if !tabHistory.isEmpty {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { stepBack() } label: {
+                        Image(systemName: "chevron.left").font(.system(size: 16, weight: .semibold))
+                    }
+                    .accessibilityLabel("ย้อนกลับ")
+                }
+            }
+        }
+        .onChange(of: tab) { old, new in
+            if steppingBack { steppingBack = false; return }
+            guard old != new else { return }
+            // Returning to the tab we just left counts as going back, not forward.
+            if tabHistory.last == new { tabHistory.removeLast() }
+            else { tabHistory.append(old) }
+        }
         .task {
             await vm.loadItinerary(journeyId: trip.id)
             await vm.loadTripConversation(journeyId: trip.id)
@@ -605,6 +636,13 @@ struct JourneyWorkspaceView: View {
         } message: { Text(setupError ?? "") }
     }
 
+    private func stepBack() {
+        guard let previous = tabHistory.popLast() else { dismiss(); return }
+        guard previous != tab else { return }
+        steppingBack = true
+        withAnimation(.easeInOut(duration: 0.2)) { tab = previous }
+    }
+
     private var journeyHeader: some View {
         HStack(spacing: 12) {
             Image(systemName: "sparkles")
@@ -619,9 +657,9 @@ struct JourneyWorkspaceView: View {
             }
             Spacer()
             HStack(spacing: -7) {
-                JourneyAvatar(url: authVM.profile?.avatarUrl, initials: authVM.profile?.initials ?? "ฉ", tint: .brand500)
+                JourneyAvatar(url: authVM.profile?.avatarUrl, initials: authVM.profile?.initials ?? "ฉ", tint: .brand500, name: authVM.profile?.displayName)
                 ForEach(Array((trip.participants ?? []).prefix(3).enumerated()), id: \.offset) { index, member in
-                    JourneyAvatar(url: nil, initials: String(member.displayName.prefix(1)), tint: [Color.statusProcessing, .statusApproved, .statusPushed][index])
+                    JourneyAvatar(url: member.profileSharedWithTrip ? member.avatarUrl : nil, initials: String(member.displayName.prefix(1)), tint: [Color.statusProcessing, .statusApproved, .statusPushed][index], name: member.displayName)
                 }
             }
             Button { showTripProfileManager = true } label: {
@@ -688,10 +726,14 @@ struct JourneyWorkspaceView: View {
 
     private var journeyHero: some View {
         ZStack(alignment: .bottomLeading) {
-            Image("KyushuTripCover")
-                .resizable()
-                .scaledToFill()
-                .frame(maxWidth: .infinity, minHeight: 250, maxHeight: 250)
+            // The cover is 16:9 and `scaledToFill` at 250pt tall wants ~444pt of
+            // width. As the layout child of this ZStack that made the hero — and
+            // so every card in the overview's VStack — wider than the screen, so
+            // both edges ran off it. As an overlay on a flexible clear base the
+            // image is only drawn, never measured, so the hero takes the width
+            // it is offered and the picture is cropped to it.
+            Color.clear
+                .overlay(Image("KyushuTripCover").resizable().scaledToFill())
                 .clipped()
             LinearGradient(
                 colors: [Color(hex: "#071126").opacity(0.96), Color(hex: "#111C46").opacity(0.72), .clear],
@@ -707,9 +749,9 @@ struct JourneyWorkspaceView: View {
                     Label([start.prefix(10), trip.endedAt?.prefix(10)].compactMap { $0.map(String.init) }.joined(separator: " – "), systemImage: "calendar")
                 }
                 HStack(spacing: -7) {
-                    JourneyAvatar(url: authVM.profile?.avatarUrl, initials: authVM.profile?.initials ?? "ฉ", tint: .brand900)
+                    JourneyAvatar(url: authVM.profile?.avatarUrl, initials: authVM.profile?.initials ?? "ฉ", tint: .brand900, name: authVM.profile?.displayName)
                     ForEach(Array((trip.participants ?? []).prefix(3).enumerated()), id: \.offset) { index, member in
-                        JourneyAvatar(url: nil, initials: String(member.displayName.prefix(1)), tint: [Color.statusProcessing, .statusApproved, .statusPushed][index])
+                        JourneyAvatar(url: member.profileSharedWithTrip ? member.avatarUrl : nil, initials: String(member.displayName.prefix(1)), tint: [Color.statusProcessing, .statusApproved, .statusPushed][index], name: member.displayName)
                     }
                     Text("  \(trip.participants?.count ?? 1) ผู้ร่วมเดินทาง").font(.system(size: 11, weight: .semibold)).foregroundColor(.brand100)
                 }
@@ -1105,10 +1147,16 @@ private struct JourneyAvatar: View {
     let url: String?
     let initials: String
     let tint: Color
+    /// Shown under the picture in the full-screen viewer.
+    var name: String? = nil
+
+    @State private var showViewer = false
+
+    private var imageURL: URL? { url.flatMap { URL(string: $0) } }
 
     var body: some View {
         ZStack {
-            if let url, let imageURL = URL(string: url) {
+            if let imageURL {
                 AsyncImage(url: imageURL) { phase in
                     if let image = phase.image { image.resizable().scaledToFill() }
                     else { fallback }
@@ -1118,6 +1166,12 @@ private struct JourneyAvatar: View {
         .frame(width: 31, height: 31)
         .clipShape(Circle())
         .overlay(Circle().stroke(Color(hex: "#0E1527"), lineWidth: 2))
+        // Only a real photo can be enlarged; an initials badge has nothing more to show.
+        .contentShape(Circle())
+        .onTapGesture { if imageURL != nil { hapticLight(); showViewer = true } }
+        .fullScreenCover(isPresented: $showViewer) {
+            if let imageURL { ProfileImageViewer(url: imageURL, title: name) }
+        }
     }
 
     private var fallback: some View {
@@ -1207,7 +1261,7 @@ private struct SharedTripProfileBadge: View {
 
     var body: some View {
         HStack(spacing: 7) {
-            TripProfileAvatar(url: member.avatarUrl, initials: String(member.displayName.prefix(1)))
+            TripProfileAvatar(url: member.avatarUrl, initials: String(member.displayName.prefix(1)), enlargeable: true, name: member.displayName)
                 .scaleEffect(0.65)
                 .frame(width: 30, height: 30)
             VStack(alignment: .leading, spacing: 1) {
@@ -1384,14 +1438,27 @@ private struct TripProfileEditorSheet: View {
 private struct TripProfileAvatar: View {
     let url: String?
     let initials: String
+    /// Tap to open the picture full screen. Off by default because most uses
+    /// sit inside a Button (e.g. the member list rows) that already owns the tap.
+    var enlargeable = false
+    var name: String? = nil
+
+    @State private var showViewer = false
+
+    private var remote: URL? { url.flatMap { URL(string: $0) } }
 
     var body: some View {
         Group {
-            if let url, let remote = URL(string: url) {
+            if let remote {
                 AsyncImage(url: remote) { image in image.resizable().scaledToFill() } placeholder: { avatarFallback }
             } else { avatarFallback }
         }
         .frame(width: 46, height: 46).clipShape(Circle())
+        .contentShape(Circle())
+        .onTapGesture { if enlargeable, remote != nil { hapticLight(); showViewer = true } }
+        .fullScreenCover(isPresented: $showViewer) {
+            if let remote { ProfileImageViewer(url: remote, title: name) }
+        }
     }
 
     private var avatarFallback: some View {
