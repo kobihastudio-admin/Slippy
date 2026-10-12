@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { canListOrganizationClaims } from "./claims-auth.ts"
+import { canListOrganizationClaims, canViewClaim } from "./claims-auth.ts"
 
 test("claim list organization-wide access is derived from stored membership roles", () => {
   assert.equal(canListOrganizationClaims("owner"), true)
@@ -16,4 +16,14 @@ test("submitter and untrusted request role values cannot list organization claim
   assert.equal(canListOrganizationClaims(""), false)
   assert.equal(canListOrganizationClaims(null), false)
   assert.equal(canListOrganizationClaims("manager&role=admin"), false)
+})
+
+test("a claim is readable by reviewers and by its own submitter only", () => {
+  assert.equal(canViewClaim("owner", "u1", "u2"), true)
+  assert.equal(canViewClaim("accountant", "u1", "u2"), true)
+  assert.equal(canViewClaim("viewer", "u1", "u1"), true)
+  assert.equal(canViewClaim("viewer", "u1", "u2"), false)
+  assert.equal(canViewClaim(null, "u1", "u2"), false)
+  assert.equal(canViewClaim("viewer", null, "u2"), false)
+  assert.equal(canViewClaim("viewer", "u1", null), false)
 })
