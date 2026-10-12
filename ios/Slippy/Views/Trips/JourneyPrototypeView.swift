@@ -2181,18 +2181,16 @@ private struct PlaceReferencePhoto: View {
     @State private var showViewer = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Button { showViewer = true } label: {
-                Color.clear
-                    .frame(height: 150)
-                    .overlay(Image(photo.name).resizable().scaledToFill())
-                    .clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("ดูรูป \(photo.title)")
-            ReferencePhotoCredit(photo: photo)
+        Button { showViewer = true } label: {
+            Color.clear
+                .frame(width: 44, height: 44)
+                .overlay(Image(photo.name).resizable().scaledToFill())
+                .clipped()
+                .clipShape(RoundedRectangle(cornerRadius: 6))
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("ดูรูป \(photo.title)")
+        .accessibilityHint("เปิดรูปเต็มจอและเครดิตภาพ")
         .fullScreenCover(isPresented: $showViewer) {
             ProfileImageViewer(assetName: photo.name, title: photo.title) {
                 ReferencePhotoCredit(photo: photo)
@@ -2326,15 +2324,15 @@ private struct DayItemRow: View {
     var body: some View {
         let style = journeyItemStyle(item.type)
         HStack(alignment: .top, spacing: 11) {
-            Image(systemName: style.icon)
-                .font(.system(size: 14, weight: .bold)).foregroundColor(style.tint)
-                .frame(width: 32, height: 32)
-                .background(style.tint.opacity(0.16), in: RoundedRectangle(cornerRadius: 10))
+            if let photo = TripReferencePhoto.matching(item.title + " " + (item.location ?? "")) {
+                PlaceReferencePhoto(photo: photo)
+            } else {
+                Image(systemName: style.icon)
+                    .font(.system(size: 14, weight: .bold)).foregroundColor(style.tint)
+                    .frame(width: 32, height: 32)
+                    .background(style.tint.opacity(0.16), in: RoundedRectangle(cornerRadius: 10))
+            }
             VStack(alignment: .leading, spacing: 3) {
-                if let photo = TripReferencePhoto.matching(item.title + " " + (item.location ?? "")) {
-                    PlaceReferencePhoto(photo: photo)
-                        .padding(.bottom, 7)
-                }
                 HStack(spacing: 6) {
                     if let time = item.timeFrom {
                         Text(String(time.prefix(5))).font(.system(size: 11, weight: .bold)).foregroundColor(.brand300)
@@ -3872,10 +3870,10 @@ private struct TripPlacesSheet: View {
     private func card(_ item: TripPlaceCandidate) -> some View {
         let count = voters(item).count
         return VStack(alignment: .leading, spacing: 9) {
-            if let photo = TripReferencePhoto.matching(item.title) {
-                PlaceReferencePhoto(photo: photo)
-            }
             HStack(alignment: .top, spacing: 8) {
+                if let photo = TripReferencePhoto.matching(item.title) {
+                    PlaceReferencePhoto(photo: photo)
+                }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.title).font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
                     if let note = item.note, !note.isEmpty {

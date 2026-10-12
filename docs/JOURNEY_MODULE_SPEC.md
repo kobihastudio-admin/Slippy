@@ -60,7 +60,7 @@ Three phases of the "Trip Full Loop" are gated **off by default**, the opposite 
 
 ## iOS trip reference photos
 
-The trip workspace uses the existing bundled Kyushu illustrations for day headers and offline reference photographs for matching itinerary/place-vote entries. These are destination references, separate from member uploads in `trip_photos`. Tap a place image to open the existing full-screen zoom viewer. Photographer, source-page and license attribution are shown with each reference photo and in its viewer.
+The trip workspace uses the existing bundled Kyushu illustrations for day headers and 44pt offline reference-photo thumbnails beside matching itinerary/place-vote entries. These are destination references, separate from member uploads in `trip_photos`. Tap a thumbnail to open the existing full-screen zoom viewer with photographer, source-page and license attribution. Place-vote entries retain their Google Maps action.
 
 `ios/Slippy/Assets.xcassets/KyushuReferencePhotos.dataset` holds the matching aliases and attribution. `ios/scripts/import-kyushu-reference-photos.mjs` imports licensed JPEGs from Wikimedia Commons into the existing asset catalog; it can resume interrupted imports. Unmatched places keep their original text/icon presentation; no substitute image is assigned to an unrelated location. No database or storage-policy changes are required.
 
