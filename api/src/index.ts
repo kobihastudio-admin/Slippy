@@ -57,14 +57,16 @@ await app.register(multipart, {
 })
 
 // ── Rate limiting (Redis-backed, shared with the BullMQ connection) ──────
-// Skips /stripe — Stripe's own retry/burst behavior on webhook delivery
-// must never get throttled by us.
+// Skips the Stripe webhook — Stripe's own retry/burst behavior on webhook
+// delivery must never get throttled by us. The route is registered under the
+// "/webhooks" prefix (see stripeRoutes below), so the path is /webhooks/stripe;
+// the old check for "/stripe" never matched it and the webhook was rate limited.
 await app.register(rateLimit, {
   global: true,
   max: 120,
   timeWindow: "1 minute",
   redis: redisConnection,
-  allowList: (req) => req.url.startsWith("/stripe"),
+  allowList: (req) => req.url.startsWith("/webhooks/stripe"),
 })
 
 // ── Raw body capture (for LINE/Stripe HMAC verification) ─────────
