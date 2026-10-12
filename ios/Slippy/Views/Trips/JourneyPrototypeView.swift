@@ -1140,7 +1140,7 @@ struct JourneyWorkspaceView: View {
                 .disabled(!vm.itineraryDays.isEmpty || applyingKyushuTemplate)
             }
 
-            Label("รถเช่า 23–25 พ.ย. ยังเป็นรอตัดสินใจ: ยืนยันจุดรับรถ/คืนรถและจำนวนผู้โดยสารก่อนกดจอง", systemImage: "exclamationmark.triangle.fill")
+            Label("รถเช่า AVIS จองและจ่ายแล้ว (23 พ.ย. Kumamoto · 24–26 พ.ย. Hakata) — พก IDP ตัวจริงทุกคนที่ขับ · ที่พัก Yufuin ยังไม่จ่าย ยกเลิกฟรีถึง 20 พ.ย.", systemImage: "exclamationmark.triangle.fill")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundColor(Color(hex: "#9A3412"))
                 .padding(10)
