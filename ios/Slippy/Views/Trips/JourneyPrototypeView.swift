@@ -528,7 +528,12 @@ struct JourneyWorkspaceView: View {
     @StateObject private var vm = TripsViewModel()
     @StateObject private var messagesVM = MessagesViewModel()
     @StateObject private var socialVM = SocialViewModel()
+    @Environment(\.dismiss) private var dismiss
     @State private var tab = 0
+    /// Tabs visited before the current one, oldest first. Back walks this
+    /// stack one step at a time and only leaves the trip from the overview.
+    @State private var tabHistory: [Int] = []
+    @State private var steppingBack = false
     @State private var showAddDay = false
     @State private var addItemDay: TripItineraryDay?
     @State private var showFriendPicker = false
@@ -563,6 +568,27 @@ struct JourneyWorkspaceView: View {
         .background(Color(hex: "#080C1A").ignoresSafeArea())
         .preferredColorScheme(.dark)
         .navigationTitle("").navigationBarTitleDisplayMode(.inline)
+        // On the overview the system back button leaves the trip as usual. On
+        // any other tab it is replaced by one that steps back to the tab the
+        // user came from (the swipe-back edge gesture is off while it is hidden).
+        .navigationBarBackButtonHidden(!tabHistory.isEmpty)
+        .toolbar {
+            if !tabHistory.isEmpty {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { stepBack() } label: {
+                        Image(systemName: "chevron.left").font(.system(size: 16, weight: .semibold))
+                    }
+                    .accessibilityLabel("ย้อนกลับ")
+                }
+            }
+        }
+        .onChange(of: tab) { old, new in
+            if steppingBack { steppingBack = false; return }
+            guard old != new else { return }
+            // Returning to the tab we just left counts as going back, not forward.
+            if tabHistory.last == new { tabHistory.removeLast() }
+            else { tabHistory.append(old) }
+        }
         .task {
             await vm.loadItinerary(journeyId: trip.id)
             await vm.loadTripConversation(journeyId: trip.id)
@@ -608,6 +634,13 @@ struct JourneyWorkspaceView: View {
         .alert("เตรียมแผนไม่สำเร็จ", isPresented: .constant(setupError != nil)) {
             Button("ตกลง") { setupError = nil }
         } message: { Text(setupError ?? "") }
+    }
+
+    private func stepBack() {
+        guard let previous = tabHistory.popLast() else { dismiss(); return }
+        guard previous != tab else { return }
+        steppingBack = true
+        withAnimation(.easeInOut(duration: 0.2)) { tab = previous }
     }
 
     private var journeyHeader: some View {
