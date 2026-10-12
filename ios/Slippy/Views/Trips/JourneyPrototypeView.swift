@@ -3702,6 +3702,20 @@ private struct DayEditorSheet: View {
 
 // MARK: – Places & restaurants the group votes on (trip_place_candidates / trip_place_votes)
 
+/// Only https Google Maps links are opened from a place's `maps_url`: the column is writable by every
+/// participant of the trip, so anything else (another host, tel:, a custom scheme) is not offered.
+private func safeGoogleMapsURL(_ raw: String?) -> URL? {
+    guard let raw, let url = URL(string: raw), url.scheme?.lowercased() == "https",
+          let host = url.host?.lowercased() else { return nil }
+    let path = url.path.lowercased()
+    switch host {
+    case "www.google.com", "google.com": return path.hasPrefix("/maps") ? url : nil
+    case "maps.google.com", "maps.app.goo.gl": return url
+    case "goo.gl": return path.hasPrefix("/maps") ? url : nil
+    default: return nil
+    }
+}
+
 private struct TripPlacesSheet: View {
     let trip: Trip
     let people: [TripParticipant]
@@ -3797,7 +3811,7 @@ private struct TripPlacesSheet: View {
                     }
                 }
                 Spacer(minLength: 4)
-                if let url = item.mapsUrl.flatMap(URL.init(string:)) {
+                if let url = safeGoogleMapsURL(item.mapsUrl) {
                     Button { GoogleMapsLinks.open(url) } label: {
                         Image(systemName: "location.north.circle.fill").font(.system(size: 22)).foregroundColor(.brand300)
                     }
