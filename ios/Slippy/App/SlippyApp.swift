@@ -82,6 +82,11 @@ enum SharedContainerReader {
 // MARK: – AppDelegate (required for Facebook SDK setup)
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        if window?.traitCollection.userInterfaceIdiom == .pad { return .all }
+        return ImageViewerOrientation.isEnabled ? .allButUpsideDown : .portrait
+    }
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -98,5 +103,39 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
         _ = LoginManager.shared.application(app, open: url)
         return true
+    }
+}
+
+@MainActor
+enum ImageViewerOrientation {
+    private static var viewerCount = 0
+    static var isEnabled: Bool { viewerCount > 0 }
+
+    static func open() {
+        viewerCount += 1
+        update()
+    }
+
+    static func close() {
+        viewerCount = max(0, viewerCount - 1)
+        update(request: isEnabled ? nil : .portrait)
+    }
+
+    static func rotate(to orientations: UIInterfaceOrientationMask) {
+        update(request: orientations)
+    }
+
+    private static func update(request: UIInterfaceOrientationMask? = nil) {
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }),
+              let window = scene.windows.first(where: \.isKeyWindow) else { return }
+        var controller = window.rootViewController
+        while let current = controller {
+            current.setNeedsUpdateOfSupportedInterfaceOrientations()
+            controller = current.presentedViewController
+        }
+        if let request, window.traitCollection.userInterfaceIdiom != .pad {
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: request))
+        }
     }
 }

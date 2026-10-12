@@ -156,6 +156,16 @@ struct ProfileImageViewer<Footer: View>: View {
                 VStack {
                     HStack {
                         Spacer()
+                        Button {
+                            reset()
+                            ImageViewerOrientation.rotate(to: geo.size.width > geo.size.height ? .portrait : .landscape)
+                        } label: {
+                            Image(systemName: "rotate.right")
+                                .font(.system(size: 22, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(width: 44, height: 44)
+                        }
+                        .accessibilityLabel("สลับแนวหน้าจอ")
                         Button { dismiss() } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.system(size: 30))
@@ -176,7 +186,11 @@ struct ProfileImageViewer<Footer: View>: View {
                     }
                 }
             }
+            .onChange(of: geo.size) { _, _ in reset() }
         }
+        .statusBarHidden()
+        .onAppear { ImageViewerOrientation.open() }
+        .onDisappear { ImageViewerOrientation.close() }
     }
 
     private func zoomable(_ image: Image, in size: CGSize) -> some View {
