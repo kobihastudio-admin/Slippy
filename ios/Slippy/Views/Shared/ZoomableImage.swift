@@ -104,3 +104,113 @@ struct ZoomableImageViewer: View {
         }
     }
 }
+
+/// Full-screen viewer for a remote profile photo: pinch to zoom, drag when
+/// zoomed, double-tap to toggle, tap the close button (or swipe down) to leave.
+struct ProfileImageViewer: View {
+    let url: URL
+    var title: String? = nil
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var scale: CGFloat = 1
+    @State private var lastScale: CGFloat = 1
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: geo.size.width, height: geo.size.height)
+                            .scaleEffect(scale)
+                            .offset(offset)
+                            .gesture(zoomGesture(in: geo.size))
+                            .onTapGesture(count: 2) {
+                                withAnimation(.easeInOut(duration: 0.25)) {
+                                    if scale > 1 { reset() } else { scale = 2.5; lastScale = 2.5 }
+                                }
+                            }
+                    case .failure:
+                        VStack(spacing: 8) {
+                            Image(systemName: "person.crop.circle.badge.exclamationmark").font(.system(size: 40))
+                            Text("โหลดรูปไม่สำเร็จ").font(.system(size: 14))
+                        }
+                        .foregroundColor(.white.opacity(0.8))
+                    default:
+                        ProgressView().tint(.white)
+                    }
+                }
+                .frame(width: geo.size.width, height: geo.size.height)
+
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button { dismiss() } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 30))
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(.white, .white.opacity(0.28))
+                        }
+                        .accessibilityLabel("ปิด")
+                    }
+                    .padding(.horizontal, 16).padding(.top, 8)
+                    Spacer()
+                    if let title, !title.isEmpty {
+                        Text(title)
+                            .font(.system(size: 16, weight: .semibold)).foregroundColor(.white)
+                            .padding(.horizontal, 16).padding(.vertical, 8)
+                            .background(.black.opacity(0.45), in: Capsule())
+                            .padding(.bottom, 24)
+                    }
+                }
+            }
+        }
+    }
+
+    private func reset() {
+        scale = 1; lastScale = 1
+        offset = .zero; lastOffset = .zero
+    }
+
+    private func zoomGesture(in size: CGSize) -> some Gesture {
+        SimultaneousGesture(
+            MagnificationGesture()
+                .onChanged { scale = max(1, min(5, lastScale * $0)) }
+                .onEnded { _ in
+                    lastScale = scale
+                    if scale <= 1 { withAnimation(.easeOut(duration: 0.2)) { reset() } }
+                    else { offset = clamped(offset, in: size); lastOffset = offset }
+                },
+            DragGesture()
+                .onChanged { value in
+                    if scale > 1 {
+                        offset = clamped(CGSize(width: lastOffset.width + value.translation.width,
+                                                height: lastOffset.height + value.translation.height), in: size)
+                    } else if value.translation.height > 0 {
+                        offset = CGSize(width: 0, height: value.translation.height)   // swipe-down feedback
+                    }
+                }
+                .onEnded { value in
+                    if scale <= 1 {
+                        if value.translation.height > 120 { dismiss() }
+                        else { withAnimation(.easeOut(duration: 0.2)) { offset = .zero } }
+                    }
+                    lastOffset = offset
+                }
+        )
+    }
+
+    private func clamped(_ proposed: CGSize, in size: CGSize) -> CGSize {
+        let maxX = max(0, size.width * (scale - 1) / 2)
+        let maxY = max(0, size.height * (scale - 1) / 2)
+        return CGSize(width: min(max(proposed.width, -maxX), maxX), height: min(max(proposed.height, -maxY), maxY))
+    }
+}
+

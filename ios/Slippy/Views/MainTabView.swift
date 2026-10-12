@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// Space a screen pushed inside the tabs must leave at its bottom so its last
+/// row is not hidden behind the floating tab bar (72pt bar + 16pt margin + a
+/// little air). MainTabView overlays the bar and ignores the bottom safe area,
+/// so nothing insets the content automatically.
+enum FloatingTabBar {
+    static let clearance: CGFloat = 100
+}
+
 struct MainTabView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @StateObject private var tabRouter = TabRouter()
