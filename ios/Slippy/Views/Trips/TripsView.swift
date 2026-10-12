@@ -124,7 +124,10 @@ struct TripsView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.top, 12)
+            // The floating app tab bar is drawn over this screen, so leave room
+            // for the last trip card to scroll clear of it.
+            .padding(.bottom, FloatingTabBar.clearance)
         }
     }
 
