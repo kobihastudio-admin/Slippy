@@ -7,7 +7,7 @@ import SwiftUI
 enum FloatingTabBar {
     static let clearance: CGFloat = 100
     /// Tighter gap for plain lists, where the last row only needs to clear the bar.
-    static let compactClearance: CGFloat = 60
+    static let compactClearance: CGFloat = 30
 }
 
 struct MainTabView: View {
