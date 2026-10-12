@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { activitiesDisabledBody, isActivitiesEnabled } from "@/lib/activities/feature"
+import { getPublicOrigin } from "@/lib/public-origin"
 
 export const runtime = "nodejs"
 
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }).select("expires_at, max_uses").single()
   if (error || !link) return NextResponse.json({ error: "Unable to create registration link" }, { status: 500 })
   return NextResponse.json({
-    url: new URL(`/join/${token}`, req.nextUrl.origin).toString(),
+    url: new URL(`/join/${token}`, getPublicOrigin(req.headers)).toString(),
     expiresAt: link.expires_at,
     maxUses: link.max_uses,
   }, { status: 201 })

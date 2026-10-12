@@ -17,6 +17,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { assertSuperadmin }  from "@/lib/admin-guard"
 import { logAdminAction }    from "@/lib/admin-audit-log"
 import { withErrorLogging }  from "@/lib/log-server-error"
+import { getPublicOrigin } from "@/lib/public-origin"
 
 export const POST = withErrorLogging("admin_document_retry", async (
   req: NextRequest, { params }: { params: Promise<{ id: string }> }
@@ -32,9 +33,12 @@ export const POST = withErrorLogging("admin_document_retry", async (
 
   await admin.from("documents").update({ status: "pending" }).eq("id", id)
 
-  const res = await fetch(`${req.nextUrl.origin}/api/documents/${id}/process`, {
+  // Public origin, not req.nextUrl.origin: inside the Docker image the latter is
+  // the container id (https://<id>:3000), which this fetch could never reach.
+  // The caller's cookie is forwarded so the middleware sees the same admin session.
+  const res = await fetch(`${getPublicOrigin(req.headers)}/api/documents/${id}/process`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", cookie: req.headers.get("cookie") ?? "" },
     body: JSON.stringify({}),
   })
   const json = await res.json().catch(() => ({}))
