@@ -629,7 +629,8 @@ struct JourneyWorkspaceView: View {
             TripProfileManagerSheet(participants: people, save: saveTripProfile)
         }
         .sheet(isPresented: $showGallery, onDismiss: { Task { await loadExtras() } }) {
-            TripGalleryView(trip: trip, days: vm.itineraryDays)
+            TripGalleryView(trip: trip, days: vm.itineraryDays,
+                            diaryImages: Self.animeMoments.map { TripGalleryAsset(name: $0.name, title: $0.title) })
         }
         .fullScreenCover(isPresented: $showCover) {
             CoverViewerSheet(url: coverURL, onPick: changeCover, onReset: resetCover)
@@ -933,7 +934,6 @@ struct JourneyWorkspaceView: View {
                 }
                 budgetPlanCard
                 remindersCard
-                kyushuGallery
                 travelCommandCenter
                 Button { tab = 1 } label: {
                     Label(vm.itineraryDays.isEmpty ? "เริ่มวางแผนรายวัน" : "เปิดแผนการเดินทาง", systemImage: "arrow.right.circle.fill")

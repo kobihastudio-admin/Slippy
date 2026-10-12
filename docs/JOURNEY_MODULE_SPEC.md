@@ -64,6 +64,8 @@ The trip workspace uses the existing bundled Kyushu illustrations for day header
 
 The full-screen profile/reference image viewer supports iPhone landscape rotation and a rotate button. Closing it restores the normal portrait-only app interface. Zoom/pan reset when the viewer dimensions change.
 
+The Kyushu workspace's four visual-diary illustrations now appear in the trip gallery alongside uploaded photos, rather than in a separate overview section. Bundled illustrations open in the full-screen viewer and have no deletion action; gallery uploads retain their existing upload/delete flow.
+
 `ios/Slippy/Assets.xcassets/KyushuReferencePhotos.dataset` holds the matching aliases and attribution. `ios/scripts/import-kyushu-reference-photos.mjs` imports licensed JPEGs from Wikimedia Commons into the existing asset catalog; it can resume interrupted imports. Unmatched places keep their original text/icon presentation; no substitute image is assigned to an unrelated location. No database or storage-policy changes are required.
 
 ## Known gaps
