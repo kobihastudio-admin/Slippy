@@ -166,7 +166,7 @@ struct ProfileImageViewer<Footer: View>: View {
                                 .frame(width: 44, height: 44)
                         }
                         .accessibilityLabel("สลับแนวหน้าจอ")
-                        Button { dismiss() } label: {
+                        Button { dismissViewer() } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.system(size: 30))
                                 .symbolRenderingMode(.palette)
@@ -186,11 +186,13 @@ struct ProfileImageViewer<Footer: View>: View {
                     }
                 }
             }
-            .onChange(of: geo.size) { _, _ in reset() }
+            .onChange(of: geo.size) { _, size in
+                ImageViewerOrientation.trace("size \(size.width)x\(size.height)")
+                reset()
+            }
         }
         .statusBarHidden()
         .onAppear { ImageViewerOrientation.open() }
-        .onDisappear { ImageViewerOrientation.close() }
     }
 
     private func zoomable(_ image: Image, in size: CGSize) -> some View {
@@ -213,6 +215,11 @@ struct ProfileImageViewer<Footer: View>: View {
         offset = .zero; lastOffset = .zero
     }
 
+    private func dismissViewer() {
+        ImageViewerOrientation.close()
+        dismiss()
+    }
+
     private func zoomGesture(in size: CGSize) -> some Gesture {
         SimultaneousGesture(
             MagnificationGesture()
@@ -233,7 +240,7 @@ struct ProfileImageViewer<Footer: View>: View {
                 }
                 .onEnded { value in
                     if scale <= 1 {
-                        if value.translation.height > 120 { dismiss() }
+                        if value.translation.height > 120 { dismissViewer() }
                         else { withAnimation(.easeOut(duration: 0.2)) { offset = .zero } }
                     }
                     lastOffset = offset
