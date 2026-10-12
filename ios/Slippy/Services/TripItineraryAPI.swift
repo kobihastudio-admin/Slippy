@@ -182,6 +182,7 @@ enum TripItineraryAPI {
         try await db.from("trip_notes")
             .select("id, journey_id, title, body, tag, is_pinned")
             .eq("journey_id", value: journeyId)
+            .or("tag.is.null,tag.neq.backup")
             .order("is_pinned", ascending: false)
             .order("created_at", ascending: true)
             .execute().value

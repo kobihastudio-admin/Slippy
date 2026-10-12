@@ -3,6 +3,7 @@ import MapKit
 import UIKit
 import PhotosUI
 import Supabase
+import UserNotifications
 
 /// Additive, local-only prototype for the future Trip & Journey module.
 /// This view intentionally does not call Supabase or mutate production trip data.
@@ -554,6 +555,10 @@ struct JourneyWorkspaceView: View {
     @State private var selectedCrew: KyushuCrew?
     @State private var selectedTag: KyushuCrew?
     @State private var pager: PagerRequest?
+    @State private var showChecklist = false
+    @State private var showNotes = false
+    @State private var remindersOn = false
+    @State private var reminderMessage: String?
 
     /// Participants as last fetched; falls back to what the trip list loaded.
     private var people: [TripParticipant] { livePeople ?? trip.participants ?? [] }
@@ -642,6 +647,8 @@ struct JourneyWorkspaceView: View {
                              save: { name, animal, data in try await saveTag(crew, name: name, animal: animal, imageData: data) },
                              reset: { try await resetTag(crew) })
         }
+        .sheet(isPresented: $showChecklist) { TripChecklistSheet(trip: trip) }
+        .sheet(isPresented: $showNotes) { TripNotesView(trip: trip) }
         .fullScreenCover(item: $pager) { request in
             TripImagePager(items: request.items, start: request.start)
         }
@@ -674,6 +681,68 @@ struct JourneyWorkspaceView: View {
     private func loadExtras() async {
         if let loaded = try? await TripMetadataAPI.load(journeyId: trip.id) { metadata = loaded }
         if let photos = try? await TripPhotoAPI.list(journeyId: trip.id) { tripPhotos = photos }
+        remindersOn = TripReminderScheduler.isEnabled(tripId: trip.id)
+        if remindersOn { await TripReminderScheduler.resync(tripId: trip.id, reminders: reminders) }
+    }
+
+    private var reminders: [TripReminderScheduler.Reminder] {
+        TripReminderScheduler.parse(metadata["reminders"])
+    }
+
+    private var budgetPlanCard: some View {
+        Group {
+            if let plan = metadata["budget_plan"]?.objectValue { BudgetPlanView(plan: plan) }
+        }
+    }
+
+    private var remindersCard: some View {
+        let upcoming = reminders.filter { $0.fireAt > Date() }
+        return Group {
+            if !reminders.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Label("การเตือนสำคัญ", systemImage: "bell.badge.fill")
+                            .font(.system(size: 16, weight: .bold)).foregroundColor(.white)
+                        Spacer()
+                        Toggle("", isOn: Binding(
+                            get: { remindersOn },
+                            set: { newValue in Task { await setReminders(newValue) } }
+                        ))
+                        .labelsHidden().tint(.brand500)
+                    }
+                    Text(remindersOn ? "เตือนบนเครื่องนี้แล้ว \(upcoming.count) รายการ" : "เปิดเพื่อให้ iPhone เตือน IDP, เส้นตายจ่ายที่พัก Yufuin และการจองร้าน")
+                        .font(.system(size: 11)).foregroundColor(.textSecondary)
+                    ForEach(upcoming.prefix(4)) { item in
+                        HStack(alignment: .top, spacing: 10) {
+                            Text(item.fireAt.formatted(.dateTime.day().month(.abbreviated)))
+                                .font(.system(size: 11, weight: .bold)).foregroundColor(.brand300)
+                                .frame(width: 52, alignment: .leading)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.title).font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
+                                Text(item.body).font(.system(size: 10)).foregroundColor(Color(hex: "#9CA9C4")).lineLimit(2)
+                            }
+                        }
+                    }
+                    if let reminderMessage {
+                        Text(reminderMessage).font(.system(size: 11, weight: .medium)).foregroundColor(.orange)
+                    }
+                }
+                .padding(14).background(Color(hex: "#0E1527")).clipShape(RoundedRectangle(cornerRadius: 18))
+            }
+        }
+    }
+
+    @MainActor
+    private func setReminders(_ on: Bool) async {
+        reminderMessage = nil
+        if on {
+            let granted = await TripReminderScheduler.enable(tripId: trip.id, reminders: reminders)
+            remindersOn = granted
+            if !granted { reminderMessage = "ต้องอนุญาตการแจ้งเตือนใน Settings › Slippy ก่อน" }
+        } else {
+            TripReminderScheduler.disable(tripId: trip.id)
+            remindersOn = false
+        }
     }
 
     @MainActor
@@ -848,6 +917,8 @@ struct JourneyWorkspaceView: View {
                     workspaceStat("ผู้ร่วม", "\(people.count)", "person.2")
                     workspaceStat("ค่าใช้จ่าย", fmtTHB(trip.computedTotal), "wallet.pass")
                 }
+                budgetPlanCard
+                remindersCard
                 kyushuGallery
                 travelCommandCenter
                 Button { tab = 1 } label: {
@@ -1099,6 +1170,18 @@ struct JourneyWorkspaceView: View {
                 .buttonStyle(.plain)
                 Button { showTripProfileManager = true } label: {
                     JourneyManagementAction(title: "Profile ทริป", detail: "รูป · บทบาท · ติดต่อ", icon: "person.crop.circle.badge.pencil", tint: .brand400)
+                }
+                .buttonStyle(.plain)
+                Button { showChecklist = true } label: {
+                    JourneyManagementAction(title: "เช็กลิสต์", detail: "ก่อนเดินทาง · ต้องจอง", icon: "checklist", tint: .statusApproved)
+                }
+                .buttonStyle(.plain)
+                Button { showNotes = true } label: {
+                    JourneyManagementAction(title: "โน้ตทริป", detail: "ที่พัก · รถเช่า · งบ", icon: "note.text", tint: .statusProcessing)
+                }
+                .buttonStyle(.plain)
+                Button { showGallery = true } label: {
+                    JourneyManagementAction(title: "แกลเลอรี", detail: "ดูรูป · เพิ่มรูป", icon: "photo.on.rectangle.angled", tint: .statusPushed)
                 }
                 .buttonStyle(.plain)
             }
@@ -2306,3 +2389,202 @@ private struct TripImagePager: View {
         }
     }
 }
+
+// MARK: – Checklist, budget and reminders
+
+/// Pre-trip checklist grouped by category; tapping a row toggles it.
+private struct TripChecklistSheet: View {
+    let trip: Trip
+    @Environment(\.dismiss) private var dismiss
+    @State private var items: [TripChecklistItem] = []
+    @State private var loading = true
+    @State private var errorText: String?
+
+    private var categories: [String] {
+        var seen: [String] = []
+        for item in items.sorted(by: { $0.sortOrder < $1.sortOrder }) {
+            let name = item.category ?? "อื่นๆ"
+            if !seen.contains(name) { seen.append(name) }
+        }
+        return seen
+    }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if loading {
+                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if items.isEmpty {
+                    ContentUnavailableView("ยังไม่มีเช็กลิสต์", systemImage: "checklist")
+                } else {
+                    List {
+                        Section {
+                            let done = items.filter(\.isDone).count
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("เสร็จแล้ว \(done) / \(items.count)").font(.system(size: 14, weight: .semibold))
+                                ProgressView(value: Double(done), total: Double(max(items.count, 1))).tint(.green)
+                            }
+                        }
+                        ForEach(categories, id: \.self) { category in
+                            Section(category) {
+                                ForEach(items.filter { ($0.category ?? "อื่นๆ") == category }.sorted { $0.sortOrder < $1.sortOrder }) { item in
+                                    Button { Task { await toggle(item) } } label: {
+                                        HStack(alignment: .top, spacing: 10) {
+                                            Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
+                                                .foregroundColor(item.isDone ? .green : .secondary)
+                                            Text(item.title)
+                                                .font(.system(size: 14))
+                                                .strikethrough(item.isDone)
+                                                .foregroundColor(item.isDone ? .secondary : .primary)
+                                                .multilineTextAlignment(.leading)
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("เช็กลิสต์").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("ปิด") { dismiss() } } }
+            .alert("บันทึกไม่สำเร็จ", isPresented: .constant(errorText != nil)) {
+                Button("ตกลง") { errorText = nil }
+            } message: { Text(errorText ?? "") }
+            .task { await load() }
+        }
+    }
+
+    private func load() async {
+        loading = true
+        defer { loading = false }
+        do { items = try await TripItineraryAPI.loadChecklist(journeyId: trip.id) }
+        catch { errorText = error.localizedDescription }
+    }
+
+    private func toggle(_ item: TripChecklistItem) async {
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        let newValue = !items[index].isDone
+        items[index].isDone = newValue
+        hapticLight()
+        do { try await TripItineraryAPI.setChecked(itemId: item.id, done: newValue) }
+        catch {
+            items[index].isDone = !newValue
+            errorText = error.localizedDescription
+        }
+    }
+}
+
+/// Planned budget (from `life_journeys.metadata.budget_plan`), shown beside the
+/// settlement figures; it is a plan, not recorded spending.
+private struct BudgetPlanView: View {
+    let plan: [String: AnyJSON]
+
+    private func number(_ value: AnyJSON?) -> Double? { value?.doubleValue ?? value?.intValue.map(Double.init) }
+    private func thb(_ value: Double?) -> String { value.map { "฿" + $0.formatted(.number.precision(.fractionLength(0))) } ?? "—" }
+
+    var body: some View {
+        let items = plan["items"]?.arrayValue?.compactMap(\.objectValue) ?? []
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("งบประมาณทริป", systemImage: "banknote.fill")
+                    .font(.system(size: 16, weight: .bold)).foregroundColor(.white)
+                Spacer()
+                Text("\(plan["people"]?.intValue ?? 0) คน").font(.system(size: 11, weight: .semibold)).foregroundColor(.brand300)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(thb(number(plan["total_thb_min"]))) – \(thb(number(plan["total_thb_max"])))")
+                    .font(.system(size: 20, weight: .heavy)).foregroundColor(.white)
+                Text("ต่อคน \(thb(number(plan["per_person_thb_min"]))) – \(thb(number(plan["per_person_thb_max"])))")
+                    .font(.system(size: 11)).foregroundColor(Color(hex: "#9CA9C4"))
+            }
+            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                let status = item["status"]?.stringValue ?? "estimate"
+                let low = number(item["thb_min"]), high = number(item["thb_max"])
+                HStack {
+                    Text(item["label"]?.stringValue ?? "").font(.system(size: 12)).foregroundColor(.white)
+                    Spacer()
+                    Text(low == high ? thb(low) : "\(thb(low)) – \(thb(high))")
+                        .font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
+                    Text(status == "paid" ? "จ่ายแล้ว" : status == "unpaid" ? "ยังไม่จ่าย" : "ประมาณ")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(status == "paid" ? .green : status == "unpaid" ? .orange : Color(hex: "#9CA9C4"))
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background((status == "paid" ? Color.green : status == "unpaid" ? Color.orange : Color.gray).opacity(0.16), in: Capsule())
+                }
+            }
+            if let note = plan["note"]?.stringValue {
+                Text(note).font(.system(size: 10)).foregroundColor(Color(hex: "#9CA9C4"))
+            }
+        }
+        .padding(14).background(Color(hex: "#0E1527")).clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+}
+
+/// Local (on-device) notifications for the trip's reminders. They live in
+/// `life_journeys.metadata.reminders`; turning the switch on schedules the ones
+/// still in the future, turning it off removes them. Nothing is sent to a server.
+@MainActor
+enum TripReminderScheduler {
+    struct Reminder: Identifiable {
+        let id: String
+        let title: String
+        let body: String
+        let fireAt: Date
+    }
+
+    static func parse(_ json: AnyJSON?) -> [Reminder] {
+        let formatter = ISO8601DateFormatter()
+        return (json?.arrayValue ?? []).compactMap { entry -> Reminder? in
+            guard let object = entry.objectValue,
+                  let id = object["id"]?.stringValue,
+                  let title = object["title"]?.stringValue,
+                  let when = object["fire_at"]?.stringValue,
+                  let date = formatter.date(from: when) else { return nil }
+            return Reminder(id: id, title: title, body: object["body"]?.stringValue ?? "", fireAt: date)
+        }
+        .sorted { $0.fireAt < $1.fireAt }
+    }
+
+    private static func key(_ tripId: String) -> String { "tripReminders.\(tripId)" }
+    private static func identifier(_ tripId: String, _ id: String) -> String { "trip.\(tripId).\(id)" }
+
+    static func isEnabled(tripId: String) -> Bool { UserDefaults.standard.bool(forKey: key(tripId)) }
+
+    static func enable(tripId: String, reminders: [Reminder]) async -> Bool {
+        let center = UNUserNotificationCenter.current()
+        let granted = (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+        guard granted else { return false }
+        UserDefaults.standard.set(true, forKey: key(tripId))
+        await resync(tripId: tripId, reminders: reminders)
+        return true
+    }
+
+    static func disable(tripId: String) {
+        UserDefaults.standard.set(false, forKey: key(tripId))
+        let center = UNUserNotificationCenter.current()
+        Task {
+            let pending = await center.pendingNotificationRequests()
+            center.removePendingNotificationRequests(
+                withIdentifiers: pending.map(\.identifier).filter { $0.hasPrefix("trip.\(tripId).") })
+        }
+    }
+
+    /// Replaces this trip's pending reminders with the current list.
+    static func resync(tripId: String, reminders: [Reminder]) async {
+        let center = UNUserNotificationCenter.current()
+        let pending = await center.pendingNotificationRequests()
+        center.removePendingNotificationRequests(
+            withIdentifiers: pending.map(\.identifier).filter { $0.hasPrefix("trip.\(tripId).") })
+        for reminder in reminders where reminder.fireAt > Date() {
+            let content = UNMutableNotificationContent()
+            content.title = reminder.title
+            content.body = reminder.body
+            content.sound = .default
+            let parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: reminder.fireAt)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: parts, repeats: false)
+            try? await center.add(UNNotificationRequest(identifier: identifier(tripId, reminder.id), content: content, trigger: trigger))
+        }
+    }
+}
+
