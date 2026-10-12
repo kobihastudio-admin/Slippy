@@ -2131,10 +2131,74 @@ private struct MomentRequest: Identifiable {
 private func dayImageName(_ day: TripItineraryDay?) -> String {
     let text = ((day?.city ?? "") + " " + (day?.title ?? "")).lowercased()
     if text.contains("depart") { return "KyushuTripCover" }
+    if text.contains("dazaifu") { return "KyushuShrine" }
     if text.contains("temple") { return "KyushuShrine" }
     if text.contains("yufuin") { return "KyushuYufuin" }
     if text.contains("kumamoto") { return "KyushuKumamoto" }
     return "KyushuFukuoka"
+}
+
+private struct TripReferencePhoto: Decodable {
+    let name: String
+    let title: String
+    let aliases: [String]
+    let source: String
+    let author: String
+    let license: String
+    let licenseURL: String
+
+    static let all: [TripReferencePhoto] = {
+        guard let data = NSDataAsset(name: "KyushuReferencePhotos")?.data else { return [] }
+        return (try? JSONDecoder().decode([TripReferencePhoto].self, from: data)) ?? []
+    }()
+
+    static func matching(_ text: String) -> TripReferencePhoto? {
+        let normalized = text.lowercased()
+        return all.first { photo in photo.aliases.contains { normalized.contains($0) } }
+    }
+}
+
+private struct ReferencePhotoCredit: View {
+    let photo: TripReferencePhoto
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if let source = URL(string: photo.source) {
+                Link("\(photo.author) · Wikimedia Commons", destination: source)
+            }
+            if let license = URL(string: photo.licenseURL) {
+                Link("\(photo.license) · cropped preview", destination: license)
+            } else {
+                Text("\(photo.license) · cropped preview")
+            }
+        }
+        .font(.system(size: 10)).foregroundColor(.white.opacity(0.8)).lineLimit(1)
+    }
+}
+
+private struct PlaceReferencePhoto: View {
+    let photo: TripReferencePhoto
+    @State private var showViewer = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Button { showViewer = true } label: {
+                Color.clear
+                    .frame(height: 150)
+                    .overlay(Image(photo.name).resizable().scaledToFill())
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("ดูรูป \(photo.title)")
+            ReferencePhotoCredit(photo: photo)
+        }
+        .fullScreenCover(isPresented: $showViewer) {
+            ProfileImageViewer(assetName: photo.name, title: photo.title) {
+                ReferencePhotoCredit(photo: photo)
+            }
+        }
+    }
 }
 
 private func journeyItemStyle(_ type: String) -> (icon: String, tint: Color) {
@@ -2233,6 +2297,10 @@ private struct DayHeroView: View {
                     .font(.system(size: 20, weight: .bold)).foregroundColor(.white).lineLimit(2)
             }
             .padding(14)
+            if let photo = TripReferencePhoto.all.first(where: { $0.name == imageName }) {
+                VStack { HStack { Spacer(); ReferencePhotoCredit(photo: photo) }; Spacer() }
+                    .padding(10)
+            }
         }
         .frame(height: height)
         .frame(maxWidth: .infinity)
@@ -2263,6 +2331,10 @@ private struct DayItemRow: View {
                 .frame(width: 32, height: 32)
                 .background(style.tint.opacity(0.16), in: RoundedRectangle(cornerRadius: 10))
             VStack(alignment: .leading, spacing: 3) {
+                if let photo = TripReferencePhoto.matching(item.title + " " + (item.location ?? "")) {
+                    PlaceReferencePhoto(photo: photo)
+                        .padding(.bottom, 7)
+                }
                 HStack(spacing: 6) {
                     if let time = item.timeFrom {
                         Text(String(time.prefix(5))).font(.system(size: 11, weight: .bold)).foregroundColor(.brand300)
@@ -2387,7 +2459,11 @@ private struct DayDetailSheet: View {
             .navigationTitle("รายละเอียดวัน").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("ปิด") { dismiss() } } }
             .fullScreenCover(isPresented: $showImage) {
-                ProfileImageViewer(assetName: imageName, title: day?.title)
+                ProfileImageViewer(assetName: imageName, title: day?.title) {
+                    if let photo = TripReferencePhoto.all.first(where: { $0.name == imageName }) {
+                        ReferencePhotoCredit(photo: photo)
+                    }
+                }
             }
             .itineraryEditor(target: $editorTarget, actions: actions)
             .confirmationDialog("ลบรายการนี้?", isPresented: Binding(
@@ -3796,6 +3872,9 @@ private struct TripPlacesSheet: View {
     private func card(_ item: TripPlaceCandidate) -> some View {
         let count = voters(item).count
         return VStack(alignment: .leading, spacing: 9) {
+            if let photo = TripReferencePhoto.matching(item.title) {
+                PlaceReferencePhoto(photo: photo)
+            }
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.title).font(.system(size: 14, weight: .semibold)).foregroundColor(.white)

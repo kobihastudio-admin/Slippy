@@ -58,6 +58,12 @@ Three phases of the "Trip Full Loop" are gated **off by default**, the opposite 
 - **`POST /api/trips`** — the dashboard/LIFF creation path described above (`journey_type: "trip"` always).
 - **`create_trip_full`** (`SECURITY DEFINER` SQL function) — an alternate, atomic creation path used elsewhere (e.g. LINE `/tripgroup`) that agrees with the same `trip_type`-only-when-`journey_type='trip'` convention.
 
+## iOS trip reference photos
+
+The trip workspace uses the existing bundled Kyushu illustrations for day headers and offline reference photographs for matching itinerary/place-vote entries. These are destination references, separate from member uploads in `trip_photos`. Tap a place image to open the existing full-screen zoom viewer. Photographer, source-page and license attribution are shown with each reference photo and in its viewer.
+
+`ios/Slippy/Assets.xcassets/KyushuReferencePhotos.dataset` holds the matching aliases and attribution. `ios/scripts/import-kyushu-reference-photos.mjs` imports licensed JPEGs from Wikimedia Commons into the existing asset catalog; it can resume interrupted imports. Unmatched places keep their original text/icon presentation; no substitute image is assigned to an unrelated location. No database or storage-policy changes are required.
+
 ## Known gaps
 
 - No current route creates a `life_journeys` row with any `journey_type` other than `"trip"`; `"event"` is mentioned only in a stale code comment as a historical possibility, not a live path. Do not assume other journey types are reachable without checking again.
