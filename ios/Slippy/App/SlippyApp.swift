@@ -84,7 +84,7 @@ enum SharedContainerReader {
 final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
         if window?.traitCollection.userInterfaceIdiom == .pad { return .all }
-        return ImageViewerOrientation.isEnabled ? .allButUpsideDown : .portrait
+        return ImageViewerOrientation.supportedOrientations
     }
 
     func application(
@@ -110,18 +110,24 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 enum ImageViewerOrientation {
     private static var viewerCount = 0
     static var isEnabled: Bool { viewerCount > 0 }
+    private(set) static var supportedOrientations: UIInterfaceOrientationMask = .portrait
 
     static func open() {
+        if !isEnabled { supportedOrientations = .allButUpsideDown }
         viewerCount += 1
         update()
     }
 
     static func close() {
         viewerCount = max(0, viewerCount - 1)
+        if !isEnabled { supportedOrientations = .portrait }
         update(request: isEnabled ? nil : .portrait)
     }
 
     static func rotate(to orientations: UIInterfaceOrientationMask) {
+        guard isEnabled else { return }
+        // Retain a button-selected orientation until the viewer switches or closes.
+        supportedOrientations = orientations
         update(request: orientations)
     }
 
