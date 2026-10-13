@@ -36,7 +36,7 @@ struct SharedImportView: View {
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
                     }
-                    .background(Color(hex: "#f1f5f9"))
+                    .background(Color.surfaceMuted)
                 }
 
                 // Main preview
@@ -54,12 +54,12 @@ struct SharedImportView: View {
                 // Status messages
                 if let error {
                     statusRow(icon: "exclamationmark.triangle.fill",
-                              text: error, color: .red, bg: "#fef2f2")
+                              text: error, color: .errorText, bg: .errorSurface)
                 }
                 if uploadSuccess {
                     statusRow(icon: "checkmark.circle.fill",
                               text: "อัพโหลดสำเร็จ! AI กำลังประมวลผล…",
-                              color: Color(hex: "#16a34a"), bg: "#f0fdf4")
+                              color: .successText, bg: .successSurface)
                 }
 
                 // Action buttons
@@ -95,7 +95,7 @@ struct SharedImportView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 24)
             }
-            .background(Color(hex: "#f8f9fc"))
+            .background(Color.background)
             .navigationTitle("นำเข้าจาก Share")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -110,14 +110,14 @@ struct SharedImportView: View {
     }
 
     @ViewBuilder
-    private func statusRow(icon: String, text: String, color: Color, bg: String) -> some View {
+    private func statusRow(icon: String, text: String, color: Color, bg: Color) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon).foregroundColor(color)
             Text(text).font(.system(size: 13)).foregroundColor(color)
             Spacer()
         }
         .padding(12)
-        .background(Color(hex: bg))
+        .background(bg)
         .cornerRadius(10)
         .padding(.horizontal, 20)
         .padding(.bottom, 8)

@@ -40,7 +40,7 @@ struct SessionSummaryView: View {
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
             }
-            .background(Color(hex: "#f0fdf4").ignoresSafeArea())
+            .background(Color.successSurface.ignoresSafeArea())
             .navigationTitle("สรุปการเล่น")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -57,7 +57,7 @@ struct SessionSummaryView: View {
         VStack(spacing: 8) {
             Image(systemName: "sportscourt.fill")
                 .font(.system(size: 44))
-                .foregroundColor(Color(hex: "#16a34a"))
+                .foregroundColor(Color.successText)
 
             Text("\(sport.emoji) \(sport.label)")
                 .font(.system(size: 13))
@@ -65,7 +65,7 @@ struct SessionSummaryView: View {
 
             Text(session.durationFormatted)
                 .font(.system(size: 40, weight: .black, design: .rounded))
-                .foregroundColor(Color(hex: "#15803d"))
+                .foregroundColor(Color.successText)
 
             Text(session.startedAt, style: .date)
                 .font(.system(size: 13))
@@ -73,7 +73,7 @@ struct SessionSummaryView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(24)
-        .background(Color.white)
+        .background(Color.surface)
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .shadow(color: .black.opacity(0.05), radius: 8, y: 3)
     }
@@ -98,7 +98,7 @@ struct SessionSummaryView: View {
                     .foregroundColor(.secondary)
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 6).fill(Color(hex: "#dcfce7")).frame(height: 12)
+                        RoundedRectangle(cornerRadius: 6).fill(Color.successSurface).frame(height: 12)
                         RoundedRectangle(cornerRadius: 6).fill(Color(hex: "#16a34a"))
                             .frame(width: geo.size.width * session.smashRatio, height: 12)
                     }
@@ -107,7 +107,7 @@ struct SessionSummaryView: View {
             }
         }
         .padding(16)
-        .background(Color.white)
+        .background(Color.surface)
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
     }
@@ -132,7 +132,7 @@ struct SessionSummaryView: View {
             }
         }
         .padding(16)
-        .background(Color.white)
+        .background(Color.surface)
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
     }
@@ -143,14 +143,14 @@ struct SessionSummaryView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "brain.head.profile")
-                    .foregroundColor(Color(hex: "#8b5cf6"))
+                    .foregroundColor(Color.accent)
                 Text("คำแนะนำจาก Nova Coach")
                     .font(.system(size: 15, weight: .bold))
             }
 
             Text(insight.text)
                 .font(.system(size: 14))
-                .foregroundColor(Color(hex: "#374151"))
+                .foregroundColor(Color.textSecondary)
                 .lineSpacing(4)
 
             HStack(spacing: 0) {
@@ -161,7 +161,7 @@ struct SessionSummaryView: View {
             }
         }
         .padding(16)
-        .background(Color(hex: "#faf5ff"))
+        .background(Color.brand50)
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(hex: "#e9d5ff"), lineWidth: 1))
     }
@@ -170,7 +170,7 @@ struct SessionSummaryView: View {
         VStack(spacing: 4) {
             Text("\(value)")
                 .font(.system(size: 18, weight: .black, design: .rounded))
-                .foregroundColor(Color(hex: "#8b5cf6"))
+                .foregroundColor(Color.accent)
             Text(label)
                 .font(.system(size: 10))
                 .foregroundColor(.secondary)

@@ -72,7 +72,7 @@ struct BillingView: View {
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            LinearGradient(colors: [Color(hex: "#8b5cf6"), Color(hex: "#6366f1"), Color(hex: "#4338ca")],
+            LinearGradient(colors: [Color(hex: "#8b5cf6"), Color.brand500, Color.brand700],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
         )
         .clipShape(RoundedRectangle(cornerRadius: 18))

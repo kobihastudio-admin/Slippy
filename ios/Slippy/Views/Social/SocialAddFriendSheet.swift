@@ -70,7 +70,7 @@ struct SocialAddFriendSheet: View {
                     .interpolation(.none)
                     .resizable()
                     .frame(width: 240, height: 240)
-                    .background(Color.white)
+                    .background(Color.surface)
                     .cornerRadius(16)
                     .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.border, lineWidth: 1))
             } else {

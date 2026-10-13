@@ -66,6 +66,10 @@ The full-screen profile/reference image viewer supports iPhone landscape rotatio
 
 The Kyushu workspace's four visual-diary illustrations now appear in the trip gallery alongside uploaded photos, rather than in a separate overview section. Bundled illustrations open in the full-screen viewer and have no deletion action; gallery uploads retain their existing upload/delete flow.
 
+The itinerary item editor can select a picture from the trip gallery (including the four diary illustrations), or from the iPhone photo library. iPhone selections are downscaled to JPEG and uploaded only on Save using the existing public `trip-photos` bucket; the owner explicitly approved this destination on 2026-10-13. Uploaded pictures also appear in the trip gallery. The item stores `photo_path` or `photo_asset` in its existing `details` JSON, preserving unrelated keys; an unchanged photo leaves `details` out of the update payload. Reset returns to automatic destination matching without deleting a shared gallery photo. Item thumbnails remain 44pt and use the existing landscape-capable full-screen viewer. Missing remote pictures fall back to a matching attributed reference image or an inert placeholder. No schema, RLS or storage-policy changes.
+
+`node ios/scripts/verify-item-photo.mjs <resolved-supabase-swift-checkout>` compiles the actual model, payload and photo-selection block with the pinned package's AnyJSON source and verifies selection/reset/details-preservation behavior. DEBUG appearance preview route `item-edit` renders the editor with synthetic IDs and no-op itinerary actions; actual upload and persistence require authenticated device acceptance testing.
+
 `ios/Slippy/Assets.xcassets/KyushuReferencePhotos.dataset` holds the matching aliases and attribution. `ios/scripts/import-kyushu-reference-photos.mjs` imports licensed JPEGs from Wikimedia Commons into the existing asset catalog; it can resume interrupted imports. Unmatched places keep their original text/icon presentation; no substitute image is assigned to an unrelated location. No database or storage-policy changes are required.
 
 ## Known gaps

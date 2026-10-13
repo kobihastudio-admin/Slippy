@@ -39,7 +39,7 @@ struct SlippyLogoImage: View {
 #if DEBUG
 #Preview("Logo sizes") {
     ZStack {
-        LinearGradient(colors: [Color(hex: "#070a18"), Color(hex: "#0f1235")],
+        LinearGradient(colors: [Color.background, Color(hex: "#0f1235")],
                        startPoint: .top, endPoint: .bottom).ignoresSafeArea()
         VStack(spacing: 28) {
             SlippyLogoMark(size: 100, glow: true)

@@ -37,7 +37,7 @@ struct ProfileView: View {
     private var role: String { authVM.membership?.role ?? "member" }
     private let roleColors: [String: Color] = [
         "owner": Color(hex: "#f59e0b"), "admin": Color(hex: "#8b5cf6"),
-        "accountant": Color(hex: "#6366f1"), "member": Color(hex: "#94a3b8")
+        "accountant": Color.brand500, "member": Color.textSecondary
     ]
     private let roleLabels: [String: String] = [
         "owner":"OWNER","admin":"ADMIN","accountant":"ACCOUNTANT","member":"MEMBER"
@@ -50,6 +50,14 @@ struct ProfileView: View {
                 ScrollView {
                     VStack(spacing: 0) {
                         heroCard
+                        HStack {
+                            Label("การแสดงผล", systemImage: "circle.lefthalf.filled")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(Color.textPrimary)
+                            Spacer()
+                            ThemePicker()
+                        }
+                        .padding(.horizontal, 20).padding(.top, 16)
                         tabBar
                             .padding(.top, 20)
 
@@ -96,11 +104,11 @@ struct ProfileView: View {
                         .foregroundColor(.white)
                         .frame(width: 54, height: 54)
                         .background(
-                            LinearGradient(colors: [Color(hex: "#8b5cf6"), Color(hex: "#6366f1")],
+                            LinearGradient(colors: [Color(hex: "#8b5cf6"), Color.brand500],
                                            startPoint: .topLeading, endPoint: .bottomTrailing)
                         )
                         .clipShape(Circle())
-                        .shadow(color: Color(hex: "#6366f1").opacity(0.4), radius: 14, x: 0, y: 6)
+                        .shadow(color: Color.brand500.opacity(0.4), radius: 14, x: 0, y: 6)
                 }
                 .padding(.trailing, 20)
                 .padding(.bottom, 24)
@@ -172,7 +180,7 @@ struct ProfileView: View {
                   spacing: 10) {
             statCard(value: profileVM.isLoading ? "—" : "\(profileVM.docCount)",
                      label: "เอกสาร",
-                     icon: "doc.text.fill", color: Color(hex: "#6366f1"))
+                     icon: "doc.text.fill", color: Color.brand500)
             statCard(value: profileVM.isLoading ? "—" : "\(profileVM.splitCount)",
                      label: "หารบิล",
                      icon: "person.2.fill", color: Color(hex: "#3b82f6"))
@@ -362,7 +370,7 @@ struct ProfileView: View {
                 .overlay(Color.black.opacity(0.25))
         } else {
             LinearGradient(
-                colors: [Color(hex: "#4338ca"), Color(hex: "#7c3aed"), Color(hex: "#c026d3")],
+                colors: [Color.brand700, Color(hex: "#7c3aed"), Color(hex: "#c026d3")],
                 startPoint: .topLeading, endPoint: .bottomTrailing
             )
             .overlay(DotPattern().opacity(0.18))
@@ -432,7 +440,7 @@ struct ProfileView: View {
                 Button { withAnimation(.easeInOut(duration: 0.18)) { tab = t } } label: {
                     Text(t.rawValue)
                         .font(.system(size: 13, weight: selected ? .bold : .medium))
-                        .foregroundColor(selected ? Color.textOnBrand : Color.textSecondary)
+                        .foregroundColor(selected ? Color.textPrimary : Color.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                         .background(selected ? Color.surfaceMuted : Color.clear)
@@ -538,14 +546,14 @@ struct ProfileView: View {
                     ) {}
                 } else {
                     connectedAccountRow(
-                        icon: "bubble.left.fill", iconBg: Color(hex: "#9ca3af"),
+                        icon: "bubble.left.fill", iconBg: Color(hex: "#596475"),
                         title: "LINE",
                         subtitle: "ยังไม่ได้เชื่อมต่อ",
                         actionTitle: "เชื่อมต่อ", actionColor: Color(hex: "#06C755"), enabled: true
                     ) {}
                 }
                 connectedAccountRow(
-                    icon: "iphone", iconBg: Color(hex: "#1f2937"),
+                    icon: "iphone", iconBg: Color(hex: "#18212e"),
                     title: "Mobile App",
                     subtitle: "เร็วๆ นี้",
                     actionTitle: "เร็วๆ นี้", actionColor: Color.textSecondary, enabled: false
@@ -740,7 +748,7 @@ struct ProfileView: View {
                     Text("ออกจากระบบ").font(.system(size: 15, weight: .bold))
                 }
             }
-            .foregroundColor(Color(hex: "#ef4444"))
+            .foregroundColor(Color.errorText)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(Color(hex: "#ef4444").opacity(0.10))

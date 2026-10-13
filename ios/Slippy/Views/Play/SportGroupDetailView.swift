@@ -79,10 +79,10 @@ struct SportGroupDetailView: View {
         .foregroundColor(.white)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(LinearGradient(colors: [Color(hex: "#7c72f5"), Color(hex: "#6366f1")],
+        .background(LinearGradient(colors: [Color(hex: "#7c72f5"), Color.brand500],
                                     startPoint: .topLeading, endPoint: .bottomTrailing))
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: Color(hex: "#6366f1").opacity(0.3), radius: 10, y: 4)
+        .shadow(color: Color.brand500.opacity(0.3), radius: 10, y: 4)
     }
 
     private var addSessionButton: some View {

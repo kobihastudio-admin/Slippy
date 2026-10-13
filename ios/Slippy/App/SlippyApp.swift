@@ -11,9 +11,10 @@ struct SlippyApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            appContent
                 .environmentObject(authVM)
                 .preferredColorScheme(settings.displayMode.colorScheme)
+                .tint(Color.accent)
                 .onOpenURL { url in
                     // Share Extension import-shared callback
                     if url.scheme == "slippy" && url.host == "import-shared" {
@@ -45,7 +46,86 @@ struct SlippyApp: App {
                 }
         }
     }
+
+    @ViewBuilder private var appContent: some View {
+        #if DEBUG
+        if let screen = ProcessInfo.processInfo.environment["SLIPPY_APPEARANCE_PREVIEW"] {
+            AppearancePreviewContent(screen: screen)
+        } else {
+            RootView()
+        }
+        #else
+        RootView()
+        #endif
+    }
 }
+
+#if DEBUG
+private struct AppearancePreviewContent: View {
+    let screen: String
+    @StateObject private var authVM: AuthViewModel
+    @StateObject private var tabRouter = TabRouter()
+    @StateObject private var splitVM = SplitViewModel()
+    private let bill = try! JSONDecoder().decode(SplitBill.self, from: Data(
+        #"{"id":"00000000-0000-0000-0000-000000000001","organization_id":"00000000-0000-0000-0000-000000000000","creator_id":"preview","title":"Kyushu dinner","total_amount":2400,"created_at":"2026-11-21T10:00:00Z","split_participants":[]}"#.utf8))
+
+    init(screen: String) {
+        self.screen = screen
+        Self.verifyPaletteContrast()
+        let preview = AuthViewModel(_preview: true)
+        preview.setPreviewData(
+            profile: UserProfile(id: "preview", email: "preview@example.invalid", fullName: "ทดสอบธีม", avatarUrl: nil),
+            org: Organization(id: "00000000-0000-0000-0000-000000000000", name: "Slippy", plan: "pro", docQuota: 200, docUsed: 45))
+        _authVM = StateObject(wrappedValue: preview)
+    }
+
+    private static func verifyPaletteContrast() {
+        let pairs: [(String, Color, Color)] = [
+            ("primary", .textPrimary, .surface), ("secondary", .textSecondary, .background),
+            ("placeholder", .textTertiary, .inputBg), ("accent", .accent, .surface),
+            ("success", .successText, .successSurface), ("warning", .warningText, .warningSurface),
+            ("error", .errorText, .errorSurface), ("info", .infoText, .infoSurface),
+            ("action", .textOnBrand, .brand500),
+        ]
+        func luminance(_ color: Color, style: UIUserInterfaceStyle) -> CGFloat {
+            let resolved = UIColor(color).resolvedColor(with: UITraitCollection(userInterfaceStyle: style))
+            var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+            precondition(resolved.getRed(&red, green: &green, blue: &blue, alpha: &alpha))
+            func linear(_ value: CGFloat) -> CGFloat {
+                value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
+        }
+        for style in [UIUserInterfaceStyle.light, .dark] {
+            for (name, text, background) in pairs {
+                let foreground = luminance(text, style: style), surface = luminance(background, style: style)
+                let ratio = (max(foreground, surface) + 0.05) / (min(foreground, surface) + 0.05)
+                precondition(ratio >= 4.5, "\(name) contrast failed in \(style): \(ratio)")
+            }
+        }
+        print("[SlippyAppearance] 18 light/dark text contrast checks passed")
+        fflush(stdout)
+    }
+
+    var body: some View {
+        Group {
+            switch screen {
+            case "trip": TripAppearancePreview()
+            case "item-edit": TripItemEditorPreview()
+            case "profile": NavigationStack { ProfileView() }
+            case "documents": DocumentsView()
+            case "split-create": CreateSplitView(vm: splitVM)
+            case "split-detail": NavigationStack { SplitDetailView(bill: bill, vm: splitVM) }
+            case "more": MoreMenuView()
+            case "login": LoginView()
+            default: DashboardView()
+            }
+        }
+        .environmentObject(authVM)
+        .environmentObject(tabRouter)
+    }
+}
+#endif
 
 // MARK: – Shared container reader (App Group)
 

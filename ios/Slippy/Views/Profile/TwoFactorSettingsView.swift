@@ -84,7 +84,7 @@ struct TwoFactorSettingsView: View {
                     .interpolation(.none)
                     .resizable()
                     .frame(width: 180, height: 180)
-                    .background(Color.white)
+                    .background(Color.surface)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
 

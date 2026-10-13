@@ -38,7 +38,7 @@ struct PlayerSetupView: View {
                         dismiss()
                     }
                     .frame(maxWidth: .infinity, alignment: .center)
-                    .foregroundColor(Color(hex: "#16a34a"))
+                    .foregroundColor(Color.successText)
                     .bold()
                 }
             }

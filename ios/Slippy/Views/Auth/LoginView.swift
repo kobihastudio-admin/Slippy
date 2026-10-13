@@ -59,21 +59,7 @@ struct LoginView: View {
 
     // MARK: – Background
     private func splashBackground(_ geo: GeometryProxy) -> some View {
-        ZStack {
-            Color(hex: "#eeeaff").ignoresSafeArea()
-            // top-right blob
-            Ellipse()
-                .fill(Color(hex: "#c4b5fd").opacity(0.55))
-                .frame(width: 340, height: 260)
-                .rotationEffect(.degrees(-20))
-                .offset(x: geo.size.width * 0.3, y: -geo.size.height * 0.28)
-            // bottom-left blob
-            Ellipse()
-                .fill(Color(hex: "#ddd6fe").opacity(0.4))
-                .frame(width: 300, height: 200)
-                .rotationEffect(.degrees(15))
-                .offset(x: -geo.size.width * 0.2, y: geo.size.height * 0.42)
-        }
+        Color.background.ignoresSafeArea()
     }
 
     // MARK: – Logo
@@ -83,7 +69,7 @@ struct LoginView: View {
             ZStack {
                 sparkle(dx: -68, dy: -26, size: 15, color: Color(hex: "#a78bfa"))
                 sparkle(dx:  70, dy: -18, size: 12, color: Color(hex: "#f472b6"))
-                sparkle(dx: -55, dy:  42, size:  9, color: Color(hex: "#818cf8"))
+                sparkle(dx: -55, dy:  42, size:  9, color: Color.brand400)
                 sparkle(dx:  64, dy:  38, size: 11, color: Color(hex: "#a78bfa"))
                 sparkle(dx:  10, dy: -50, size:  8, color: Color(hex: "#f9a8d4"))
 
@@ -97,19 +83,19 @@ struct LoginView: View {
 
             Text("Slippy")
                 .font(.system(size: 32, weight: .black, design: .rounded))
-                .foregroundColor(Color(hex: "#1e1b4b"))
+                .foregroundColor(Color.textPrimary)
 
             Spacer().frame(height: 4)
 
             Text("Your AI Life Assistant")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(Color(hex: "#7c72f5"))
+                .foregroundColor(Color.accent)
 
             Spacer().frame(height: 8)
 
             Text("จัดการชีวิตให้ง่ายขึ้น\nด้วยผู้ช่วยอัจฉริยะของคุณ 💜")
                 .font(.system(size: 13))
-                .foregroundColor(Color(hex: "#6b7280"))
+                .foregroundColor(Color.textSecondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
         }
@@ -130,12 +116,12 @@ struct LoginView: View {
             if let err = localError ?? authVM.error {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.circle.fill")
-                        .foregroundColor(Color(hex: "#ef4444"))
-                    Text(err).font(.system(size: 13)).foregroundColor(Color(hex: "#dc2626"))
+                        .foregroundColor(Color.errorText)
+                    Text(err).font(.system(size: 13)).foregroundColor(Color.errorText)
                     Spacer()
                 }
                 .padding(12)
-                .background(Color(hex: "#fef2f2"))
+                .background(Color.errorSurface)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: "#fecaca"), lineWidth: 1))
                 .transition(.move(edge: .top).combined(with: .opacity))
@@ -159,7 +145,7 @@ struct LoginView: View {
                       icon: AnyView(GoogleLogo(size: 20)),
                       bg: .white,
                       textColor: Color(hex: "#1a1a2e"),
-                      border: Color(hex: "#e5e7eb"),
+                      border: Color.border,
                       isLoading: oauthKey == "Google") {
                 Task { await runNative("Google") { await authVM.signInWithGoogleNative() } }
             }
@@ -207,7 +193,7 @@ struct LoginView: View {
             Rectangle().fill(Color(hex: "#ddd6fe")).frame(height: 1)
             Text("หรือ")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(Color(hex: "#9ca3af"))
+                .foregroundColor(Color.textSecondary)
             Rectangle().fill(Color(hex: "#ddd6fe")).frame(height: 1)
         }
         .padding(.vertical, 18)
@@ -220,46 +206,46 @@ struct LoginView: View {
             // Email
             HStack(spacing: 12) {
                 Image(systemName: "envelope")
-                    .font(.system(size: 14)).foregroundColor(Color(hex: "#9ca3af"))
+                    .font(.system(size: 14)).foregroundColor(Color.textSecondary)
                 TextField("", text: $email,
-                          prompt: Text("E-mail Address").foregroundColor(Color(hex: "#9ca3af")))
+                          prompt: Text("E-mail Address").foregroundColor(Color.textSecondary))
                     .keyboardType(.emailAddress)
                     .autocapitalization(.none)
                     .autocorrectionDisabled()
                     .font(.system(size: 15))
-                    .foregroundColor(Color(hex: "#1e1b4b"))
+                    .foregroundColor(Color.textPrimary)
             }
             .padding(.horizontal, 16).padding(.vertical, 14)
-            .background(Color.white)
+            .background(Color.surface)
             .clipShape(RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: "#e5e7eb"), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.border, lineWidth: 1))
 
             // Password
             HStack(spacing: 12) {
                 Image(systemName: "lock.shield")
-                    .font(.system(size: 14)).foregroundColor(Color(hex: "#9ca3af"))
+                    .font(.system(size: 14)).foregroundColor(Color.textSecondary)
                 Group {
                     if showPw {
                         TextField("", text: $password,
-                                  prompt: Text("Password").foregroundColor(Color(hex: "#9ca3af")))
+                                  prompt: Text("Password").foregroundColor(Color.textSecondary))
                     } else {
                         SecureField("", text: $password,
-                                    prompt: Text("Password").foregroundColor(Color(hex: "#9ca3af")))
+                                    prompt: Text("Password").foregroundColor(Color.textSecondary))
                     }
                 }
                 .font(.system(size: 15))
-                .foregroundColor(Color(hex: "#1e1b4b"))
+                .foregroundColor(Color.textPrimary)
                 .onSubmit { Task { await handleEmailSignIn() } }
                 Button { showPw.toggle(); hapticLight() } label: {
                     Image(systemName: showPw ? "eye.slash" : "eye")
                         .font(.system(size: 14))
-                        .foregroundColor(Color(hex: "#9ca3af"))
+                        .foregroundColor(Color.textSecondary)
                 }
             }
             .padding(.horizontal, 16).padding(.vertical, 14)
-            .background(Color.white)
+            .background(Color.surface)
             .clipShape(RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: "#e5e7eb"), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.border, lineWidth: 1))
 
             // Remember + Forgot
             HStack {
@@ -267,11 +253,11 @@ struct LoginView: View {
                     HStack(spacing: 8) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 5)
-                                .fill(remember ? Color(hex: "#6366f1") : Color.white)
+                                .fill(remember ? Color.brand500 : Color.surface)
                                 .frame(width: 18, height: 18)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 5)
-                                        .stroke(remember ? Color(hex: "#6366f1") : Color(hex: "#d1d5db"),
+                                        .stroke(remember ? Color.brand500 : Color.border,
                                                 lineWidth: 1.5)
                                 )
                             if remember {
@@ -282,13 +268,13 @@ struct LoginView: View {
                         }
                         Text("จดจำฉัน")
                             .font(.system(size: 13))
-                            .foregroundColor(Color(hex: "#6b7280"))
+                            .foregroundColor(Color.textSecondary)
                     }
                 }
                 Spacer()
                 Button("ลืมรหัสผ่าน?") {}
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(Color(hex: "#6366f1"))
+                    .foregroundColor(Color.accent)
             }
 
             // Sign-in button — frame(maxWidth:.infinity) on Button directly
@@ -306,12 +292,12 @@ struct LoginView: View {
                 .frame(height: 50)
                 .background(
                     LinearGradient(
-                        colors: [Color(hex: "#8b7cf8"), Color(hex: "#6366f1")],
+                        colors: [Color(hex: "#8b7cf8"), Color.brand500],
                         startPoint: .topLeading, endPoint: .bottomTrailing
                     )
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 14))
-                .shadow(color: Color(hex: "#6366f1").opacity(0.3), radius: 10, x: 0, y: 4)
+                .shadow(color: Color.brand500.opacity(0.3), radius: 10, x: 0, y: 4)
             }
             .disabled(busy)
             .opacity(busy ? 0.7 : 1)
@@ -321,10 +307,10 @@ struct LoginView: View {
             // Register link
             HStack(spacing: 4) {
                 Text("ยังไม่มีบัญชี?")
-                    .font(.system(size: 13)).foregroundColor(Color(hex: "#9ca3af"))
+                    .font(.system(size: 13)).foregroundColor(Color.textSecondary)
                 Button("สมัครสมาชิก") { showSignUp = true }
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Color(hex: "#6366f1"))
+                    .foregroundColor(Color.accent)
             }
             .padding(.top, 4)
         }

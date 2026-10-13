@@ -128,10 +128,10 @@ struct SportSessionDetailView: View {
         .foregroundColor(.white)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(LinearGradient(colors: [Color(hex: "#7c72f5"), Color(hex: "#6366f1")],
+        .background(LinearGradient(colors: [Color(hex: "#7c72f5"), Color.brand500],
                                     startPoint: .topLeading, endPoint: .bottomTrailing))
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: Color(hex: "#6366f1").opacity(0.3), radius: 10, y: 4)
+        .shadow(color: Color.brand500.opacity(0.3), radius: 10, y: 4)
     }
 
     @ViewBuilder
@@ -312,7 +312,7 @@ struct SportSessionDetailView: View {
                 HStack(spacing: 10) {
                     AsyncImage(url: imgURL) { phase in
                         if let img = phase.image { img.resizable().scaledToFill() }
-                        else { Color(hex: "#f3f4f6") }
+                        else { Color.surfaceMuted }
                     }
                     .frame(width: 56, height: 56).clipShape(RoundedRectangle(cornerRadius: 8))
                     Spacer()

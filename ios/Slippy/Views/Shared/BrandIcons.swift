@@ -127,7 +127,7 @@ extension FeatureIconKind {
         switch self {
         case .expenses:
             return .init(symbol: "doc.text.fill",
-                         tile:  [Color(hex: "#f1ecff"), Color(hex: "#ddd0ff")],
+                         tile:  [Color.surfaceMuted, Color(hex: "#ddd0ff")],
                          glyph: [Color(hex: "#9b7bff"), Color(hex: "#6d28d9")])
         case .split:
             return .init(symbol: "person.2.fill",
@@ -154,7 +154,7 @@ extension FeatureIconKind {
         case .chat:
             return .init(symbol: "ellipsis.bubble.fill",
                          tile:  [Color(hex: "#eae7ff"), Color(hex: "#d6d0ff")],
-                         glyph: [Color(hex: "#818cf8"), Color(hex: "#4f46e5")])
+                         glyph: [Color.brand400, Color.brand600])
         case .more:
             return .init(symbol: "square.grid.2x2.fill",
                          tile:  [Color(hex: "#efeaff"), Color(hex: "#ddd6fe")],
@@ -360,7 +360,7 @@ struct CategoryIcon: View {
         guard !trimmed.isEmpty else {
             // Truly uncategorised — a neutral receipt disc.
             return CategoryStyle(symbol: "doc.text.fill",
-                                 colors: [Color(hex: "#9ca3af"), Color(hex: "#4b5563")])
+                                 colors: [Color.textSecondary, Color.textSecondary])
         }
 
         // Deterministic hash → stable palette slot (mirrors Vendor.brandColorHex).
@@ -398,7 +398,7 @@ struct CategoryIcon: View {
 #if DEBUG
 #Preview {
     ZStack {
-        Color(hex: "#070a18").ignoresSafeArea()
+        Color.background.ignoresSafeArea()
         VStack(spacing: 28) {
             HStack(spacing: 24) {
                 GoogleLogo(size: 32)
@@ -412,14 +412,14 @@ struct CategoryIcon: View {
             }
         }
         .padding(28)
-        .background(Color(hex: "#111827"))
+        .background(Color.surface)
         .cornerRadius(16)
     }
 }
 
 #Preview("Feature icons") {
     ZStack {
-        Color(hex: "#f4f3ff").ignoresSafeArea()
+        Color.surfaceMuted.ignoresSafeArea()
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4),
                   spacing: 18) {
             ForEach(Array(FeatureIconKind.allCases.enumerated()), id: \.offset) { _, kind in

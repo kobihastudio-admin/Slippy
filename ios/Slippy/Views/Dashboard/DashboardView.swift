@@ -31,7 +31,7 @@ struct DashboardView: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .top) {
-                Color(hex: "#f4f3ff").ignoresSafeArea()
+                Color.surfaceMuted.ignoresSafeArea()
 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
@@ -114,7 +114,7 @@ struct DashboardView: View {
             SlippyLogoMark(size: 36)
             Text("Slippy")
                 .font(.system(size: 22, weight: .black, design: .rounded))
-                .foregroundColor(Color(hex: "#1e1b4b"))
+                .foregroundColor(Color.textPrimary)
 
             Spacer()
 
@@ -122,7 +122,7 @@ struct DashboardView: View {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: "bell.fill")
                         .font(.system(size: 18))
-                        .foregroundColor(Color(hex: "#1e1b4b"))
+                        .foregroundColor(Color.textPrimary)
                         .frame(width: 40, height: 40)
                     let unread = vm.notifications.filter { $0.readAt == nil }.count
                     if unread > 0 {
@@ -144,7 +144,7 @@ struct DashboardView: View {
     @ViewBuilder
     private var profileAvatar: some View {
         ZStack {
-            Circle().fill(Color(hex: "#ede9fe")).frame(width: 40, height: 40)
+            Circle().fill(Color.brand50).frame(width: 40, height: 40)
             if let urlStr = authVM.profile?.avatarUrl, let url = URL(string: urlStr) {
                 AsyncImage(url: url) { phase in
                     switch phase {
@@ -155,13 +155,13 @@ struct DashboardView: View {
                     default:
                         Text(authVM.profile?.displayName.prefix(1).uppercased() ?? "S")
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(Color(hex: "#6366f1"))
+                            .foregroundColor(Color.accent)
                     }
                 }
             } else {
                 Text(authVM.profile?.displayName.prefix(1).uppercased() ?? "S")
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(Color(hex: "#6366f1"))
+                    .foregroundColor(Color.accent)
             }
         }
     }
@@ -176,7 +176,7 @@ struct DashboardView: View {
         ZStack {
             RoundedRectangle(cornerRadius: 22)
                 .fill(LinearGradient(
-                    colors: [Color(hex: "#7c72f5"), Color(hex: "#6366f1"), Color(hex: "#4f46e5")],
+                    colors: [Color(hex: "#7c72f5"), Color.brand500, Color.brand600],
                     startPoint: .topLeading, endPoint: .bottomTrailing
                 ))
 
@@ -214,9 +214,9 @@ struct DashboardView: View {
                                 Image(systemName: "chart.bar.fill").font(.system(size: 10))
                                 Text("ดูรายงาน").font(.system(size: 11.5, weight: .semibold))
                             }
-                            .foregroundColor(Color(hex: "#4f46e5"))
+                            .foregroundColor(Color.accent)
                             .padding(.horizontal, 12).padding(.vertical, 6)
-                            .background(Color.white)
+                            .background(Color.surface)
                             .clipShape(Capsule())
                         }
 
@@ -248,7 +248,7 @@ struct DashboardView: View {
             .padding(.vertical, 14)
         }
         .frame(height: 138)
-        .shadow(color: Color(hex: "#6366f1").opacity(0.25), radius: 16, x: 0, y: 8)
+        .shadow(color: Color.brand500.opacity(0.25), radius: 16, x: 0, y: 8)
         .padding(.horizontal, 20)
         .padding(.bottom, 18)
     }
@@ -332,7 +332,7 @@ struct DashboardView: View {
                 Circle().fill(Color.white).frame(width: 18, height: 18)
                 Text("S")
                     .font(.system(size: 11, weight: .black, design: .rounded))
-                    .foregroundColor(Color(hex: "#7c3aed"))
+                    .foregroundColor(Color.accent)
             }
             .offset(x: 20)
         }
@@ -345,7 +345,7 @@ struct DashboardView: View {
             Circle().strokeBorder(Color.white.opacity(0.65), lineWidth: 1)
             Text("฿")
                 .font(.system(size: size * 0.52, weight: .bold, design: .rounded))
-                .foregroundColor(Color(hex: "#b45309"))
+                .foregroundColor(Color.warningText)
         }
         .frame(width: size, height: size)
         .shadow(color: Color(hex: "#b45309").opacity(0.3), radius: 3, x: 0, y: 2)
@@ -383,11 +383,11 @@ struct DashboardView: View {
             HStack {
                 Text("ฟีเจอร์หลัก")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(Color(hex: "#1e1b4b"))
+                    .foregroundColor(Color.textPrimary)
                 Spacer()
                 Text("ดูทั้งหมด")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Color(hex: "#6366f1"))
+                    .foregroundColor(Color.accent)
             }
 
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 18) {
@@ -444,7 +444,7 @@ struct DashboardView: View {
             FeatureIcon(kind: tile.kind, size: 56)
             Text(tile.label)
                 .font(.system(size: 10.5, weight: .medium))
-                .foregroundColor(Color(hex: "#4b5563"))
+                .foregroundColor(Color.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
         }
@@ -472,7 +472,7 @@ struct DashboardView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("กำลังประมวลผล \(tracker.pending.count) ฉบับ")
                         .font(.system(size: 13.5, weight: .bold))
-                        .foregroundColor(Color(hex: "#1e1b4b"))
+                        .foregroundColor(Color.textPrimary)
                     Text("ข้อมูลจะอัพเดทที่หน้านี้เองเมื่ออ่านเสร็จ")
                         .font(.system(size: 11.5))
                         .foregroundColor(Color.textSecondary)
@@ -496,15 +496,15 @@ struct DashboardView: View {
             HStack {
                 Text("สรุปภาพรวม")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(Color(hex: "#1e1b4b"))
+                    .foregroundColor(Color.textPrimary)
                 Spacer()
                 HStack(spacing: 4) {
                     Text(vm.periodLabel)
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(Color(hex: "#6366f1"))
+                        .foregroundColor(Color.accent)
                     Image(systemName: "calendar")
                         .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(Color(hex: "#6366f1"))
+                        .foregroundColor(Color.accent)
                 }
             }
 
@@ -544,12 +544,12 @@ struct DashboardView: View {
 
             Text(label)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundColor(Color(hex: "#6b7280"))
+                .foregroundColor(Color.textSecondary)
                 .lineLimit(1)
 
             Text(value)
                 .font(.system(size: 15, weight: .bold))
-                .foregroundColor(Color(hex: "#1e1b4b"))
+                .foregroundColor(Color.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
 
@@ -562,7 +562,7 @@ struct DashboardView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(Color.white)
+        .background(Color.surface)
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.04), radius: 6, x: 0, y: 2)
     }
@@ -575,10 +575,10 @@ struct DashboardView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("เป้าหมายชีวิต")
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(Color(hex: "#1e1b4b"))
+                        .foregroundColor(Color.textPrimary)
                     Text("Life Score · 4 มิติของ Slippy")
                         .font(.system(size: 11))
-                        .foregroundColor(Color(hex: "#9ca3af"))
+                        .foregroundColor(Color.textSecondary)
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 0) {
@@ -587,7 +587,7 @@ struct DashboardView: View {
                         .foregroundColor(lifeScoreTone(vm.overallScore))
                     Text("Life Score")
                         .font(.system(size: 9))
-                        .foregroundColor(Color(hex: "#9ca3af"))
+                        .foregroundColor(Color.textSecondary)
                 }
             }
 
@@ -601,12 +601,12 @@ struct DashboardView: View {
                       spacing: 8) {
                 lifeDomainRow("ความมั่งคั่ง", "Wealth", vm.wealthScore, Color(hex: "#8b5cf6"))
                 lifeDomainRow("ไลฟ์สไตล์", "Lifestyle", vm.lifestyleScore, Color(hex: "#ec4899"))
-                lifeDomainRow("การเดินทาง", "Journey", vm.journeyScore, Color(hex: "#6366f1"))
+                lifeDomainRow("การเดินทาง", "Journey", vm.journeyScore, Color.brand500)
                 lifeDomainRow("สังคม", "Social", vm.socialScore, Color(hex: "#06b6d4"))
             }
         }
         .padding(16)
-        .background(Color.white)
+        .background(Color.surface)
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
         .padding(.horizontal, 20)
@@ -618,10 +618,10 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(label)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(Color(hex: "#374151"))
+                    .foregroundColor(Color.textSecondary)
                 GeometryReader { g in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(Color(hex: "#f3f4f6")).frame(height: 4)
+                        Capsule().fill(Color.surfaceMuted).frame(height: 4)
                         Capsule().fill(color).frame(width: g.size.width * (score / 100), height: 4)
                     }
                 }
@@ -632,7 +632,7 @@ struct DashboardView: View {
                 .foregroundColor(color)
         }
         .padding(10)
-        .background(Color(hex: "#f9fafb"))
+        .background(Color.inputBg)
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
@@ -648,11 +648,11 @@ struct DashboardView: View {
             HStack {
                 Text("รายการล่าสุด")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(Color(hex: "#1e1b4b"))
+                    .foregroundColor(Color.textPrimary)
                 Spacer()
                 NavigationLink("ดูทั้งหมด") { DocumentsView() }
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Color(hex: "#6366f1"))
+                    .foregroundColor(Color.accent)
             }
             .padding(.horizontal, 20)
 
@@ -663,14 +663,14 @@ struct DashboardView: View {
                         .foregroundColor(Color(hex: "#ddd6fe"))
                     Text("ยังไม่มีรายการ")
                         .font(.system(size: 13))
-                        .foregroundColor(Color(hex: "#9ca3af"))
+                        .foregroundColor(Color.textSecondary)
                     Text("กดสแกนเพื่อเพิ่มเอกสารแรกของคุณ")
                         .font(.system(size: 11))
                         .foregroundColor(Color(hex: "#c4b5fd"))
                 }
                 .frame(maxWidth: .infinity)
                 .padding(40)
-                .background(Color.white)
+                .background(Color.surface)
                 .clipShape(RoundedRectangle(cornerRadius: 20))
                 .padding(.horizontal, 20)
             } else {
@@ -792,11 +792,11 @@ struct DashboardView: View {
             HStack {
                 Text("กิจกรรมล่าสุด")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(Color(hex: "#1e1b4b"))
+                    .foregroundColor(Color.textPrimary)
                 Spacer()
                 Button("ดูทั้งหมด") { showNotifications = true }
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Color(hex: "#6366f1"))
+                    .foregroundColor(Color.accent)
             }
             .padding(.horizontal, 20)
 
@@ -806,15 +806,15 @@ struct DashboardView: View {
                     VStack(spacing: 6) {
                         Image(systemName: "tray")
                             .font(.system(size: 24))
-                            .foregroundColor(Color(hex: "#d1d5db"))
+                            .foregroundColor(Color.border)
                         Text("ยังไม่มีกิจกรรม")
                             .font(.system(size: 12))
-                            .foregroundColor(Color(hex: "#9ca3af"))
+                            .foregroundColor(Color.textSecondary)
                     }
                     Spacer()
                 }
                 .padding(.vertical, 24)
-                .background(Color.white)
+                .background(Color.surface)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .padding(.horizontal, 20)
             } else {
@@ -824,7 +824,7 @@ struct DashboardView: View {
                         notifRow(n)
                     }
                 }
-                .background(Color.white)
+                .background(Color.surface)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .shadow(color: .black.opacity(0.04), radius: 6, x: 0, y: 2)
                 .padding(.horizontal, 20)
@@ -845,19 +845,19 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(n.title)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(Color(hex: "#1e1b4b"))
+                    .foregroundColor(Color.textPrimary)
                     .lineLimit(1)
                 if let body = n.body {
                     Text(body)
                         .font(.system(size: 11))
-                        .foregroundColor(Color(hex: "#9ca3af"))
+                        .foregroundColor(Color.textSecondary)
                         .lineLimit(1)
                 }
             }
             Spacer()
             Text(relTime(n.createdAt))
                 .font(.system(size: 10))
-                .foregroundColor(Color(hex: "#9ca3af"))
+                .foregroundColor(Color.textSecondary)
         }
         .padding(12)
     }
@@ -875,7 +875,7 @@ struct DashboardView: View {
         case "integration_sync":   return ("bolt.fill", Color(hex: "#8b5cf6"))
         case "line_received":      return ("message.fill", Color(hex: "#06C755"))
         case "email_received":     return ("envelope.fill", Color(hex: "#3b82f6"))
-        default:                   return ("bell.fill", Color(hex: "#6366f1"))
+        default:                   return ("bell.fill", Color.brand500)
         }
     }
 
@@ -891,12 +891,12 @@ struct DashboardView: View {
                             Text("💡").font(.system(size: 14))
                             Text("AI Insights")
                                 .font(.system(size: 13, weight: .bold))
-                                .foregroundColor(Color(hex: "#1e1b4b"))
+                                .foregroundColor(Color.textPrimary)
                             Text("\(vm.lifeInsights.count)")
                                 .font(.system(size: 10, weight: .bold))
                                 .foregroundColor(.white)
                                 .frame(width: 18, height: 18)
-                                .background(Color(hex: "#6366f1"))
+                                .background(Color.brand500)
                                 .clipShape(Circle())
                         }
                         VStack(spacing: 8) {
@@ -906,10 +906,10 @@ struct DashboardView: View {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(ins.title)
                                             .font(.system(size: 12.5, weight: .semibold))
-                                            .foregroundColor(Color(hex: "#1e1b4b"))
+                                            .foregroundColor(Color.textPrimary)
                                         Text(ins.body)
                                             .font(.system(size: 11))
-                                            .foregroundColor(Color(hex: "#9ca3af"))
+                                            .foregroundColor(Color.textSecondary)
                                             .lineLimit(2)
                                     }
                                 }
@@ -917,7 +917,7 @@ struct DashboardView: View {
                         }
                     }
                     .padding(16)
-                    .background(Color.white)
+                    .background(Color.surface)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                     .shadow(color: .black.opacity(0.04), radius: 6, x: 0, y: 2)
                 }
@@ -928,36 +928,36 @@ struct DashboardView: View {
                             Text("🏪").font(.system(size: 14))
                             Text("ร้านค้าที่ใช้บ่อย")
                                 .font(.system(size: 13, weight: .bold))
-                                .foregroundColor(Color(hex: "#1e1b4b"))
+                                .foregroundColor(Color.textPrimary)
                         }
                         VStack(spacing: 8) {
                             ForEach(Array(vm.lifeMerchants.enumerated()), id: \.offset) { idx, m in
                                 HStack(spacing: 10) {
                                     Text("\(idx + 1)")
                                         .font(.system(size: 11, weight: .bold))
-                                        .foregroundColor(Color(hex: "#9ca3af"))
+                                        .foregroundColor(Color.textSecondary)
                                         .frame(width: 26, height: 26)
-                                        .background(Color(hex: "#f3f4f6"))
+                                        .background(Color.surfaceMuted)
                                         .clipShape(RoundedRectangle(cornerRadius: 8))
                                     VStack(alignment: .leading, spacing: 1) {
                                         Text(m.name)
                                             .font(.system(size: 12.5, weight: .medium))
-                                            .foregroundColor(Color(hex: "#1e1b4b"))
+                                            .foregroundColor(Color.textPrimary)
                                             .lineLimit(1)
                                         Text("\(m.visitCount) ครั้ง")
                                             .font(.system(size: 10.5))
-                                            .foregroundColor(Color(hex: "#9ca3af"))
+                                            .foregroundColor(Color.textSecondary)
                                     }
                                     Spacer()
                                     Text(fmtTHB(m.totalSpent))
                                         .font(.system(size: 12.5, weight: .semibold))
-                                        .foregroundColor(Color(hex: "#1e1b4b"))
+                                        .foregroundColor(Color.textPrimary)
                                 }
                             }
                         }
                     }
                     .padding(16)
-                    .background(Color.white)
+                    .background(Color.surface)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                     .shadow(color: .black.opacity(0.04), radius: 6, x: 0, y: 2)
                 }
@@ -979,7 +979,7 @@ struct LifeRadarChart: View {
     private var scores: [Double] { [wealth, lifestyle, journey, social] }
     private let labels = ["Wealth", "Lifestyle", "Journey", "Social"]
     private let colors = [Color(hex: "#8b5cf6"), Color(hex: "#ec4899"),
-                           Color(hex: "#6366f1"), Color(hex: "#06b6d4")]
+                           Color.brand500, Color(hex: "#06b6d4")]
 
     var body: some View {
         GeometryReader { g in
@@ -991,7 +991,7 @@ struct LifeRadarChart: View {
                 // Grid rings
                 ForEach([0.25, 0.5, 0.75, 1.0], id: \.self) { ring in
                     polygonPath(radius: radius * ring, center: center)
-                        .stroke(Color(hex: "#e5e7eb"), lineWidth: 1)
+                        .stroke(Color.border, lineWidth: 1)
                 }
                 // Axis lines
                 ForEach(0..<4, id: \.self) { i in
@@ -1000,7 +1000,7 @@ struct LifeRadarChart: View {
                         path.move(to: center)
                         path.addLine(to: p)
                     }
-                    .stroke(Color(hex: "#e5e7eb"), lineWidth: 1)
+                    .stroke(Color.border, lineWidth: 1)
                 }
                 // Data polygon
                 dataPath(radius: radius, center: center)
@@ -1019,7 +1019,7 @@ struct LifeRadarChart: View {
                     let p = point(for: 1.18, index: i, radius: radius, center: center)
                     Text(labels[i])
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(Color(hex: "#6b7280"))
+                        .foregroundColor(Color.textSecondary)
                         .position(p)
                 }
             }
@@ -1095,7 +1095,7 @@ struct SwipeActionsRow<Content: View>: View {
             .clipShape(RoundedRectangle(cornerRadius: 16))
 
             content()
-                .background(Color.white)
+                .background(Color.surface)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .offset(x: offsetX)
                 // `content()` contains a NavigationLink/Button, which normally
@@ -1153,11 +1153,11 @@ struct DocRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(doc.vendorName ?? doc.fileName)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(Color(hex: "#1e1b4b"))
+                    .foregroundColor(Color.textPrimary)
                     .lineLimit(1)
                 Text("\(displayCategory ?? "ทั่วไป") · \(relTime(doc.createdAt))")
                     .font(.system(size: 11))
-                    .foregroundColor(Color(hex: "#9ca3af"))
+                    .foregroundColor(Color.textSecondary)
                     .lineLimit(1)
             }
             Spacer()
@@ -1165,7 +1165,7 @@ struct DocRow: View {
                 if let amt = doc.totalAmount {
                     Text(fmtTHB(amt))
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(Color(hex: "#1e1b4b"))
+                        .foregroundColor(Color.textPrimary)
                 }
                 HStack(spacing: 4) {
                     Circle()
@@ -1179,7 +1179,7 @@ struct DocRow: View {
             }
         }
         .padding(12)
-        .background(Color.white)
+        .background(Color.surface)
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.04), radius: 6, x: 0, y: 2)
     }

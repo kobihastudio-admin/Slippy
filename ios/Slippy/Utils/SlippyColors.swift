@@ -1,12 +1,12 @@
 import SwiftUI
 
 extension Color {
-    // MARK: – Brand (Indigo) — matches web brand-* CSS vars
-    static let brand50  = Color(hex: "#eef2ff")
-    static let brand100 = Color(hex: "#e0e7ff")
+    // MARK: – Brand (Indigo)
+    static let brand50  = adaptive(light: "#eef2ff", dark: "#24263b")
+    static let brand100 = adaptive(light: "#e0e7ff", dark: "#30334b")
     static let brand300 = Color(hex: "#a5b4fc")
     static let brand400 = Color(hex: "#818cf8")
-    static let brand500 = Color(hex: "#6366f1")
+    static let brand500 = Color(hex: "#5b5ee5")
     static let brand600 = Color(hex: "#4f46e5")
     static let brand700 = Color(hex: "#4338ca")
     static let brand900 = Color(hex: "#312e81")
@@ -19,51 +19,31 @@ extension Color {
     static let statusPushed     = Color(hex: "#8b5cf6")
     static let statusFailed     = Color(hex: "#ef4444")
 
-    // MARK: – Adaptive surfaces (light / dark)
-    /// White in light mode, ~#1e2030 in dark mode
-    static let surface = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(hex: "#1e2030")
-            : .white
-    })
-    /// ~#f4f4f6 light / #14161f dark
-    static let surfaceMuted = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(hex: "#14161f")
-            : UIColor(hex: "#f4f4f6")
-    })
-    /// Input background
-    static let inputBg = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(hex: "#1a1d2e")
-            : UIColor(hex: "#f9fafb")
-    })
-    /// Border
-    static let border = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(hex: "#2d3150")
-            : UIColor(hex: "#e5e7eb")
-    })
-    /// Primary text
-    static let textPrimary = Color(UIColor { t in
-        t.userInterfaceStyle == .dark ? .white : UIColor(hex: "#111827")
-    })
-    /// Secondary / muted text
-    static let textSecondary = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(hex: "#9ca3af")
-            : UIColor(hex: "#6b7280")
-    })
-    /// Screen background — ~#f8f9fc light / #0a0d1a dark (matches web --background)
-    static let background = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(hex: "#0a0d1a")
-            : UIColor(hex: "#f8f9fc")
-    })
-    /// Text colour for content drawn on top of a selected/brand-filled chip
-    static let textOnBrand = Color(UIColor { t in
-        t.userInterfaceStyle == .dark ? .white : UIColor(hex: "#111827")
-    })
+    // MARK: – Shared adaptive appearance
+    static let background = adaptive(light: "#f7f8fa", dark: "#101217")
+    static let surface = adaptive(light: "#ffffff", dark: "#1b1e25")
+    static let surfaceMuted = adaptive(light: "#eef0f4", dark: "#242831")
+    static let inputBg = adaptive(light: "#f2f4f7", dark: "#22262e")
+    static let border = adaptive(light: "#d8dde5", dark: "#3b414d")
+    static let textPrimary = adaptive(light: "#18212e", dark: "#f3f5f8")
+    static let textSecondary = adaptive(light: "#596475", dark: "#b2bac8")
+    static let textTertiary = adaptive(light: "#667085", dark: "#a1aabb")
+    static let accent = adaptive(light: "#4f46e5", dark: "#a5b4fc")
+    static let textOnBrand = Color.white
+    static let successSurface = adaptive(light: "#eaf7f0", dark: "#17352a")
+    static let warningSurface = adaptive(light: "#fff5df", dark: "#382d19")
+    static let errorSurface = adaptive(light: "#fff0f1", dark: "#3b2027")
+    static let infoSurface = adaptive(light: "#eaf2ff", dark: "#1c2c43")
+    static let successText = adaptive(light: "#047857", dark: "#6ee7b7")
+    static let warningText = adaptive(light: "#8a5b00", dark: "#fcd34d")
+    static let errorText = adaptive(light: "#b91c1c", dark: "#fca5a5")
+    static let infoText = adaptive(light: "#1d4ed8", dark: "#93c5fd")
+
+    static func adaptive(light: String, dark: String) -> Color {
+        Color(UIColor { traits in
+            UIColor(hex: traits.userInterfaceStyle == .dark ? dark : light)
+        })
+    }
 
     // MARK: – Hex initialiser (SwiftUI Color)
     init(hex: String) {

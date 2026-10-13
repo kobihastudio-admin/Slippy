@@ -17,7 +17,7 @@ struct FriendChatListView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color(hex: "#f4f3ff").ignoresSafeArea()
+                Color.surfaceMuted.ignoresSafeArea()
 
                 if vm.isLoading {
                     ProgressView().tint(Color.brand500)
@@ -79,13 +79,13 @@ struct FriendChatListView: View {
                 .foregroundColor(Color(hex: "#c4b5fd"))
             Text("ยังไม่มีการสนทนา")
                 .font(.system(size: 15, weight: .medium))
-                .foregroundColor(Color(hex: "#6b7280"))
+                .foregroundColor(Color.textSecondary)
             Button { hapticLight(); showFriendPicker = true } label: {
                 Text("เริ่มแชทกับเพื่อน")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.white)
                     .padding(.horizontal, 16).padding(.vertical, 10)
-                    .background(Color(hex: "#6366f1"))
+                    .background(Color.brand500)
                     .clipShape(Capsule())
             }
         }
@@ -108,39 +108,39 @@ private struct ConversationRowView: View {
     var body: some View {
         HStack(spacing: 12) {
             ZStack {
-                Circle().fill(Color(hex: "#ede9fe")).frame(width: 48, height: 48)
+                Circle().fill(Color.brand50).frame(width: 48, height: 48)
                 if let urlStr = conv.displayAvatarUrl, let url = URL(string: urlStr) {
                     AsyncImage(url: url) { phase in
                         if case .success(let img) = phase {
                             img.resizable().scaledToFill().frame(width: 48, height: 48).clipShape(Circle())
                         } else {
                             Text(conv.displayName.prefix(1).uppercased())
-                                .font(.system(size: 17, weight: .bold)).foregroundColor(Color(hex: "#6366f1"))
+                                .font(.system(size: 17, weight: .bold)).foregroundColor(Color.accent)
                         }
                     }
                 } else {
                     Text(conv.displayName.prefix(1).uppercased())
-                        .font(.system(size: 17, weight: .bold)).foregroundColor(Color(hex: "#6366f1"))
+                        .font(.system(size: 17, weight: .bold)).foregroundColor(Color.accent)
                 }
             }
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(conv.displayName)
                     .font(.system(size: 14.5, weight: .semibold))
-                    .foregroundColor(Color(hex: "#1e1b4b"))
+                    .foregroundColor(Color.textPrimary)
                     .lineLimit(1)
                 Text(lastMessagePreview())
                     .font(.system(size: 12.5))
-                    .foregroundColor(Color(hex: "#9ca3af"))
+                    .foregroundColor(Color.textSecondary)
                     .lineLimit(1)
             }
             Spacer()
             Text(relTime(conv.updatedAt))
                 .font(.system(size: 10.5))
-                .foregroundColor(Color(hex: "#9ca3af"))
+                .foregroundColor(Color.textSecondary)
         }
         .padding(12)
-        .background(Color.white)
+        .background(Color.surface)
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.04), radius: 6, x: 0, y: 2)
     }
@@ -156,12 +156,12 @@ private struct FriendPickerSheet: View {
             List(friends) { friend in
                 Button { onPick(friend) } label: {
                     HStack(spacing: 12) {
-                        Circle().fill(Color(hex: "#ede9fe")).frame(width: 40, height: 40)
+                        Circle().fill(Color.brand50).frame(width: 40, height: 40)
                             .overlay(Text(friend.displayName.prefix(1).uppercased())
-                                .font(.system(size: 15, weight: .bold)).foregroundColor(Color(hex: "#6366f1")))
+                                .font(.system(size: 15, weight: .bold)).foregroundColor(Color.accent))
                         Text(friend.displayName)
                             .font(.system(size: 14.5))
-                            .foregroundColor(Color(hex: "#1e1b4b"))
+                            .foregroundColor(Color.textPrimary)
                     }
                 }
             }
@@ -169,7 +169,7 @@ private struct FriendPickerSheet: View {
                 if friends.isEmpty {
                     Text("ยังไม่มีเพื่อน — เพิ่มเพื่อนก่อนเริ่มแชทได้ที่แท็บโซเชียล")
                         .font(.system(size: 13))
-                        .foregroundColor(Color(hex: "#9ca3af"))
+                        .foregroundColor(Color.textSecondary)
                         .multilineTextAlignment(.center)
                         .padding(32)
                 }

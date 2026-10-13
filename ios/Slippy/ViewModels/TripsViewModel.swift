@@ -123,6 +123,7 @@ final class TripsViewModel: ObservableObject {
         var confirmationCode: String?
         var amount: Double?
         var currency: String?
+        var details: [String: AnyJSON]? = nil
     }
 
     private struct ItemRow: Encodable {
@@ -131,7 +132,7 @@ final class TripsViewModel: ObservableObject {
         let f: TripItemFields
 
         enum Keys: String, CodingKey {
-            case day_id, sort_order, type, title, location, time_from, time_to, status, notes, provider, confirmation_code, amount, currency
+            case day_id, sort_order, type, title, location, time_from, time_to, status, notes, provider, confirmation_code, amount, currency, details
         }
         func encode(to encoder: Encoder) throws {
             var c = encoder.container(keyedBy: Keys.self)
@@ -148,6 +149,7 @@ final class TripsViewModel: ObservableObject {
             try c.encode(f.confirmationCode, forKey: .confirmation_code)
             try c.encode(f.amount ?? 0, forKey: .amount)
             try c.encode(f.currency ?? "JPY", forKey: .currency)
+            try c.encodeIfPresent(f.details, forKey: .details)
         }
     }
 

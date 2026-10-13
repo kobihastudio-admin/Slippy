@@ -40,7 +40,7 @@ struct NotesScansPickerView: View {
                     gridView
                 }
             }
-            .background(Color(hex: "#f8f9fc"))
+            .background(Color.background)
             .navigationTitle(foundScanAlbum ? "เอกสารสแกนในคลังภาพ" : "นำเข้าจาก Notes")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -86,7 +86,7 @@ struct NotesScansPickerView: View {
                                         .scaledToFill()
                                 } else {
                                     Rectangle()
-                                        .fill(Color(hex: "#e5e7eb"))
+                                        .fill(Color.border)
                                         .overlay(ProgressView().scaleEffect(0.6))
                                 }
                             }
@@ -150,13 +150,13 @@ struct NotesScansPickerView: View {
             Spacer()
             Image(systemName: "doc.viewfinder")
                 .font(.system(size: 52))
-                .foregroundColor(Color(hex: "#d1d5db"))
+                .foregroundColor(Color.border)
             Text("ไม่พบเอกสารสแกน")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(Color(hex: "#6b7280"))
+                .foregroundColor(Color.textSecondary)
             Text("เปิด Notes แล้วสแกนเอกสาร จากนั้นบันทึกลงคลังภาพ\nหรือสแกนโดยตรงในแอป Slippy")
                 .font(.system(size: 13))
-                .foregroundColor(Color(hex: "#9ca3af"))
+                .foregroundColor(Color.textSecondary)
                 .multilineTextAlignment(.center)
             Spacer()
         }
@@ -168,10 +168,10 @@ struct NotesScansPickerView: View {
             Spacer()
             Image(systemName: "lock.fill")
                 .font(.system(size: 52))
-                .foregroundColor(Color(hex: "#d1d5db"))
+                .foregroundColor(Color.border)
             Text("ไม่มีสิทธิ์เข้าถึงรูปภาพ")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(Color(hex: "#6b7280"))
+                .foregroundColor(Color.textSecondary)
             Button("ไปที่การตั้งค่า") {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
                     UIApplication.shared.open(url)

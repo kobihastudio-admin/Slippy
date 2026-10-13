@@ -34,7 +34,7 @@ struct DocumentsView: View {
                     docList
                 }
             }
-            .background(Color(hex: "#f8f9fc"))
+            .background(Color.background)
             .navigationTitle("เอกสาร")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {

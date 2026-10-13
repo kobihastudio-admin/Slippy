@@ -84,7 +84,7 @@ struct TaxView: View {
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
-                    LinearGradient(colors: [Color(hex: "#6366f1"), Color(hex: "#4338ca")],
+                    LinearGradient(colors: [Color.brand500, Color.brand700],
                                    startPoint: .topLeading, endPoint: .bottomTrailing)
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 18))
@@ -176,7 +176,7 @@ struct TaxView: View {
             VStack(alignment: .trailing, spacing: 3) {
                 Text(fmtTHB(item.tax))
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(Color(hex: "#ef4444"))
+                    .foregroundColor(Color.errorText)
                 Text("จาก \(fmtTHB(item.amount))")
                     .font(.system(size: 10))
                     .foregroundColor(Color.textSecondary)

@@ -475,7 +475,7 @@ struct HealthView: View {
                         Text(tip.icon)
                             .font(.system(size: 22))
                             .frame(width: 40, height: 40)
-                            .background(Color(hex: "#f0fdf4"))
+                            .background(Color.successSurface)
                             .cornerRadius(10)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(tip.title)

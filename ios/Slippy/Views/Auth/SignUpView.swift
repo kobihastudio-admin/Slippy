@@ -65,7 +65,7 @@ struct SignUpView: View {
 
     private func signUpBackground(_ geo: GeometryProxy) -> some View {
         ZStack {
-            Color(hex: "#eeeaff").ignoresSafeArea()
+            Color.background.ignoresSafeArea()
             Ellipse()
                 .fill(Color(hex: "#c4b5fd").opacity(0.55))
                 .frame(width: 340, height: 260)
@@ -86,7 +86,7 @@ struct SignUpView: View {
             ZStack {
                 sparkle(dx: -62, dy: -22, size: 13, color: Color(hex: "#a78bfa"))
                 sparkle(dx:  64, dy: -16, size: 10, color: Color(hex: "#f472b6"))
-                sparkle(dx: -50, dy:  36, size:  8, color: Color(hex: "#818cf8"))
+                sparkle(dx: -50, dy:  36, size:  8, color: Color.brand400)
                 sparkle(dx:  58, dy:  32, size: 10, color: Color(hex: "#a78bfa"))
                 sparkle(dx:   8, dy: -44, size:  7, color: Color(hex: "#f9a8d4"))
 
@@ -100,19 +100,19 @@ struct SignUpView: View {
 
             Text("สร้างบัญชีใหม่")
                 .font(.system(size: 28, weight: .black, design: .rounded))
-                .foregroundColor(Color(hex: "#1e1b4b"))
+                .foregroundColor(Color.textPrimary)
 
             Spacer().frame(height: 4)
 
             Text("เริ่มต้นใช้งาน Slippy วันนี้")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(Color(hex: "#7c72f5"))
+                .foregroundColor(Color.accent)
 
             Spacer().frame(height: 6)
 
             Text("ผู้ช่วย AI จัดการชีวิตให้ง่ายขึ้น 💜")
                 .font(.system(size: 12))
-                .foregroundColor(Color(hex: "#6b7280"))
+                .foregroundColor(Color.textSecondary)
         }
         .opacity(appeared ? 1 : 0)
         .offset(y: appeared ? 0 : -10)
@@ -130,19 +130,19 @@ struct SignUpView: View {
     private func errorBanner(_ message: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.circle.fill")
-                .foregroundColor(Color(hex: "#ef4444"))
+                .foregroundColor(Color.errorText)
             Text(message)
                 .font(.system(size: 13))
-                .foregroundColor(Color(hex: "#dc2626"))
+                .foregroundColor(Color.errorText)
             Spacer()
             Button { withAnimation { localError = nil } } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(Color(hex: "#9ca3af"))
+                    .foregroundColor(Color.textSecondary)
             }
         }
         .padding(12)
-        .background(Color(hex: "#fef2f2"))
+        .background(Color.errorSurface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: "#fecaca"), lineWidth: 1))
     }
@@ -158,14 +158,14 @@ struct SignUpView: View {
                         .frame(width: 80, height: 80)
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 44))
-                        .foregroundColor(Color(hex: "#16a34a"))
+                        .foregroundColor(Color.successText)
                 }
                 Text("สมัครสมาชิกสำเร็จ!")
                     .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(Color(hex: "#15803d"))
+                    .foregroundColor(Color.successText)
                 Text("กรุณาตรวจสอบอีเมลเพื่อยืนยันบัญชีก่อนเข้าสู่ระบบ")
                     .font(.system(size: 13))
-                    .foregroundColor(Color(hex: "#6b7280"))
+                    .foregroundColor(Color.textSecondary)
                     .multilineTextAlignment(.center)
                     .lineSpacing(3)
             }
@@ -182,12 +182,12 @@ struct SignUpView: View {
                     .frame(height: 50)
                     .background(
                         LinearGradient(
-                            colors: [Color(hex: "#8b7cf8"), Color(hex: "#6366f1")],
+                            colors: [Color(hex: "#8b7cf8"), Color.brand500],
                             startPoint: .topLeading, endPoint: .bottomTrailing
                         )
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 14))
-                    .shadow(color: Color(hex: "#6366f1").opacity(0.3), radius: 10, x: 0, y: 4)
+                    .shadow(color: Color.brand500.opacity(0.3), radius: 10, x: 0, y: 4)
             }
         }
         .opacity(appeared ? 1 : 0)
@@ -205,7 +205,7 @@ struct SignUpView: View {
                         .autocapitalization(.words)
                         .autocorrectionDisabled()
                         .font(.system(size: 15))
-                        .foregroundColor(Color(hex: "#1e1b4b"))
+                        .foregroundColor(Color.textPrimary)
                 }
 
                 fieldDivider
@@ -216,7 +216,7 @@ struct SignUpView: View {
                         .autocapitalization(.none)
                         .autocorrectionDisabled()
                         .font(.system(size: 15))
-                        .foregroundColor(Color(hex: "#1e1b4b"))
+                        .foregroundColor(Color.textPrimary)
                 }
 
                 fieldDivider
@@ -234,7 +234,7 @@ struct SignUpView: View {
             .shadow(color: .black.opacity(0.06), radius: 10, y: 4)
             .overlay(
                 RoundedRectangle(cornerRadius: 18)
-                    .stroke(Color(hex: "#e5e7eb"), lineWidth: 1)
+                    .stroke(Color.border, lineWidth: 1)
             )
 
             // Password strength indicator
@@ -265,12 +265,12 @@ struct SignUpView: View {
                 .frame(height: 50)
                 .background(
                     LinearGradient(
-                        colors: [Color(hex: "#8b7cf8"), Color(hex: "#6366f1")],
+                        colors: [Color(hex: "#8b7cf8"), Color.brand500],
                         startPoint: .topLeading, endPoint: .bottomTrailing
                     )
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 14))
-                .shadow(color: Color(hex: "#6366f1").opacity(0.3), radius: 10, x: 0, y: 4)
+                .shadow(color: Color.brand500.opacity(0.3), radius: 10, x: 0, y: 4)
             }
             .disabled(isLoading)
             .opacity(isLoading ? 0.7 : 1)
@@ -280,17 +280,17 @@ struct SignUpView: View {
             // Terms hint
             Text("การสมัครสมาชิกถือว่าคุณยอมรับ Terms of Service\nและ Privacy Policy ของ Slippy")
                 .font(.system(size: 11))
-                .foregroundColor(Color(hex: "#9ca3af"))
+                .foregroundColor(Color.textSecondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(2)
 
             // Already have account
             HStack(spacing: 4) {
                 Text("มีบัญชีแล้ว?")
-                    .font(.system(size: 13)).foregroundColor(Color(hex: "#9ca3af"))
+                    .font(.system(size: 13)).foregroundColor(Color.textSecondary)
                 Button("เข้าสู่ระบบ") { dismiss() }
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Color(hex: "#6366f1"))
+                    .foregroundColor(Color.accent)
             }
         }
         .opacity(appeared ? 1 : 0)
@@ -308,12 +308,12 @@ struct SignUpView: View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 14))
-                .foregroundColor(Color(hex: "#a78bfa"))
+                .foregroundColor(Color.accent)
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 2) {
                 Text(placeholder)
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(Color(hex: "#9ca3af"))
+                    .foregroundColor(Color.textSecondary)
                 field()
             }
         }
@@ -327,12 +327,12 @@ struct SignUpView: View {
         HStack(spacing: 12) {
             Image(systemName: "lock.shield.fill")
                 .font(.system(size: 14))
-                .foregroundColor(Color(hex: "#a78bfa"))
+                .foregroundColor(Color.accent)
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 2) {
                 Text(placeholder)
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(Color(hex: "#9ca3af"))
+                    .foregroundColor(Color.textSecondary)
                 Group {
                     if show.wrappedValue {
                         TextField("", text: text)
@@ -341,7 +341,7 @@ struct SignUpView: View {
                     }
                 }
                 .font(.system(size: 15))
-                .foregroundColor(Color(hex: "#1e1b4b"))
+                .foregroundColor(Color.textPrimary)
             }
             Button { show.wrappedValue.toggle(); hapticLight() } label: {
                 Image(systemName: show.wrappedValue ? "eye.slash.fill" : "eye.fill")
@@ -360,7 +360,7 @@ struct SignUpView: View {
             HStack(spacing: 4) {
                 ForEach(0..<4, id: \.self) { i in
                     RoundedRectangle(cornerRadius: 2)
-                        .fill(i < strength.level ? strength.color : Color(hex: "#e5e7eb"))
+                        .fill(i < strength.level ? strength.color : Color.border)
                         .frame(maxWidth: .infinity).frame(height: 4)
                         .animation(.spring(response: 0.3), value: strength.level)
                 }

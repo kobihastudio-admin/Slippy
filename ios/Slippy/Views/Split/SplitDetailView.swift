@@ -141,7 +141,7 @@ struct SplitDetailView: View {
         ZStack {
             RoundedRectangle(cornerRadius: 20)
                 .fill(LinearGradient(
-                    colors: [Color(hex: "#0E1527"), Color(hex: "#1A2742")],
+                    colors: [Color.surface, Color.surfaceMuted],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 ))
@@ -149,20 +149,20 @@ struct SplitDetailView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("JOURNEY · EXPENSES")
                         .font(.system(size: 10, weight: .bold)).tracking(1.2)
-                        .foregroundColor(Color(hex: "#C7D2FE"))
+                        .foregroundColor(Color.accent)
                 Text("ยอดรวมทั้งหมด")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.white.opacity(0.8))
+                    .foregroundColor(Color.textSecondary)
                 Text(fmtTHB(localBill.totalAmount))
                     .font(.system(size: 36, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(Color.textPrimary)
                 if localBill.isSettled {
                     HStack(spacing: 4) {
                         Image(systemName: "checkmark.circle.fill")
                         Text("ชำระครบแล้ว")
                     }
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.9))
+                    .foregroundColor(Color.successText)
                     .padding(.top, 2)
                 }
                 }
@@ -171,7 +171,7 @@ struct SplitDetailView: View {
             }
             .padding(20)
         }
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color(hex: "#27324D"), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.surfaceMuted, lineWidth: 1))
         .shadow(color: .black.opacity(0.16), radius: 10, y: 5)
     }
 
@@ -226,8 +226,8 @@ struct SplitDetailView: View {
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("สรุปค่าใช้จ่าย").font(.system(size: 15, weight: .bold)).foregroundColor(.white)
-                    Text("ภาพรวมของ Journey นี้").font(.system(size: 10)).foregroundColor(Color(hex: "#9CA9C4"))
+                    Text("สรุปค่าใช้จ่าย").font(.system(size: 15, weight: .bold)).foregroundColor(Color.textPrimary)
+                    Text("ภาพรวมของ Journey นี้").font(.system(size: 10)).foregroundColor(Color.textSecondary)
                 }
                 Spacer()
             }
@@ -235,19 +235,19 @@ struct SplitDetailView: View {
                 ForEach(ExpenseSummaryScope.allCases, id: \.self) { scope in
                     Button { withAnimation(.easeInOut(duration: 0.2)) { summaryScope = scope } } label: {
                         Text(scope.rawValue).font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(summaryScope == scope ? .white : Color(hex: "#9CA9C4"))
+                            .foregroundColor(summaryScope == scope ? .white : Color.textSecondary)
                             .frame(maxWidth: .infinity).padding(.vertical, 8)
                             .background(summaryScope == scope ? Color.brand500 : Color.clear, in: RoundedRectangle(cornerRadius: 9))
                     }.buttonStyle(.plain)
                 }
-            }.padding(4).background(Color(hex: "#171F35"), in: RoundedRectangle(cornerRadius: 12))
+            }.padding(4).background(Color.surface, in: RoundedRectangle(cornerRadius: 12))
 
             ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
                 summaryGroupRow(label: group.0, amount: group.1, count: group.2)
             }
         }
-        .padding(14).background(Color(hex: "#0E1527"), in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color(hex: "#27324D"), lineWidth: 1))
+        .padding(14).background(Color.surface, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.surfaceMuted, lineWidth: 1))
     }
 
     private func summaryGroupRow(label: String, amount: Double, count: Int) -> some View {
@@ -255,18 +255,18 @@ struct SplitDetailView: View {
         let subtitle = count == 0 ? "ยังไม่มีใบเสร็จที่เชื่อมไว้" : "\(count) ใบเสร็จ"
         return HStack(spacing: 11) {
             Image(systemName: icon)
-                .font(.system(size: 13, weight: .semibold)).foregroundColor(Color.brand300)
+                .font(.system(size: 13, weight: .semibold)).foregroundColor(Color.accent)
                 .frame(width: 32, height: 32)
                 .background(Color.brand500.opacity(0.14), in: RoundedRectangle(cornerRadius: 9))
             VStack(alignment: .leading, spacing: 2) {
-                Text(label).font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
-                Text(subtitle).font(.system(size: 10)).foregroundColor(Color(hex: "#9CA9C4"))
+                Text(label).font(.system(size: 12, weight: .semibold)).foregroundColor(Color.textPrimary)
+                Text(subtitle).font(.system(size: 10)).foregroundColor(Color.textSecondary)
             }
             Spacer()
-            Text(fmtTHB(amount)).font(.system(size: 14, weight: .bold)).foregroundColor(Color.brand300)
+            Text(fmtTHB(amount)).font(.system(size: 14, weight: .bold)).foregroundColor(Color.accent)
         }
-        .padding(11).background(Color(hex: "#171F35"), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: "#27324D"), lineWidth: 1))
+        .padding(11).background(Color.surface, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.surfaceMuted, lineWidth: 1))
     }
 
     private var progressCard: some View {
@@ -546,7 +546,7 @@ struct SettleUpSheet: View {
                                     // From avatar
                                     ZStack {
                                         Circle()
-                                            .fill(Color(hex: "#fee2e2"))
+                                            .fill(Color.errorSurface)
                                             .frame(width: 40, height: 40)
                                         Text(String(s.from.prefix(1)))
                                             .font(.system(size: 15, weight: .bold))
@@ -576,7 +576,7 @@ struct SettleUpSheet: View {
                                         // To avatar
                                         ZStack {
                                             Circle()
-                                                .fill(Color(hex: "#d1fae5"))
+                                                .fill(Color.successSurface)
                                                 .frame(width: 32, height: 32)
                                             Text(String(s.to.prefix(1)))
                                                 .font(.system(size: 12, weight: .bold))
