@@ -31,6 +31,7 @@ final class SplitViewModel: ObservableObject {
         title: String,
         totalAmount: Double,
         note: String?,
+        documentID: String? = nil,
         participants: [(name: String, amount: Double)]
     ) async throws -> String? {
         struct BillInsert: Encodable {
@@ -39,6 +40,7 @@ final class SplitViewModel: ObservableObject {
             let title: String
             let total_amount: Double
             let note: String?
+            let document_id: String?
         }
 
         struct BillRow: Decodable {
@@ -53,7 +55,8 @@ final class SplitViewModel: ObservableObject {
                 creator_id: userId,
                 title: title,
                 total_amount: totalAmount,
-                note: note?.isEmpty == true ? nil : note
+                note: note?.isEmpty == true ? nil : note,
+                document_id: documentID
             ))
             .select("id, share_token")
             .execute()

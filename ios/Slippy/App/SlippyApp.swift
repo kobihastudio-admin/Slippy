@@ -4,10 +4,19 @@ import LineSDK
 @main
 struct SlippyApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
-    @StateObject private var authVM   = AuthViewModel()
+    @StateObject private var authVM: AuthViewModel
     @ObservedObject private var settings = AppSettings.shared
     @State private var sharedImages: [UIImage] = []
     @State private var showSharedImport = false
+
+    init() {
+        #if DEBUG
+        let preview = ProcessInfo.processInfo.environment["SLIPPY_APPEARANCE_PREVIEW"] != nil
+        _authVM = StateObject(wrappedValue: preview ? AuthViewModel(_preview: true) : AuthViewModel())
+        #else
+        _authVM = StateObject(wrappedValue: AuthViewModel())
+        #endif
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -111,10 +120,28 @@ private struct AppearancePreviewContent: View {
         Group {
             switch screen {
             case "trip": TripAppearancePreview()
+            case "split-redesign-details":
+                CreateSplitView.redesignPreview(vm: splitVM, step: .details)
+                    .environment(\.colorScheme, ProcessInfo.processInfo.environment["SLIPPY_SPLIT_TEST_STYLE"] == "light" ? .light : .dark)
+            case "split-redesign-items":
+                CreateSplitView.redesignPreview(vm: splitVM, step: .friends)
+                    .environment(\.colorScheme, ProcessInfo.processInfo.environment["SLIPPY_SPLIT_TEST_STYLE"] == "light" ? .light : .dark)
+            case "trip-map-test": TripMapTestPreview()
             case "item-edit": TripItemEditorPreview()
             case "profile": NavigationStack { ProfileView() }
             case "documents": DocumentsView()
             case "split-create": CreateSplitView(vm: splitVM)
+            case "split-receipt": CreateSplitView(vm: splitVM, initialReceipt: SlipExtraction(
+                vendorName: "Kyushu Dinner", totalAmount: 123.45, docDate: "2026-10-15",
+                lineItems: [LineItem(name: "Dinner", qty: 0.25, unitPrice: 493.8, amount: 123.45)],
+                confidence: 0.9), sourceDocumentID: "preview")
+            case "split-friends": SplitFriendPickerSheet(accountID: "preview") { _, _ in }
+            case "split-friends-test": SplitFriendsUITestPreview()
+            case "document-split-test": NavigationStack {
+                DocumentDetailContentView(previewDocument: try! JSONDecoder().decode(SlippyDocument.self, from: Data(
+                    #"{"id":"00000000-0000-0000-0000-000000000099","organization_id":"00000000-0000-0000-0000-000000000000","vendor_name":"Kyushu Dinner","total_amount":123.45,"doc_date":"2026-10-15","status":"approved","source":"manual","file_path":"preview/no-file","created_at":"2026-10-15T00:00:00Z"}"#.utf8)),
+                    items: [.init(id: "preview-item", description: "Dinner", qty: "0.25", unitPrice: "493.8", amount: "123.45", isNew: false)])
+            }
             case "split-detail": NavigationStack { SplitDetailView(bill: bill, vm: splitVM) }
             case "more": MoreMenuView()
             case "login": LoginView()
@@ -123,6 +150,21 @@ private struct AppearancePreviewContent: View {
         }
         .environmentObject(authVM)
         .environmentObject(tabRouter)
+    }
+}
+
+private struct SplitFriendsUITestPreview: View {
+    @State private var showPicker = true
+    @State private var selectedName = ""
+
+    var body: some View {
+        Text("Selected: \(selectedName)")
+            .sheet(isPresented: $showPicker) {
+                SplitFriendPickerSheet(accountID: "preview-uitest") { name, _ in
+                    selectedName = name
+                    showPicker = false
+                }
+            }
     }
 }
 #endif

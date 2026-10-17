@@ -56,6 +56,7 @@ struct DraftItem: Identifiable {
     /// a receipt clean up the items it contributed instead of leaving orphans.
     /// nil for items added manually via "เพิ่มรายการ".
     var sourceReceiptId: UUID? = nil
+    var isIncluded = true
 }
 
 enum CreateSplitStep: Int, CaseIterable {
@@ -66,7 +67,7 @@ enum CreateSplitStep: Int, CaseIterable {
     var title: String {
         switch self {
         case .details: return "รายละเอียด"
-        case .friends: return "เลือกเพื่อน"
+        case .friends: return "รายการและเพื่อน"
         case .review: return "ตรวจสอบ"
         }
     }
@@ -110,11 +111,14 @@ struct ScannedReceipt: Identifiable {
     /// The original scanned photo — kept so OCRFullDetailView can offer
     /// "ดาวน์โหลดใบเสร็จต้นฉบับ" without needing a round-trip to storage.
     var image: UIImage?
+    var sourceDocumentID: String? = nil
     /// Each bill has its own split pattern — only summed together across all
     /// receipts at the end (see CreateSplitView.aggregatedAmount).
     var splitMode: SplitMode = .equal
     var customAmounts: [UUID: Double] = [:]   // participant.id -> amount, .custom mode
     var percentages: [UUID: Double] = [:]     // participant.id -> percent, .percentage mode
+    var vatMode: SplitVATMode = .receiptTotal
+    var vatRateText = ""
     // .item mode reads draftItems filtered by sourceReceiptId == self.id
 }
 
@@ -141,7 +145,10 @@ struct CreateSplitView: View {
     @State private var createStep: CreateSplitStep = .details
     @State private var billDate = Date()
     @State private var location = ""
-    @State private var category: SplitBillCategory = .food
+    @State private var category: SplitBillCategory?
+    @State private var manualVATMode: SplitVATMode = .none
+    @State private var manualVATRate = ""
+    @State private var addingItemToReceiptId: UUID?
 
     // Receipt scan
     @State private var showImageSourceMenu = false
@@ -172,7 +179,60 @@ struct CreateSplitView: View {
     /// updates (recomputeTotalFromReceipts) for a manual edit.
     @State private var isProgrammaticTotalUpdate = false
 
-    var totalAmount: Double { Double(totalAmountText.replacingOccurrences(of: ",", with: "")) ?? 0 }
+    init(vm: SplitViewModel, initialReceipt: SlipExtraction? = nil, sourceDocumentID: String? = nil) {
+        self.vm = vm
+        if let result = initialReceipt {
+            let receipt = ScannedReceipt(result: result, image: nil, sourceDocumentID: sourceDocumentID)
+            _receipts = State(initialValue: [receipt])
+            _title = State(initialValue: result.vendorName ?? "")
+            _totalAmountText = State(initialValue: result.totalAmount.map { String(format: "%.2f", $0) } ?? "")
+            _draftItems = State(initialValue: result.lineItems.filter(\.isLineItem).map {
+                DraftItem(name: $0.name, price: $0.amount, assignedTo: [], sourceReceiptId: receipt.id)
+            })
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyy-MM-dd"
+            _billDate = State(initialValue: result.docDate.flatMap(formatter.date(from:)) ?? Date())
+        }
+    }
+
+    var totalAmount: Double {
+        if usesPerReceiptSplit { return receipts.reduce(0) { $0 + payableTotal(for: $1) } }
+        return manualTaxCalculation?.total ?? 0
+    }
+
+    private var enteredAmount: Double { Double(totalAmountText.replacingOccurrences(of: ",", with: "")) ?? 0 }
+
+    private func taxCalculation(for receipt: ScannedReceipt) -> SplitVATCalculation? {
+        let items = draftItems.filter { $0.sourceReceiptId == receipt.id }
+        let selected = items.filter(\.isIncluded).reduce(0) { $0 + $1.price }
+        let source = items.reduce(0) { $0 + $1.price }
+        return SplitBillVAT.calculate(base: items.isEmpty ? (receipt.result.totalAmount ?? 0) : selected,
+            mode: receipt.vatMode, rate: SplitBillVAT.rate(from: receipt.vatRateText),
+            referenceTotal: receipt.result.totalAmount, referenceBase: items.isEmpty ? nil : source)
+    }
+
+    private func payableTotal(for receipt: ScannedReceipt) -> Double { taxCalculation(for: receipt)?.total ?? 0 }
+
+    private var manualTaxCalculation: SplitVATCalculation? {
+        let selected = draftItems.filter(\.isIncluded).reduce(0) { $0 + $1.price }
+        return SplitBillVAT.calculate(base: draftItems.isEmpty ? enteredAmount : selected,
+            mode: manualVATMode, rate: SplitBillVAT.rate(from: manualVATRate),
+            referenceTotal: enteredAmount, referenceBase: draftItems.isEmpty ? nil : draftItems.reduce(0) { $0 + $1.price })
+    }
+
+    private var hasValidTaxConfiguration: Bool {
+        usesPerReceiptSplit ? receipts.allSatisfy { taxCalculation(for: $0) != nil } : manualTaxCalculation != nil
+    }
+
+    private var hasCompleteAssignments: Bool {
+        let active = Set(participants.map(\.id))
+        return draftItems.filter { item in
+            guard item.isIncluded else { return false }
+            if let id = item.sourceReceiptId { return receipts.first { $0.id == id }?.splitMode == .item }
+            return !usesPerReceiptSplit && splitMode == .item
+        }.allSatisfy { !$0.assignedTo.isEmpty && Set($0.assignedTo).isSubset(of: active) }
+    }
 
     /// Once at least one bill is scanned, each one carries its own split
     /// mode (see ScannedReceipt) — the global splitMode/items UI only
@@ -211,6 +271,7 @@ struct CreateSplitView: View {
                             .padding(.horizontal, 18)
                             .padding(.bottom, 118)
                     }
+                    .scrollDismissesKeyboard(.interactively)
                 }
 
                 VStack {
@@ -239,16 +300,28 @@ struct CreateSplitView: View {
             }
             .navigationBarHidden(true)
             .sheet(isPresented: $showAddParticipant) {
-                AddParticipantSheet { name, amount in
+                SplitFriendPickerSheet(accountID: authVM.session?.user.id.uuidString ?? "") { name, amount in
                     let pct = participants.isEmpty ? 100.0 : 0.0
                     participants.append(DraftParticipant(name: name, amount: amount, percentage: pct, items: []))
+                    for index in receipts.indices where receipts[index].splitMode == .percentage {
+                        normalizeReceiptPercentages($receipts[index])
+                    }
                     if splitMode == .equal { recalcEqual() }
                     if splitMode == .percentage { normalizePercentages() }
                 }
             }
             .sheet(isPresented: $showAddItem) {
                 AddItemSheet { name, price in
-                    draftItems.append(DraftItem(name: name, price: price, assignedTo: []))
+                    draftItems.append(DraftItem(name: name, price: price, assignedTo: [], sourceReceiptId: addingItemToReceiptId))
+                }
+            }
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("เสร็จ", systemImage: "keyboard.chevron.compact.down") {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }
+                    .accessibilityIdentifier("split.dismissKeyboard")
                 }
             }
             .sheet(isPresented: $showShareSheet, onDismiss: { dismiss() }) {
@@ -326,25 +399,13 @@ struct CreateSplitView: View {
 
             VStack(spacing: 2) {
                 Text("สร้างการหารบิล")
-                    .font(.system(size: 24, weight: .black, design: .rounded))
+                    .font(.system(size: 19, weight: .semibold))
                     .foregroundColor(Color.textPrimary)
-                Text("สร้างบิลใหม่ในไม่กี่ขั้นตอน")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(Color.textSecondary)
             }
 
             Spacer()
 
-            Button {
-                hapticLight()
-                save()
-            } label: {
-                Text("บันทึก")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(Color.brand500)
-                    .frame(width: 44, height: 44)
-            }
-            .disabled(isSaving)
+            Color.clear.frame(width: 44, height: 44)
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)
@@ -357,25 +418,25 @@ struct CreateSplitView: View {
                     ZStack {
                         Circle()
                             .fill(step.rawValue <= createStep.rawValue ? Color.brand500 : Color.border)
-                            .frame(width: 40, height: 40)
+                            .frame(width: 30, height: 30)
                         Text("\(step.rawValue)")
-                            .font(.system(size: 17, weight: .bold))
-                            .foregroundColor(.white)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(step.rawValue <= createStep.rawValue ? .white : Color.textSecondary)
                     }
                     Text(step.title)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundColor(step == createStep ? Color.brand500 : Color.textSecondary)
                 }
                 .frame(maxWidth: .infinity)
-                .overlay(alignment: .topTrailing) {
-                    if step != CreateSplitStep.allCases.last {
-                        Rectangle()
-                            .fill(Color.border)
-                            .frame(height: 2)
-                            .offset(x: 44, y: 19)
-                    }
-                }
             }
+        }
+        .background {
+            GeometryReader { geometry in
+                Rectangle().fill(Color.border)
+                    .frame(width: geometry.size.width * 2 / 3, height: 2)
+                    .position(x: geometry.size.width / 2, y: 15)
+            }
+            .allowsHitTesting(false)
         }
     }
 
@@ -397,11 +458,23 @@ struct CreateSplitView: View {
         case .friends:
             VStack(spacing: 16) {
                 participantsCard
-                if !usesPerReceiptSplit {
+                addItemControl.frame(maxWidth: .infinity, alignment: .leading)
+                if usesPerReceiptSplit {
+                    ForEach($receipts) { receipt in
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text(receipt.wrappedValue.result.vendorName ?? "ใบเสร็จ")
+                                .font(.system(size: 15, weight: .semibold))
+                            receiptSplitEditor(receipt)
+                            vatEditor(mode: receipt.vatMode, rate: receipt.vatRateText,
+                                      calculation: taxCalculation(for: receipt.wrappedValue))
+                        }
+                        .padding(14)
+                        .background(Color.surface, in: RoundedRectangle(cornerRadius: 8))
+                    }
+                } else {
                     splitModeCard
-                }
-                if !usesPerReceiptSplit && splitMode == .item {
-                    itemsCard
+                    if !draftItems.isEmpty { assignmentRows(indices: Array(draftItems.indices), receiptId: nil) }
+                    vatEditor(mode: $manualVATMode, rate: $manualVATRate, calculation: manualTaxCalculation)
                 }
             }
         case .review:
@@ -439,7 +512,7 @@ struct CreateSplitView: View {
                     ProgressView().tint(.white)
                 } else {
                     Text(createStep == .review ? "บันทึกการหารบิล" : "ถัดไป: \(nextStep.title)")
-                        .font(.system(size: 18, weight: .bold))
+                        .font(.system(size: 15, weight: .semibold))
                     Image(systemName: createStep == .review ? "checkmark" : "chevron.right")
                         .font(.system(size: 17, weight: .bold))
                 }
@@ -454,10 +527,11 @@ struct CreateSplitView: View {
                     endPoint: .trailing
                 )
             )
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .shadow(color: Color.brand500.opacity(0.32), radius: 16, x: 0, y: 10)
         }
         .disabled(isSaving)
+        .accessibilityIdentifier("split.next")
     }
 
     // MARK: – Receipt scan card
@@ -641,26 +715,17 @@ struct CreateSplitView: View {
     @ViewBuilder
     private func receiptSplitEditor(_ receipt: Binding<ScannedReceipt>) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
+            Picker("วิธีหารบิลนี้", selection: receipt.splitMode) {
                 ForEach(SplitMode.allCases, id: \.self) { mode in
-                    let active = receipt.wrappedValue.splitMode == mode
-                    Button {
-                        hapticLight()
-                        withAnimation(.spring(response: 0.25)) {
-                            receipt.wrappedValue.splitMode = mode
-                            if mode == .percentage && receipt.wrappedValue.percentages.isEmpty {
-                                normalizeReceiptPercentages(receipt)
-                            }
-                        }
-                    } label: {
-                        Image(systemName: mode.icon).font(.system(size: 12))
-                            .foregroundColor(active ? .white : Color.textSecondary)
-                            .frame(width: 30, height: 30)
-                            .background(active ? Color.brand500 : Color.border.opacity(0.5))
-                            .clipShape(Circle())
-                    }
+                    Text(mode.label).tag(mode)
                 }
-                Spacer()
+            }
+            .pickerStyle(.menu)
+            .font(.system(size: 14))
+            .onChange(of: receipt.wrappedValue.splitMode) { _, mode in
+                if mode == .percentage {
+                    normalizeReceiptPercentages(receipt)
+                }
             }
 
             ForEach(participants) { p in
@@ -669,24 +734,24 @@ struct CreateSplitView: View {
                     Spacer()
                     switch receipt.wrappedValue.splitMode {
                     case .equal:
-                        Text(fmtTHB(amount(for: p, in: receipt.wrappedValue)))
+                        Text(fmtTHB(roundedReceiptAmount(for: p, in: receipt.wrappedValue), decimals: 2))
                             .font(.system(size: 13, weight: .semibold)).foregroundColor(Color.textSecondary)
 
                     case .custom:
-                        TextField("฿", value: Binding(
+                        SplitAmountField("จำนวนเงิน", value: Binding(
                             get: { receipt.wrappedValue.customAmounts[p.id] ?? 0 },
                             set: { receipt.wrappedValue.customAmounts[p.id] = $0 }
-                        ), format: .number.precision(.fractionLength(2)))
+                        ))
                             .font(.system(size: 13, weight: .semibold)).foregroundColor(Color.brand500)
                             .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                             .frame(width: 80)
 
                     case .percentage:
                         HStack(spacing: 4) {
-                            TextField("0", value: Binding(
+                            SplitAmountField("สัดส่วน", value: Binding(
                                 get: { receipt.wrappedValue.percentages[p.id] ?? 0 },
                                 set: { receipt.wrappedValue.percentages[p.id] = $0 }
-                            ), format: .number.precision(.fractionLength(1)))
+                            ))
                                 .font(.system(size: 13, weight: .semibold)).foregroundColor(Color.brand500)
                                 .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                                 .frame(width: 44)
@@ -694,18 +759,15 @@ struct CreateSplitView: View {
                         }
 
                     case .item:
-                        let items = draftItems.indices.filter { draftItems[$0].sourceReceiptId == receipt.wrappedValue.id }
-                        Text(fmtTHB(itemAmountFor(p, itemIndices: items)))
+                        Text(fmtTHB(roundedReceiptAmount(for: p, in: receipt.wrappedValue), decimals: 2))
                             .font(.system(size: 13, weight: .semibold)).foregroundColor(Color.textSecondary)
                     }
                 }
             }
 
-            if receipt.wrappedValue.splitMode == .item {
-                receiptItemsList(receipt)
-            }
+            receiptItemsList(receipt)
 
-            let diff = (receipt.wrappedValue.result.totalAmount ?? 0)
+            let diff = payableTotal(for: receipt.wrappedValue)
                 - participants.reduce(0) { $0 + amount(for: $1, in: receipt.wrappedValue) }
             if participants.count > 1 {
                 Text(abs(diff) < 0.01 ? "แบ่งครบยอดแล้ว ✓" : "เหลือ \(fmtTHB(diff)) ยังไม่ได้แบ่ง")
@@ -716,35 +778,107 @@ struct CreateSplitView: View {
 
     private func receiptItemsList(_ receipt: Binding<ScannedReceipt>) -> some View {
         let indices = draftItems.indices.filter { draftItems[$0].sourceReceiptId == receipt.wrappedValue.id }
-        return VStack(alignment: .leading, spacing: 6) {
-            ForEach(indices, id: \.self) { idx in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(draftItems[idx].name).font(.system(size: 12)).foregroundColor(Color.textPrimary)
-                        Spacer()
-                        Text(fmtTHB(draftItems[idx].price)).font(.system(size: 12, weight: .semibold)).foregroundColor(Color.textPrimary)
+        return assignmentRows(indices: indices, receiptId: receipt.wrappedValue.id)
+    }
+
+    private func assignmentRows(indices: [Int], receiptId: UUID?) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("รายการที่นำมาหาร (\(indices.filter { draftItems[$0].isIncluded }.count)/\(indices.count))")
+                .font(.system(size: 14, weight: .semibold))
+            ForEach(indices, id: \.self) { index in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top, spacing: 10) {
+                        Button { draftItems[index].isIncluded.toggle() } label: {
+                            Image(systemName: draftItems[index].isIncluded ? "checkmark.square.fill" : "square")
+                                .font(.system(size: 21)).foregroundStyle(Color.brand500)
+                                .frame(width: 30, height: 30)
+                        }
+                        .accessibilityLabel("นำ \(draftItems[index].name) มาหาร")
+                        .accessibilityIdentifier("split.item.include.\(index)")
+                        .accessibilityValue(draftItems[index].isIncluded ? "เลือกแล้ว" : "ไม่เลือก")
+                        Text(draftItems[index].name)
+                            .font(.system(size: 14)).fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(fmtTHB(draftItems[index].price, decimals: 2))
+                            .font(.system(size: 14, weight: .semibold)).monospacedDigit()
                     }
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(participants) { p in
-                                let assigned = draftItems[idx].assignedTo.contains(p.id)
+                    if draftItems[index].isIncluded {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 105), alignment: .leading)], alignment: .leading, spacing: 6) {
+                            ForEach(participants) { participant in
+                                let selected = draftItems[index].assignedTo.contains(participant.id)
                                 Button {
-                                    if assigned { draftItems[idx].assignedTo.removeAll { $0 == p.id } }
-                                    else { draftItems[idx].assignedTo.append(p.id) }
+                                    if selected { draftItems[index].assignedTo.removeAll { $0 == participant.id } }
+                                    else { draftItems[index].assignedTo.append(participant.id) }
+                                    if let receiptId, let slot = receipts.firstIndex(where: { $0.id == receiptId }) {
+                                        receipts[slot].splitMode = .item
+                                    } else { splitMode = .item }
                                 } label: {
-                                    Text(p.name)
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundColor(assigned ? .white : Color.textSecondary)
-                                        .padding(.horizontal, 8).padding(.vertical, 3)
-                                        .background(assigned ? Color.brand500 : Color.border.opacity(0.5))
-                                        .clipShape(Capsule())
+                                    HStack(alignment: .top, spacing: 6) {
+                                        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                                        Text(participant.name).fixedSize(horizontal: false, vertical: true)
+                                    }
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(selected ? Color.brand500 : Color.textSecondary)
+                                    .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
                                 }
+                                .accessibilityLabel("\(participant.name) จ่าย \(draftItems[index].name)")
+                                .accessibilityIdentifier("split.assignment.\(index).\(participants.firstIndex(where: { $0.id == participant.id }) ?? 0)")
+                                .accessibilityValue(selected ? "เลือกแล้ว" : "ไม่เลือก")
                             }
+                        }
+                        if !participants.isEmpty && draftItems[index].assignedTo.isEmpty {
+                            Text("ยังไม่ได้เลือกผู้ร่วมจ่าย").font(.system(size: 12)).foregroundStyle(Color.textSecondary)
                         }
                     }
                 }
+                Divider()
             }
         }
+    }
+
+    private func vatEditor(mode: Binding<SplitVATMode>, rate: Binding<String>, calculation: SplitVATCalculation?) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("การคำนวณ VAT").font(.system(size: 12)).foregroundStyle(Color.textSecondary)
+            Menu {
+                ForEach(SplitVATMode.allCases) { option in
+                    Button(option.title) { mode.wrappedValue = option }
+                }
+            } label: {
+                HStack {
+                    Text(mode.wrappedValue.title).fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                }
+                .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
+            }
+            .font(.system(size: 14))
+            .accessibilityIdentifier("split.vat.mode")
+            if mode.wrappedValue.needsRate {
+                HStack {
+                    Text("อัตรา VAT").font(.system(size: 13)).foregroundStyle(Color.textSecondary)
+                    TextField("ระบุอัตรา VAT", text: rate)
+                        .font(.system(size: 14)).keyboardType(.decimalPad)
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityIdentifier("split.vat.rate")
+                    Text("%").font(.system(size: 14))
+                }
+            }
+            if let calculation {
+                if let net = calculation.net { reviewRow("ยอดก่อน VAT", fmtTHB(net, decimals: 2)) }
+                if let tax = calculation.vat { reviewRow("VAT", fmtTHB(tax, decimals: 2)) }
+                HStack {
+                    Text("ยอดที่นำมาหาร").font(.system(size: 13))
+                    Spacer()
+                    Text(fmtTHB(calculation.total, decimals: 2))
+                        .font(.system(size: 15, weight: .semibold)).monospacedDigit()
+                        .accessibilityIdentifier("split.vat.total")
+                }
+            } else {
+                Text("ระบุอัตรา VAT เป็นตัวเลขระหว่าง 0–100%")
+                    .font(.system(size: 13)).foregroundStyle(.red)
+            }
+        }
+        .foregroundStyle(Color.textPrimary)
     }
 
     private func normalizeReceiptPercentages(_ receipt: Binding<ScannedReceipt>) {
@@ -755,10 +889,12 @@ struct CreateSplitView: View {
 
     /// One participant's share of one receipt, in that receipt's own mode.
     private func amount(for participant: DraftParticipant, in receipt: ScannedReceipt) -> Double {
-        let total = receipt.result.totalAmount ?? 0
+        let total = payableTotal(for: receipt)
         switch receipt.splitMode {
         case .equal:
-            return participants.isEmpty ? 0 : total / Double(participants.count)
+            guard let index = participants.firstIndex(where: { $0.id == participant.id }) else { return 0 }
+            let shares = SplitBillAmounts.equalShares(total: total, count: participants.count)
+            return shares.indices.contains(index) ? shares[index] : 0
         case .custom:
             return receipt.customAmounts[participant.id] ?? 0
         case .percentage:
@@ -768,39 +904,36 @@ struct CreateSplitView: View {
         }
     }
 
-    /// A participant's share of one receipt under "ตามรายการ" (item) mode —
-    /// their assigned line items' subtotal PLUS their proportional share of
-    /// that receipt's VAT, so the final split total actually matches what
-    /// the group paid (subtotal + VAT), not just the pre-tax item prices.
-    /// Falls back to Config.defaultVatRatePct when the receipt itself has no
-    /// extracted VAT (e.g. manually-typed items with no real receipt behind
-    /// them) — see Config.swift for why this lives in one central place.
+    /// Allocate the actual paid total by item weights; never add guessed VAT
+    /// to a receipt whose printed prices may already include it.
     private func itemModeAmount(for participantId: UUID, in receipt: ScannedReceipt) -> Double {
-        let items = draftItems.filter { $0.sourceReceiptId == receipt.id }
+        let items = draftItems.filter { $0.sourceReceiptId == receipt.id && $0.isIncluded }
         let participantSubtotal = items.filter { $0.assignedTo.contains(participantId) }
             .reduce(0) { $0 + $1.price / Double(max(1, $1.assignedTo.count)) }
-        guard participantSubtotal > 0 else { return 0 }
-
-        if let vat = receipt.result.vatAmount, vat > 0 {
-            let allItemsSubtotal = items.reduce(0) { $0 + $1.price }
-            let vatShare = allItemsSubtotal > 0 ? (participantSubtotal / allItemsSubtotal) * vat : 0
-            return participantSubtotal + vatShare
-        }
-        return participantSubtotal * (1 + Config.defaultVatRatePct / 100)
+        return SplitBillAmounts.itemShare(subtotal: participantSubtotal,
+            itemsSubtotal: items.reduce(0) { $0 + $1.price }, total: payableTotal(for: receipt))
     }
 
-    /// Same as itemAmountFor(_:) but scoped to one receipt's items only —
-    /// the global one sums across ALL items regardless of receipt.
-    private func itemAmountFor(_ p: DraftParticipant, itemIndices: [Int]) -> Double {
-        itemIndices.map { draftItems[$0] }
-            .filter { $0.assignedTo.contains(p.id) }
-            .reduce(0) { $0 + $1.price / Double(max(1, $1.assignedTo.count)) }
+    private func roundedReceiptAmount(for participant: DraftParticipant, in receipt: ScannedReceipt) -> Double {
+        guard let index = participants.firstIndex(where: { $0.id == participant.id }) else { return 0 }
+        let raw = participants.map { amount(for: $0, in: receipt) }
+        let rounded = SplitBillAmounts.roundedShares(raw, total: payableTotal(for: receipt))
+        return rounded?[index] ?? raw[index]
     }
 
     /// A participant's combined total across every scanned receipt — this is
     /// what actually gets saved once any bills have been scanned.
     private func aggregatedAmount(for participant: DraftParticipant) -> Double {
-        receipts.reduce(0) { $0 + amount(for: participant, in: $1) }
+        receipts.reduce(0) { $0 + roundedReceiptAmount(for: participant, in: $1) }
+    }
+
+    private var hasBalancedReceipts: Bool {
+        guard usesPerReceiptSplit else { return true }
+        return receipts.allSatisfy { receipt in
+            let shares = participants.map { amount(for: $0, in: receipt) }
+            return shares.allSatisfy { $0.isFinite && $0 >= 0 }
+                && abs(shares.reduce(0, +) - payableTotal(for: receipt)) < 0.005
+        }
     }
 
     private func scanTag(icon: String, value: String) -> some View {
@@ -812,6 +945,23 @@ struct CreateSplitView: View {
     }
 
     // MARK: – OCR scan
+
+    private func preserveManualItemsBeforeFirstReceipt() {
+        guard receipts.isEmpty, !draftItems.isEmpty else { return }
+        let allItemsTotal = draftItems.reduce(0) { $0 + $1.price }
+        let sourceTotal = manualVATMode == .receiptTotal ? enteredAmount :
+            (SplitBillVAT.calculate(base: allItemsTotal, mode: manualVATMode,
+                                   rate: SplitBillVAT.rate(from: manualVATRate))?.total ?? enteredAmount)
+        let result = SlipExtraction(vendorName: "รายการที่กรอกเอง", totalAmount: sourceTotal,
+            lineItems: draftItems.map { LineItem(name: $0.name, amount: $0.price) }, confidence: 1)
+        var group = ScannedReceipt(result: result, image: nil, splitMode: splitMode)
+        group.vatMode = manualVATMode
+        group.vatRateText = manualVATRate
+        group.customAmounts = Dictionary(uniqueKeysWithValues: participants.map { ($0.id, $0.amount) })
+        group.percentages = Dictionary(uniqueKeysWithValues: participants.map { ($0.id, $0.percentage) })
+        for index in draftItems.indices { draftItems[index].sourceReceiptId = group.id }
+        receipts.append(group)
+    }
 
     @MainActor
     private func runOCR(on image: UIImage) async {
@@ -834,6 +984,11 @@ struct CreateSplitView: View {
             title = vendor
         }
 
+        preserveManualItemsBeforeFirstReceipt()
+        guard receipts.count < maxReceiptCount else {
+            scanError = "เพิ่มได้ไม่เกิน \(maxReceiptCount) บิล"
+            return
+        }
         let receipt = ScannedReceipt(result: result, image: image)
         receipts.append(receipt)
 
@@ -847,11 +1002,7 @@ struct CreateSplitView: View {
             let newItems = realLineItems.map {
                 DraftItem(name: $0.name, price: $0.amount, assignedTo: [], sourceReceiptId: receipt.id)
             }
-            for item in newItems {
-                if !draftItems.contains(where: { $0.name == item.name }) {
-                    draftItems.append(item)
-                }
-            }
+            draftItems.append(contentsOf: newItems)
         }
 
         recomputeTotalFromReceipts()
@@ -863,11 +1014,9 @@ struct CreateSplitView: View {
         receipts.reduce(0) { $0 + ($1.result.totalAmount ?? 0) }
     }
 
-    /// Refreshes ยอดรวม to match the sum of all scanned receipts — skipped
-    /// once the user has typed into that field themselves, so we don't
-    /// stomp on a deliberate manual override.
+    /// Per-receipt shares and the displayed total must use the same amounts.
     private func recomputeTotalFromReceipts() {
-        guard !totalManuallyEdited, !receipts.isEmpty else { return }
+        guard !receipts.isEmpty else { return }
         isProgrammaticTotalUpdate = true
         totalAmountText = String(format: "%.2f", receiptsTotal)
         recalcEqual()
@@ -888,9 +1037,7 @@ struct CreateSplitView: View {
         draftItems.removeAll { $0.sourceReceiptId == receiptId }
         let realLineItems = updated.lineItems.filter(\.isLineItem)
         for item in realLineItems {
-            if !draftItems.contains(where: { $0.name == item.name && $0.sourceReceiptId == receiptId }) {
-                draftItems.append(DraftItem(name: item.name, price: item.amount, assignedTo: [], sourceReceiptId: receiptId))
-            }
+            draftItems.append(DraftItem(name: item.name, price: item.amount, assignedTo: [], sourceReceiptId: receiptId))
         }
         recomputeTotalFromReceipts()
     }
@@ -913,7 +1060,7 @@ struct CreateSplitView: View {
     private var billDetailsCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("รายละเอียดบิล")
-                .font(.system(size: 18, weight: .black, design: .rounded))
+                .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(Color.textPrimary)
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
@@ -925,15 +1072,16 @@ struct CreateSplitView: View {
                 label: "ชื่อบิล",
                 trailing: title.isEmpty ? nil : "xmark.circle.fill"
             ) {
-                TextField("Dinner Chinatown", text: $title,
-                          prompt: Text("Dinner Chinatown").foregroundColor(Color.textTertiary))
-                    .font(.system(size: 18, weight: .bold))
+                TextField("ระบุชื่อบิล", text: $title,
+                          prompt: Text("ระบุชื่อบิล").foregroundColor(Color.textTertiary))
+                    .accessibilityIdentifier("split.title")
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundColor(Color.textPrimary)
             } trailingAction: {
                 title = ""
             }
 
-            Divider().padding(.leading, 108)
+            Divider().padding(.leading, 66)
 
             detailInputRow(icon: "calendar", tint: Color(hex: "#ec4899"), label: "วันที่และเวลา") {
                 ViewThatFits(in: .horizontal) {
@@ -949,44 +1097,49 @@ struct CreateSplitView: View {
                 }
             }
 
-            Divider().padding(.leading, 108)
+            Divider().padding(.leading, 66)
 
             detailInputRow(icon: "mappin.circle.fill", tint: Color(hex: "#3b9df4"), label: "สถานที่") {
-                TextField("China Town Bangkok", text: $location,
-                          prompt: Text("China Town Bangkok").foregroundColor(Color.textTertiary))
-                    .font(.system(size: 17, weight: .bold))
+                TextField("ระบุร้านหรือสถานที่ (ไม่บังคับ)", text: $location,
+                          prompt: Text("ระบุร้านหรือสถานที่ (ไม่บังคับ)").foregroundColor(Color.textTertiary))
+                    .font(.system(size: 14))
                     .foregroundColor(Color.textPrimary)
             }
 
-            Divider().padding(.leading, 108)
+            Divider().padding(.leading, 66)
 
             detailInputRow(icon: "clipboard.fill", tint: Color(hex: "#fb923c"), label: "โน้ต (ไม่บังคับ)") {
                 TextField("เพิ่มโน้ตหรือรายละเอียดเพิ่มเติม...", text: $note,
                           prompt: Text("เพิ่มโน้ตหรือรายละเอียดเพิ่มเติม...").foregroundColor(Color.textTertiary))
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: 14))
                     .foregroundColor(Color.textPrimary)
             }
         }
         .background(Color.surface.opacity(0.96))
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .shadow(color: Color.brand600.opacity(0.06), radius: 20, x: 0, y: 10)
     }
 
     private var amountCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("ยอดรวมของบิล")
-                .font(.system(size: 17, weight: .black, design: .rounded))
+            Text(receipts.isEmpty ? "ยอดเงินที่ระบุ" : "ยอดสุทธิตามใบเสร็จ")
+                .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(Color.textPrimary)
 
             HStack(spacing: 12) {
-                TextField("2,850.00", text: $totalAmountText,
-                          prompt: Text("2,850.00").foregroundColor(Color.textTertiary))
-                    .font(.system(size: 30, weight: .black, design: .rounded))
+                TextField("ระบุยอดเงิน", text: $totalAmountText,
+                          prompt: Text("ระบุยอดเงิน").foregroundColor(Color.textTertiary))
+                    .accessibilityIdentifier("split.total")
+                    .font(.system(size: 22, weight: .semibold))
                     .foregroundColor(Color.textPrimary)
                     .keyboardType(.decimalPad)
+                    .disabled(receipts.count > 1)
                     .onChange(of: totalAmountText) { _, _ in
                         if isProgrammaticTotalUpdate { isProgrammaticTotalUpdate = false }
-                        else { totalManuallyEdited = true }
+                        else {
+                            totalManuallyEdited = true
+                        }
+                        if receipts.count == 1 { receipts[0].result.totalAmount = enteredAmount }
                         if splitMode == .equal { recalcEqual() }
                         if splitMode == .percentage { recalcPercentage() }
                     }
@@ -1047,22 +1200,26 @@ struct CreateSplitView: View {
                 endPoint: .bottomTrailing
             )
         )
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .shadow(color: Color.brand600.opacity(0.06), radius: 20, x: 0, y: 10)
     }
 
     private var categoryAndModeRow: some View {
-        HStack(spacing: 14) {
-            menuSelectCard(label: "หมวดหมู่", value: category.rawValue, icon: category.icon, tint: category.tint) {
+        VStack(spacing: 10) {
+            menuSelectCard(label: "หมวดหมู่", value: category?.rawValue ?? "เลือกหมวดหมู่", icon: category?.icon ?? "square.grid.2x2", tint: category?.tint ?? Color.textSecondary) {
                 ForEach(SplitBillCategory.allCases, id: \.self) { option in
                     Button(option.rawValue) { category = option }
                 }
             }
 
-            menuSelectCard(label: "ประเภทการจ่าย", value: splitMode.label, icon: splitMode.icon, tint: Color.brand500) {
+            menuSelectCard(label: "วิธีหารบิล", value: splitDescription, icon: splitMode.icon, tint: Color.brand500) {
                 ForEach(SplitMode.allCases, id: \.self) { mode in
                     Button(mode.label) {
                         splitMode = mode
+                        for index in receipts.indices {
+                            receipts[index].splitMode = mode
+                            if mode == .percentage { normalizeReceiptPercentages($receipts[index]) }
+                        }
                         if mode == .equal { recalcEqual() }
                         if mode == .percentage { normalizePercentages() }
                     }
@@ -1075,93 +1232,102 @@ struct CreateSplitView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("รายการในบิล")
-                    .font(.system(size: 18, weight: .black, design: .rounded))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(Color.textPrimary)
-                Text("(ไม่บังคับ)")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(Color.textSecondary)
                 Spacer()
-                Button {
-                    hapticLight()
-                    showAddItem = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus")
-                        Text("เพิ่มรายการ")
-                    }
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(Color.brand500)
-                }
+                addItemControl
             }
             .padding(.horizontal, 20)
             .padding(.top, 18)
             .padding(.bottom, 8)
 
             if draftItems.isEmpty {
-                Text("เพิ่มรายการอาหารหรือใช้ OCR จากใบเสร็จเพื่อให้เพื่อนเลือกจ่ายตามรายการได้")
+                Text("ยังไม่มีรายการ")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(Color.textSecondary)
                     .padding(.horizontal, 20)
                     .padding(.bottom, 18)
             } else {
-                ForEach(Array(draftItems.prefix(3).enumerated()), id: \.element.id) { offset, item in
+                ForEach(Array(draftItems.enumerated()), id: \.element.id) { offset, item in
                     compactItemRow(item)
-                    if offset < min(draftItems.count, 3) - 1 {
+                    if offset < draftItems.count - 1 {
                         Divider().padding(.leading, 90)
                     }
-                }
-                if draftItems.count > 3 {
-                    Text("ดูทั้งหมด \(draftItems.count) รายการ")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(Color.textSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
                 }
             }
         }
         .background(Color.surface.opacity(0.96))
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .shadow(color: Color.brand600.opacity(0.05), radius: 18, x: 0, y: 8)
     }
 
     private var reviewBillCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("ตรวจสอบก่อนบันทึก")
-                .font(.system(size: 18, weight: .black, design: .rounded))
+                .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(Color.textPrimary)
             reviewRow("ชื่อบิล", title.trimmingCharacters(in: .whitespaces).isEmpty ? "-" : title)
             reviewRow("วันที่", splitDateLabel)
             reviewRow("สถานที่", location.isEmpty ? "-" : location)
-            reviewRow("หมวดหมู่", category.rawValue)
+            reviewRow("หมวดหมู่", category?.rawValue ?? "ไม่ระบุ")
             reviewRow("ยอดรวม", fmtTHB(totalAmount, decimals: 2))
-            reviewRow("ประเภทการจ่าย", usesPerReceiptSplit ? "แยกตามบิล (\(receipts.count))" : splitMode.label)
-            reviewRow("รายการในบิล", "\(draftItems.count) รายการ")
+            reviewRow("วิธีหารบิล", splitDescription)
+            reviewRow("รายการที่เลือก", "\(draftItems.filter(\.isIncluded).count) จาก \(draftItems.count) รายการ")
+            if usesPerReceiptSplit {
+                ForEach(receipts) { receipt in
+                    reviewRow("VAT · \(receipt.result.vendorName ?? "ใบเสร็จ")", receipt.vatMode.title)
+                    if let vat = taxCalculation(for: receipt)?.vat { reviewRow("VAT", fmtTHB(vat, decimals: 2)) }
+                }
+            } else {
+                reviewRow("VAT", manualVATMode.title)
+                if let vat = manualTaxCalculation?.vat { reviewRow("ยอด VAT", fmtTHB(vat, decimals: 2)) }
+            }
         }
         .padding(20)
         .background(Color.surface.opacity(0.96))
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .shadow(color: Color.brand600.opacity(0.05), radius: 18, x: 0, y: 8)
+    }
+
+    @ViewBuilder private var addItemControl: some View {
+        if receipts.isEmpty {
+            Button {
+                addingItemToReceiptId = nil
+                showAddItem = true
+            } label: { Label("เพิ่มรายการ", systemImage: "plus") }
+                .font(.system(size: 14, weight: .medium))
+        } else {
+            Menu {
+                ForEach(Array(receipts.enumerated()), id: \.element.id) { index, receipt in
+                    Button("ใบที่ \(index + 1) · \(receipt.result.vendorName ?? "ใบเสร็จ")") {
+                        addingItemToReceiptId = receipt.id
+                        showAddItem = true
+                    }
+                }
+            } label: { Label("เพิ่มรายการ", systemImage: "plus") }
+                .font(.system(size: 14, weight: .medium))
+        }
     }
 
     private func detailInputRow<Content: View>(
         icon: String,
         tint: Color,
         label: String,
-        trailing: String? = "chevron.right",
+        trailing: String? = nil,
         @ViewBuilder content: () -> Content,
         trailingAction: (() -> Void)? = nil
     ) -> some View {
-        HStack(spacing: 18) {
+        HStack(alignment: .top, spacing: 12) {
             ZStack {
-                Circle().fill(tint.opacity(0.14)).frame(width: 62, height: 62)
+                Circle().fill(tint.opacity(0.14)).frame(width: 34, height: 34)
                 Image(systemName: icon)
-                    .font(.system(size: 25, weight: .bold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(tint)
             }
 
             VStack(alignment: .leading, spacing: 5) {
                 Text(label)
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundColor(Color.textSecondary)
                 content()
             }
@@ -1193,21 +1359,21 @@ struct CreateSplitView: View {
         Menu {
             menu()
         } label: {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(label)
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(Color.textSecondary)
                 HStack(spacing: 12) {
                     ZStack {
-                        Circle().fill(tint.opacity(0.16)).frame(width: 42, height: 42)
+                        Circle().fill(tint.opacity(0.16)).frame(width: 30, height: 30)
                         Image(systemName: icon)
                             .font(.system(size: 17, weight: .bold))
                             .foregroundColor(tint)
                     }
                     Text(value)
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(Color.textPrimary)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                     Spacer()
                     Image(systemName: "chevron.down")
                         .font(.system(size: 13, weight: .bold))
@@ -1225,20 +1391,20 @@ struct CreateSplitView: View {
     private func compactItemRow(_ item: DraftItem) -> some View {
         HStack(spacing: 12) {
             ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(Color.warningSurface)
-                    .frame(width: 54, height: 54)
+                    .frame(width: 32, height: 32)
                 Image(systemName: "fork.knife")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(Color(hex: "#fb923c"))
             }
             Text(item.name)
-                .font(.system(size: 16, weight: .medium))
+                .font(.system(size: 14))
                 .foregroundColor(Color.textPrimary)
-                .lineLimit(1)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer()
             Text(fmtTHB(item.price, decimals: 2))
-                .font(.system(size: 16, weight: .bold))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(Color.textPrimary)
         }
         .padding(.horizontal, 20)
@@ -1277,9 +1443,11 @@ struct CreateSplitView: View {
                 TextField("", text: $totalAmountText)
                     .font(.system(size: 15)).foregroundColor(Color.textPrimary)
                     .keyboardType(.decimalPad)
+                    .disabled(receipts.count > 1)
                     .onChange(of: totalAmountText) { _, _ in
                         if isProgrammaticTotalUpdate { isProgrammaticTotalUpdate = false }
                         else { totalManuallyEdited = true }
+                        if receipts.count == 1 { receipts[0].result.totalAmount = totalAmount }
                         if splitMode == .equal { recalcEqual() }
                         if splitMode == .percentage { recalcPercentage() }
                     }
@@ -1410,16 +1578,16 @@ struct CreateSplitView: View {
             if usesPerReceiptSplit {
                 // Each bill sets its own mode (see scannedReceiptsCard) —
                 // here we only show the combined result across all of them.
-                Text(fmtTHB(aggregatedAmount(for: p.wrappedValue)))
+                Text(fmtTHB(displayAmount(for: p.wrappedValue), decimals: 2))
                     .font(.system(size: 14, weight: .semibold)).foregroundColor(Color.textPrimary)
             } else {
                 switch splitMode {
                 case .equal:
-                    Text(fmtTHB(p.amount.wrappedValue))
+                    Text(fmtTHB(displayAmount(for: p.wrappedValue), decimals: 2))
                         .font(.system(size: 14, weight: .semibold)).foregroundColor(Color.textPrimary)
 
                 case .custom:
-                    TextField("฿", value: p.amount, format: .number.precision(.fractionLength(2)))
+                    SplitAmountField("จำนวนเงิน", value: p.amount)
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(Color.brand500)
                         .keyboardType(.decimalPad)
@@ -1428,7 +1596,7 @@ struct CreateSplitView: View {
 
                 case .percentage:
                     HStack(spacing: 4) {
-                        TextField("0", value: p.percentage, format: .number.precision(.fractionLength(1)))
+                        SplitAmountField("สัดส่วน", value: p.percentage)
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(Color.brand500)
                             .keyboardType(.decimalPad)
@@ -1437,18 +1605,25 @@ struct CreateSplitView: View {
                             .onChange(of: p.percentage.wrappedValue) { _, _ in recalcPercentage() }
                         Text("%").font(.system(size: 13)).foregroundColor(Color.textSecondary)
                         Text("=").font(.system(size: 11)).foregroundColor(Color.textSecondary)
-                        Text(fmtTHB(amountFor(p.wrappedValue)))
+                        Text(fmtTHB(displayAmount(for: p.wrappedValue), decimals: 2))
                             .font(.system(size: 12, weight: .semibold)).foregroundColor(Color.textPrimary)
                     }
 
                 case .item:
-                    Text(fmtTHB(itemAmountFor(p.wrappedValue)))
+                    Text(fmtTHB(displayAmount(for: p.wrappedValue), decimals: 2))
                         .font(.system(size: 14, weight: .semibold)).foregroundColor(Color.textPrimary)
                 }
             }
 
             Button {
-                participants.removeAll { $0.id == p.id }
+                let removedID = p.wrappedValue.id
+                for index in draftItems.indices { draftItems[index].assignedTo.removeAll { $0 == removedID } }
+                participants.removeAll { $0.id == removedID }
+                for index in receipts.indices {
+                    receipts[index].customAmounts.removeValue(forKey: removedID)
+                    receipts[index].percentages.removeValue(forKey: removedID)
+                    if receipts[index].splitMode == .percentage { normalizeReceiptPercentages($receipts[index]) }
+                }
                 if splitMode == .equal { recalcEqual() }
                 if splitMode == .percentage { normalizePercentages() }
             } label: {
@@ -1588,19 +1763,18 @@ struct CreateSplitView: View {
         totalAmount * (p.percentage / 100.0)
     }
 
-    /// Manual-entry path (no scanned receipt behind it, so no extracted VAT
-    /// to allocate proportionally) — apply the central default rate directly.
+    /// Manual bills use the entered grand total with the same allocation rule.
     private func itemAmountFor(_ p: DraftParticipant) -> Double {
-        let subtotal = draftItems.filter { $0.assignedTo.contains(p.id) }
+        let subtotal = draftItems.filter { $0.isIncluded && $0.assignedTo.contains(p.id) }
             .reduce(0) { $0 + $1.price / Double(max(1, $1.assignedTo.count)) }
-        guard subtotal > 0 else { return 0 }
-        return subtotal * (1 + Config.defaultVatRatePct / 100)
+        return SplitBillAmounts.itemShare(subtotal: subtotal,
+            itemsSubtotal: draftItems.filter(\.isIncluded).reduce(0) { $0 + $1.price }, total: totalAmount)
     }
 
     private func recalcEqual() {
-        guard !participants.isEmpty, totalAmount > 0 else { return }
-        let each = (totalAmount / Double(participants.count) * 100).rounded() / 100
-        for i in participants.indices { participants[i].amount = each }
+        let shares = SplitBillAmounts.equalShares(total: totalAmount, count: participants.count)
+        guard shares.count == participants.count else { return }
+        for i in participants.indices { participants[i].amount = shares[i] }
     }
 
     private func recalcPercentage() {
@@ -1619,19 +1793,26 @@ struct CreateSplitView: View {
     }
 
     private func effectiveAmounts() -> [(name: String, amount: Double)] {
-        guard !usesPerReceiptSplit else {
-            return participants.map { ($0.name, aggregatedAmount(for: $0)) }
+        let raw: [(name: String, amount: Double)]
+        if usesPerReceiptSplit {
+            raw = participants.map { ($0.name, aggregatedAmount(for: $0)) }
+        } else {
+            switch splitMode {
+            case .equal:
+                let shares = SplitBillAmounts.equalShares(total: totalAmount, count: participants.count)
+                raw = participants.indices.map { (participants[$0].name, shares[$0]) }
+            case .custom: raw = participants.map { ($0.name, $0.amount) }
+            case .percentage: raw = participants.map { ($0.name, amountFor($0)) }
+            case .item: raw = participants.map { ($0.name, itemAmountFor($0)) }
+            }
         }
-        switch splitMode {
-        case .equal:
-            return participants.map { ($0.name, $0.amount) }
-        case .custom:
-            return participants.map { ($0.name, $0.amount) }
-        case .percentage:
-            return participants.map { ($0.name, amountFor($0)) }
-        case .item:
-            return participants.map { ($0.name, itemAmountFor($0)) }
-        }
+        guard let rounded = SplitBillAmounts.roundedShares(raw.map(\.amount), total: totalAmount) else { return raw }
+        return raw.indices.map { (raw[$0].name, rounded[$0]) }
+    }
+
+    private func displayAmount(for participant: DraftParticipant) -> Double {
+        guard let index = participants.firstIndex(where: { $0.id == participant.id }) else { return 0 }
+        return effectiveAmounts()[index].amount
     }
 
     // MARK: – Field helpers
@@ -1666,7 +1847,8 @@ struct CreateSplitView: View {
             validationError = "กรุณาใส่ชื่อบิล"
             return false
         }
-        guard totalAmount > 0 else {
+        let sourceTotal = usesPerReceiptSplit ? receiptsTotal : enteredAmount
+        guard sourceTotal.isFinite, sourceTotal > 0 || draftItems.contains(where: { $0.price > 0 }) else {
             validationError = "กรุณาใส่ยอดรวมที่ถูกต้อง"
             return false
         }
@@ -1674,8 +1856,26 @@ struct CreateSplitView: View {
     }
 
     private func validateFriends() -> Bool {
+        guard hasValidTaxConfiguration else {
+            validationError = "กรุณาระบุอัตรา VAT ให้ถูกต้อง หรือเลือกใช้ยอดสุทธิจากใบเสร็จ"
+            return false
+        }
+        guard totalAmount.isFinite, totalAmount > 0, hasCompleteAssignments else {
+            validationError = "กรุณาเลือกรายการและกำหนดผู้ร่วมจ่ายให้ครบทุกรายการที่นำมาหาร"
+            return false
+        }
         guard !participants.isEmpty else {
             validationError = "กรุณาเพิ่มผู้เข้าร่วมอย่างน้อย 1 คน"
+            return false
+        }
+        guard hasBalancedReceipts else {
+            validationError = "ยอดแบ่งของแต่ละใบเสร็จไม่ตรง กรุณาตรวจสอบทุกใบแยกกัน"
+            return false
+        }
+        let amounts = effectiveAmounts().map(\.amount)
+        guard amounts.allSatisfy({ $0.isFinite && $0 >= 0 }),
+              abs(amounts.reduce(0, +) - totalAmount) < 0.005 else {
+            validationError = "ยอดแบ่งของผู้ร่วมบิลไม่ตรงกับยอดรวม กรุณาตรวจสอบจำนวนเงินและรายการที่เลือก"
             return false
         }
         return true
@@ -1687,15 +1887,34 @@ struct CreateSplitView: View {
         if !trimmedNote.isEmpty { lines.append(trimmedNote) }
 
         lines.append("วันที่และเวลา: \(splitDateLabel)")
-        lines.append("หมวดหมู่: \(category.rawValue)")
-        lines.append("ประเภทการจ่าย: \(usesPerReceiptSplit ? "แยกตามบิล (\(receipts.count))" : splitMode.label)")
+        lines.append("หมวดหมู่: \(category?.rawValue ?? "ไม่ระบุ")")
+        lines.append("วิธีหารบิล: \(splitDescription)")
+        if usesPerReceiptSplit {
+            for receipt in receipts {
+                lines.append("VAT \(receipt.result.vendorName ?? "ใบเสร็จ"): \(receipt.vatMode.title)\(receipt.vatMode.needsRate ? " (\(receipt.vatRateText)%)" : "")")
+            }
+        } else {
+            lines.append("VAT: \(manualVATMode.title)\(manualVATMode.needsRate ? " (\(manualVATRate)%)" : "")")
+        }
         if !location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             lines.append("สถานที่: \(location.trimmingCharacters(in: .whitespacesAndNewlines))")
         }
         if !draftItems.isEmpty {
-            lines.append("รายการในบิล: \(draftItems.map { "\($0.name) \(fmtTHB($0.price, decimals: 2))" }.joined(separator: ", "))")
+            lines.append("รายการที่นำมาหาร:")
+            for item in draftItems where item.isIncluded {
+                let mode = item.sourceReceiptId.flatMap { id in receipts.first { $0.id == id }?.splitMode } ?? splitMode
+                let names = participants.filter { item.assignedTo.contains($0.id) }.map(\.name)
+                let allocation = mode == .item ? names.joined(separator: ", ") : mode.label
+                lines.append("\(item.name) · \(fmtTHB(item.price, decimals: 2)) · \(allocation)")
+            }
         }
         return lines.isEmpty ? nil : lines.joined(separator: "\n")
+    }
+
+    private var splitDescription: String {
+        guard usesPerReceiptSplit else { return splitMode.label }
+        if Set(receipts.map(\.splitMode)).count == 1 { return receipts[0].splitMode.label }
+        return "แยกวิธีตามใบเสร็จ"
     }
 
     // MARK: – Save
@@ -1715,6 +1934,7 @@ struct CreateSplitView: View {
                     title: title.trimmingCharacters(in: .whitespaces),
                     totalAmount: totalAmount,
                     note: persistedNote,
+                    documentID: receipts.compactMap(\.sourceDocumentID).first,
                     participants: amounts.map { ($0.name, $0.amount) }
                 )
                 hapticSuccess()
@@ -1731,6 +1951,61 @@ struct CreateSplitView: View {
 }
 
 // MARK: – Add Participant Sheet
+
+#if DEBUG
+extension CreateSplitView {
+    static func redesignPreview(vm: SplitViewModel, step: CreateSplitStep) -> CreateSplitView {
+        let result = SlipExtraction(vendorName: "มื้ออาหารร่วมกัน", totalAmount: 214,
+            lineItems: [LineItem(name: "อาหารจานหลัก", amount: 100),
+                        LineItem(name: "เครื่องดื่ม", amount: 20),
+                        LineItem(name: "เครื่องดื่ม", amount: 20),
+                        LineItem(name: "ของหวาน", amount: 20),
+                        LineItem(name: "อาหารทานเล่น", amount: 20),
+                        LineItem(name: "รายการสุดท้าย", amount: 20)], confidence: 1)
+        var view = CreateSplitView(vm: vm)
+        let receipt = ScannedReceipt(result: result, image: nil, splitMode: .item)
+        view._receipts = State(initialValue: [receipt])
+        view._draftItems = State(initialValue: result.lineItems.map {
+            DraftItem(name: $0.name, price: $0.amount, assignedTo: [], sourceReceiptId: receipt.id)
+        })
+        view._participants = State(initialValue: ["คุณเอ", "คุณบี", "เพื่อนที่มีชื่อยาวสำหรับตรวจข้อความ"].map {
+            DraftParticipant(name: $0, amount: 0, percentage: 0, items: [])
+        })
+        view._title = State(initialValue: result.vendorName!)
+        view._totalAmountText = State(initialValue: "214.00")
+        view._createStep = State(initialValue: step)
+        return view
+    }
+}
+#endif
+
+private struct SplitAmountField: View {
+    let placeholder: String
+    @Binding var value: Double
+    @State private var text: String
+    @FocusState private var focused: Bool
+
+    init(_ placeholder: String, value: Binding<Double>) {
+        self.placeholder = placeholder
+        _value = value
+        _text = State(initialValue: value.wrappedValue == 0 ? "" : String(format: "%.2f", value.wrappedValue))
+    }
+
+    var body: some View {
+        TextField(placeholder, text: $text)
+            .keyboardType(.decimalPad)
+            .focused($focused)
+            .accessibilityLabel(placeholder)
+            .onChange(of: text) { _, input in
+                let cleaned = input.replacingOccurrences(of: ",", with: "")
+                value = cleaned.isEmpty ? 0 : Double(cleaned) ?? .nan
+            }
+            .onChange(of: value) { _, updated in
+                guard !focused else { return }
+                text = updated == 0 || !updated.isFinite ? "" : String(format: "%.2f", updated)
+            }
+    }
+}
 
 struct AddParticipantSheet: View {
     let onAdd: (String, Double) -> Void
@@ -1758,7 +2033,7 @@ struct AddParticipantSheet: View {
                             Text("จำนวน (฿)")
                                 .font(.system(size: 14, weight: .medium)).foregroundColor(Color.textSecondary)
                                 .frame(width: 80, alignment: .leading)
-                            TextField("0 (เว้นว่างเพื่อหารเท่ากัน)", text: $amountText)
+                            TextField("จำนวนเงิน (ไม่บังคับ)", text: $amountText)
                                 .font(.system(size: 15)).foregroundColor(Color.textPrimary)
                                 .keyboardType(.decimalPad)
                         }
@@ -1815,7 +2090,7 @@ struct AddItemSheet: View {
                             Text("ชื่อรายการ")
                                 .font(.system(size: 14, weight: .medium)).foregroundColor(Color.textSecondary)
                                 .frame(width: 90, alignment: .leading)
-                            TextField("เช่น ข้าวผัด, เบียร์", text: $name)
+                            TextField("ระบุชื่อรายการ", text: $name)
                                 .font(.system(size: 15)).foregroundColor(Color.textPrimary)
                         }
                         .padding(.horizontal, 16).padding(.vertical, 14)
@@ -1824,7 +2099,7 @@ struct AddItemSheet: View {
                             Text("ราคา (฿)")
                                 .font(.system(size: 14, weight: .medium)).foregroundColor(Color.textSecondary)
                                 .frame(width: 90, alignment: .leading)
-                            TextField("0.00", text: $priceText)
+                            TextField("ระบุราคารายการ", text: $priceText)
                                 .font(.system(size: 15)).foregroundColor(Color.textPrimary)
                                 .keyboardType(.decimalPad)
                         }

@@ -55,6 +55,7 @@ coverage/
 ios/Slippy.xcodeproj/
 ios/Pods/
 ios/DerivedData/
+ios/Config/Maps.local.xcconfig
 
 ## Android sensitive
 android/local.properties
