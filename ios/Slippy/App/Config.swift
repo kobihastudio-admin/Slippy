@@ -50,9 +50,7 @@ enum Config {
     static let liveKitURL: URL? = nil // e.g. URL(string: "wss://slippy-xxxxx.livekit.cloud")
 
     // MARK: – Tax
-    /// Thailand's standard VAT rate — single source of truth so it's never
-    /// hardcoded per-call-site. Used as a fallback when a receipt's actual
-    /// VAT wasn't extracted by OCR (e.g. manually-added split-bill items),
-    /// see CreateSplitView's per-line-item VAT allocation.
+    /// Default VAT configuration. Split bills allocate their actual grand
+    /// total instead of inferring or adding tax from this default.
     static let defaultVatRatePct: Double = 7.0
 }

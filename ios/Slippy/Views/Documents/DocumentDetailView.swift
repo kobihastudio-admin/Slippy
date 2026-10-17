@@ -43,6 +43,19 @@ struct DocumentDetailContentView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var confirmAction: String?
     @State private var isActing = false
+    @State private var showSplit = false
+    @StateObject private var splitVM = SplitViewModel()
+    #if DEBUG
+    private var previewLineItems: [EditableLineItem]? = nil
+    #endif
+
+    private var isPreviewDocument: Bool {
+        #if DEBUG
+        return previewLineItems != nil
+        #else
+        return false
+        #endif
+    }
 
     // ── Receipt image viewer ───────────────────────────────────────────────
     @State private var showImageViewer  = false
@@ -54,6 +67,7 @@ struct DocumentDetailContentView: View {
     @State private var isEditing       = false
     @State private var isSaving        = false
     @State private var isLoadingItems  = true
+    @State private var itemsLoadError: String?
     @State private var saveError: String?
     @State private var saveSuccess     = false
 
@@ -100,11 +114,37 @@ struct DocumentDetailContentView: View {
         _doc = State(initialValue: doc)
     }
 
+    #if DEBUG
+    init(previewDocument: SlippyDocument, items: [EditableLineItem]) {
+        _doc = State(initialValue: previewDocument)
+        previewLineItems = items
+        _lineItems = State(initialValue: items)
+        _isLoadingItems = State(initialValue: false)
+    }
+    #endif
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
                 headerCard
                 primaryButtonsRow
+                if !isEditing {
+                    if let itemsLoadError {
+                        Text(itemsLoadError).font(.caption).foregroundStyle(Color.statusFailed)
+                        Button { Task { await loadLineItems() } } label: {
+                            Label("โหลดรายการอีกครั้ง", systemImage: "arrow.clockwise")
+                        }
+                        .disabled(isLoadingItems)
+                    }
+                    Button { showSplit = true } label: {
+                        Label("หารบิลจากใบเสร็จนี้", systemImage: "person.2.fill")
+                            .font(.system(size: 15, weight: .semibold))
+                            .frame(maxWidth: .infinity).padding(.vertical, 13)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("document.split")
+                    .disabled(isLoadingItems || itemsLoadError != nil || authVM.org?.id == nil)
+                }
 
                 infoCard
                 if !lineItems.isEmpty || isEditing { itemsCard }
@@ -116,8 +156,10 @@ struct DocumentDetailContentView: View {
                     // pre-upload review screen, i.e. before anyone knew what
                     // the document was. They belong where the document is
                     // actually looked at.
-                    DocumentTagsShareSection(documentId: doc.id)
-                        .environmentObject(authVM)
+                    if !isPreviewDocument {
+                        DocumentTagsShareSection(documentId: doc.id)
+                            .environmentObject(authVM)
+                    }
 
                     footerActionBar
                     statusActionButtons
@@ -130,6 +172,7 @@ struct DocumentDetailContentView: View {
         .navigationTitle("รายละเอียดเอกสาร")
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            guard !isPreviewDocument else { return }
             await loadLineItems()
             if let orgId = authVM.org?.id { await categoriesVM.load(orgId: orgId) }
             await loadRepeatCount()
@@ -141,6 +184,10 @@ struct DocumentDetailContentView: View {
                 onSaveRotation: { newRotation in await saveRotation(newRotation) }
                 // returns Bool now — success/failure surfaced in the viewer's UI
             )
+        }
+        .sheet(isPresented: $showSplit) {
+            CreateSplitView(vm: splitVM, initialReceipt: splitExtraction, sourceDocumentID: doc.id)
+                .environmentObject(authVM)
         }
         .alert("ยืนยันการดำเนินการ", isPresented: Binding(
             get: { confirmAction != nil },
@@ -301,6 +348,23 @@ struct DocumentDetailContentView: View {
     }
 
     // MARK: – View original receipt photo
+
+    private var splitExtraction: SlipExtraction {
+        SlipExtraction(
+            vendorName: doc.vendorName,
+            totalAmount: doc.totalAmount,
+            subtotal: doc.subtotalAmount,
+            vatAmount: doc.vatAmount,
+            whtAmount: doc.whtAmount,
+            docDate: doc.docDate,
+            docNumber: doc.invoiceNumber,
+            lineItems: lineItems.map {
+                LineItem(name: $0.description, qty: Double($0.qty), unitPrice: Double($0.unitPrice),
+                         amount: Double($0.amount) ?? 0)
+            },
+            confidence: doc.overallConfidence ?? 0
+        )
+    }
 
     private var primaryButtonsRow: some View {
         VStack(spacing: 8) {
@@ -1069,6 +1133,7 @@ struct DocumentDetailContentView: View {
 
     private func loadLineItems() async {
         isLoadingItems = true
+        itemsLoadError = nil
         vendorName  = doc.vendorName ?? ""
         companyName = doc.companyName ?? ""
         docDateText = doc.docDate ?? ""
@@ -1101,7 +1166,7 @@ struct DocumentDetailContentView: View {
                 EditableLineItem(
                     id: $0.id,
                     description: $0.description ?? "",
-                    qty: $0.quantity.map { String(Int($0.rounded())) } ?? "1",
+                    qty: $0.quantity.map { String($0) } ?? "1",
                     unitPrice: $0.unit_price.map { String(format: "%.2f", $0) } ?? "0",
                     amount: $0.amount.map { String(format: "%.2f", $0) } ?? "0",
                     isNew: false
@@ -1109,6 +1174,7 @@ struct DocumentDetailContentView: View {
             }
         } catch {
             lineItems = []
+            itemsLoadError = "โหลดรายการใบเสร็จไม่สำเร็จ กรุณาลองอีกครั้งก่อนหารบิล"
         }
         originalItemDescriptions = lineItems.map(\.description)
         isLoadingItems = false

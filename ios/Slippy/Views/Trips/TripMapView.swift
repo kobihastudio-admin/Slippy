@@ -2,11 +2,10 @@ import SwiftUI
 import MapKit
 import Supabase
 
-/// The trip map — real Apple Maps, and the itinerary is edited on it.
+/// Native trip maps with a shared itinerary and optional Google renderer.
 ///
-/// MapKit rather than the web's Leaflet + OpenStreetMap tiles: it is already on
-/// the device, needs no tile provider or API key, and handles gestures, labels
-/// and dark mode the way the rest of iOS does. The pin colours and symbols come
+/// MapKit remains available without credentials. Google Maps is enabled only
+/// when a native iOS key is supplied. The pin colours and symbols come
 /// from JourneyStyle, which mirrors the web's table, so the same trip reads the
 /// same on both.
 ///
@@ -60,6 +59,10 @@ struct TripMapView: View {
     var showDayStrip: Bool = true
 
     @State private var camera: MapCameraPosition = .automatic
+    @State private var provider = TripMapProvider.initial(googleConfigured: GoogleTripMap.isConfigured)
+    @State private var visibleRegion: MKCoordinateRegion?
+    @State private var googleCameraRevision = 0
+    @State private var mapCardHeight: CGFloat = 0
     @State private var selectedId: String?
     /// Non-nil while the next tap on open ground should relocate this item.
     @State private var movingId: String?
@@ -153,6 +156,21 @@ struct TripMapView: View {
             movingId = nil
             pending = nil
             frameToPins()
+        }
+        .onChange(of: provider) { _, value in
+            selectedFeature = nil
+            poi = nil
+            pending = nil
+            if value == .google {
+                guard GoogleTripMap.isConfigured else {
+                    provider = .apple
+                    errorText = "ยังไม่ได้ตั้งค่า Google Maps สำหรับ iOS ใช้ Apple Maps ต่อได้"
+                    return
+                }
+                googleCameraRevision += 1
+            } else if let visibleRegion {
+                camera = .region(visibleRegion)
+            }
         }
         .onChange(of: selectedFeature) { _, feature in
             guard let feature, canEdit else { return }
@@ -265,6 +283,94 @@ struct TripMapView: View {
     // MARK: – Map
 
     private var mapArea: some View {
+        Group {
+            if provider == .google, GoogleTripMap.isConfigured {
+                GoogleTripMap(
+                    pins: googlePins,
+                    selectedID: selectedId,
+                    region: visibleRegion,
+                    cameraRevision: googleCameraRevision,
+                    bottomInset: mapCardHeight + 12,
+                    onSelect: { id in
+                        guard pins.contains(where: { $0.item.id == id }) else { return }
+                        pending = nil
+                        selectedId = id
+                        hapticLight()
+                    },
+                    onTap: handleGoogleMapTap,
+                    onPOI: { name, coordinate in
+                        handleGoogleMapTap(coordinate)
+                        if canEdit, movingId == nil, pending != nil { pending?.name = name }
+                    },
+                    onRegionChange: { visibleRegion = $0 }
+                )
+                .frame(minHeight: 320)
+                .overlay(alignment: .top) { providerControls }
+                .overlay(alignment: .bottom) { mapCard }
+                .onPreferenceChange(MapCardHeightKey.self) { mapCardHeight = $0 }
+            } else {
+                appleMapArea
+            }
+        }
+    }
+
+    private var googlePins: [GoogleTripMap.Pin] {
+        let stops = pins.compactMap { pin -> GoogleTripMap.Pin? in
+            guard let coordinate = pin.item.coordinate else { return nil }
+            return .init(id: pin.item.id, title: "\(pin.index). \(pin.item.title)",
+                         coordinate: .init(latitude: coordinate.lat, longitude: coordinate.lng),
+                         color: UIColor(JourneyStyle.spec(pin.item.type).color), label: String(pin.index))
+        }
+        let people = locationVM.others.map { loc in
+            GoogleTripMap.Pin(id: "live:\(loc.id)", title: "ผู้ร่วมทริป",
+                              coordinate: .init(latitude: loc.latitude, longitude: loc.longitude),
+                              color: locationIsStale(loc) ? .systemGray : UIColor(Color.brand500))
+        }
+        return stops + people
+    }
+
+    private var providerControls: some View {
+        VStack(spacing: 4) {
+            Picker("แผนที่", selection: $provider) {
+                ForEach(TripMapProvider.allCases) { value in
+                    Text(value.title).tag(value)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("trip.map.provider")
+            .frame(maxWidth: 300)
+            .padding(6)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+            if resolvingPOI { resolvingBanner }
+            movingBanner
+        }
+        .padding(.top, 8)
+        .padding(.horizontal, 8)
+    }
+
+    private var mapCard: some View {
+        Group {
+            if let selected { selectionCard(selected) }
+            else if let pending { pendingCard(pending) }
+        }
+        .background(GeometryReader { geometry in
+            Color.clear.preference(key: MapCardHeightKey.self, value: geometry.size.height)
+        })
+    }
+
+    private func handleGoogleMapTap(_ coordinate: CLLocationCoordinate2D) {
+        if canEdit, let movingId, let item = pins.first(where: { $0.item.id == movingId })?.item {
+            self.movingId = nil
+            Task { await moveSelected(item, to: coordinate) }
+            return
+        }
+        selectedId = nil
+        guard canEdit else { return }
+        // Do not reverse-geocode Google taps through Apple's service.
+        pending = PendingPlace(coordinate: coordinate, name: "ตำแหน่งที่เลือก")
+    }
+
+    private var appleMapArea: some View {
         MapReader { proxy in
             Map(position: $camera, selection: canEdit ? $selectedFeature : .constant(nil)) {
                 ForEach(legs, id: \.id) { leg in
@@ -310,6 +416,7 @@ struct TripMapView: View {
                 }
             }
             .mapStyle(.standard(elevation: .flat))
+            .onMapCameraChange(frequency: .onEnd) { visibleRegion = $0.region }
             .frame(minHeight: 320)
             .simultaneousGesture(
                 SpatialTapGesture().onEnded { value in
@@ -324,10 +431,7 @@ struct TripMapView: View {
                 // TripDetailView renders it now, tab-independently, from the
                 // same shared locationVM instance. See locationVM's doc
                 // comment above.
-                VStack(spacing: 6) {
-                    if resolvingPOI { resolvingBanner }
-                    movingBanner
-                }
+                providerControls
             }
             // Floats over the map itself — pinned to mapArea's own bottom
             // edge, growing upward — rather than living in the outer VStack's
@@ -405,8 +509,7 @@ struct TripMapView: View {
     }()
 
     private func livePinBadge(_ loc: TripLocationAPI.MemberLocation) -> some View {
-        let parsed = Self.iso8601Fractional.date(from: loc.recordedAt) ?? Self.iso8601Plain.date(from: loc.recordedAt)
-        let stale = (parsed.map { Date().timeIntervalSince($0) > 60 }) ?? true
+        let stale = locationIsStale(loc)
         return ZStack {
             Circle()
                 .fill(stale ? Color.gray : Color.brand500)
@@ -418,6 +521,11 @@ struct TripMapView: View {
                 .foregroundColor(.white)
         }
         .opacity(stale ? 0.6 : 1)
+    }
+
+    private func locationIsStale(_ loc: TripLocationAPI.MemberLocation) -> Bool {
+        let parsed = Self.iso8601Fractional.date(from: loc.recordedAt) ?? Self.iso8601Plain.date(from: loc.recordedAt)
+        return (parsed.map { Date().timeIntervalSince($0) > 60 }) ?? true
     }
 
     @ViewBuilder
@@ -714,7 +822,7 @@ struct TripMapView: View {
         ).first else { return }
         // The user may have tapped elsewhere, or dismissed, before this
         // returns — only apply it if it is still about the same point.
-        guard let current = pending?.coordinate,
+        guard provider == .apple, let current = pending?.coordinate,
               current.latitude == coordinate.latitude, current.longitude == coordinate.longitude else { return }
         pending?.name = mark.name ?? mark.thoroughfare ?? mark.locality
         pending?.subtitle = [mark.locality, mark.administrativeArea, mark.country].compactMap { $0 }.joined(separator: ", ")
@@ -752,7 +860,7 @@ struct TripMapView: View {
 
         // The user may have tapped a different feature, or dismissed, before
         // this search returned.
-        guard selectedFeature == feature else { return }
+        guard provider == .apple, selectedFeature == feature else { return }
         poi = ResolvedPlace(
             coordinate: feature.coordinate,
             title: feature.title ?? "สถานที่",
@@ -816,6 +924,10 @@ struct TripMapView: View {
 
     /// Fit the camera to whatever is currently shown.
     private func frameToPins() {
+        defer {
+            if let region = camera.region { visibleRegion = region }
+            googleCameraRevision += 1
+        }
         let coords = pins.compactMap(\.item.coordinate)
         guard !coords.isEmpty else { return }
 
@@ -837,6 +949,13 @@ struct TripMapView: View {
                 // almost zero and would otherwise zoom to street level.
                 latitudeDelta:  max((maxLat - minLat) * 1.4, 0.01),
                 longitudeDelta: max((maxLng - minLng) * 1.4, 0.01))))
+    }
+}
+
+private struct MapCardHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 

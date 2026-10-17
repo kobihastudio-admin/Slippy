@@ -1,5 +1,39 @@
 import Foundation
 
+enum SplitBillAmounts {
+    static func itemShare(subtotal: Double, itemsSubtotal: Double, total: Double) -> Double {
+        guard subtotal.isFinite, itemsSubtotal.isFinite, total.isFinite,
+              subtotal >= 0, itemsSubtotal > 0, total >= 0 else { return 0 }
+        return (subtotal / itemsSubtotal) * total
+    }
+
+    /// Largest-remainder rounding keeps valid shares balanced in whole satang.
+    static func roundedShares(_ shares: [Double], total: Double) -> [Double]? {
+        guard !shares.isEmpty, total.isFinite, total >= 0, total * 100 < 9_000_000_000_000_000,
+              shares.allSatisfy({ $0.isFinite && $0 >= 0 }),
+              abs(shares.reduce(0, +) - total) < 0.005 else { return nil }
+        let scaled = shares.map { $0 * 100 }
+        var cents = scaled.map { Int($0.rounded(.down)) }
+        let remainder = Int((total * 100).rounded()) - cents.reduce(0, +)
+        guard remainder >= 0, remainder <= shares.count else { return nil }
+        let order = shares.indices.sorted {
+            let lhs = scaled[$0] - Double(cents[$0])
+            let rhs = scaled[$1] - Double(cents[$1])
+            return lhs == rhs ? $0 < $1 : lhs > rhs
+        }
+        for index in order.prefix(remainder) { cents[index] += 1 }
+        return cents.map { Double($0) / 100 }
+    }
+
+    static func equalShares(total: Double, count: Int) -> [Double] {
+        guard count > 0, total.isFinite, total >= 0, total * 100 < 9_000_000_000_000_000 else { return [] }
+        let cents = Int((total * 100).rounded())
+        let base = cents / count
+        let remainder = cents % count
+        return (0..<count).map { Double(base + ($0 < remainder ? 1 : 0)) / 100 }
+    }
+}
+
 struct SplitBill: Codable, Identifiable {
     let id: String
     let organizationId: String

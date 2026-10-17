@@ -19,6 +19,9 @@ settings:
     SWIFT_ENABLE_EXPLICIT_MODULES: NO
 
 packages:
+  GoogleMaps:
+    url: https://github.com/googlemaps/ios-maps-sdk
+    exactVersion: "11.2.0"
   Supabase:
     url: https://github.com/supabase/supabase-swift
     from: "2.3.0"
@@ -36,6 +39,19 @@ packages:
     from: "2.15.0"
 
 targets:
+  SlippyUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: SlippyUITests
+    dependencies:
+      - target: Slippy
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.slippy.ios.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.9"
+        DEVELOPMENT_TEAM: "DBQN87K35F"
   Slippy:
     type: application
     platform: iOS
@@ -47,6 +63,8 @@ targets:
         product: Supabase
       - package: GoogleSignIn
         product: GoogleSignIn
+      - package: GoogleMaps
+        product: GoogleMaps
       - package: FacebookSDK
         product: FacebookLogin
         suppressWarnings: true
@@ -73,6 +91,7 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.9"
         INFOPLIST_FILE: Slippy/App/Info.plist
+        OTHER_LDFLAGS: "$(inherited) -ObjC"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Team ID = the OU field of the signing certificate, NOT the code in
         # parentheses after the Apple ID in its common name. This was
@@ -96,6 +115,7 @@ targets:
       path: Slippy/App/Info.plist
       properties:
         CFBundleDisplayName: Slippy
+        GoogleMapsIOSAPIKey: "$(GOOGLE_MAPS_IOS_API_KEY)"
         CFBundleShortVersionString: "1.0.0"
         NSCameraUsageDescription: "ถ่ายภาพเอกสารเพื่ออัปโหลดเข้าระบบ Slippy"
         NSPhotoLibraryUsageDescription: "เลือกรูปเอกสารจากคลังภาพ"
@@ -133,6 +153,8 @@ targets:
 
         # ── Queried schemes (for LINE / Facebook) ─────────────────────
         LSApplicationQueriesSchemes:
+          - comgooglemaps
+          - googlechromes
           - lineauth2
           - line3rdp.app.slippy.ios
           - line
@@ -240,6 +262,8 @@ schemes:
       config: Debug
     test:
       config: Debug
+      targets:
+        - SlippyUITests
     profile:
       config: Release
     analyze:
