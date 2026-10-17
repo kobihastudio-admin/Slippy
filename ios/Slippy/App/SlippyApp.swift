@@ -82,6 +82,12 @@ enum SharedContainerReader {
 // MARK: – AppDelegate (required for Facebook SDK setup)
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        if window?.traitCollection.userInterfaceIdiom == .pad { return .all }
+        ImageViewerOrientation.trace("query")
+        return ImageViewerOrientation.supportedOrientations
+    }
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -98,5 +104,60 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
         _ = LoginManager.shared.application(app, open: url)
         return true
+    }
+}
+
+@MainActor
+enum ImageViewerOrientation {
+    private(set) static var isEnabled = false
+    private(set) static var supportedOrientations: UIInterfaceOrientationMask = .portrait
+
+    static func open() {
+        guard !isEnabled else { return }
+        supportedOrientations = .allButUpsideDown
+        isEnabled = true
+        trace("open")
+        update()
+    }
+
+    static func close() {
+        guard isEnabled else { return }
+        isEnabled = false
+        supportedOrientations = .portrait
+        trace("close")
+        update(request: .portrait)
+    }
+
+    static func rotate(to orientations: UIInterfaceOrientationMask) {
+        guard isEnabled else { return }
+        // Retain a button-selected orientation until the viewer switches or closes.
+        supportedOrientations = orientations
+        trace("rotate")
+        update(request: orientations)
+    }
+
+    private static func update(request: UIInterfaceOrientationMask? = nil) {
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }),
+              let window = scene.windows.first(where: \.isKeyWindow) else { return }
+        var controller = window.rootViewController
+        while let current = controller {
+            current.setNeedsUpdateOfSupportedInterfaceOrientations()
+            controller = current.presentedViewController
+        }
+        if let request, window.traitCollection.userInterfaceIdiom != .pad {
+            trace("request \(request.rawValue)")
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: request)) { error in
+                trace("geometry error \(error.localizedDescription)")
+            }
+        }
+    }
+
+    static func trace(_ event: String) {
+        #if DEBUG
+        guard ProcessInfo.processInfo.environment["SLIPPY_ORIENTATION_TRACE"] == "1" else { return }
+        print("[SlippyOrientation] \(event) enabled=\(isEnabled) mask=\(supportedOrientations.rawValue)")
+        fflush(stdout)
+        #endif
     }
 }

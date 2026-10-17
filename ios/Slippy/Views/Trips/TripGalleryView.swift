@@ -1,16 +1,24 @@
 import SwiftUI
 import PhotosUI
 
+struct TripGalleryAsset: Identifiable {
+    let name: String
+    let title: String
+    var id: String { name }
+}
+
 /// The trip's photo gallery — every check-in photo, all together. Public
 /// bucket (TripPhotoAPI), so plain AsyncImage works with no signed URLs.
 struct TripGalleryView: View {
     let trip: Trip
     let days: [TripItineraryDay]
+    var diaryImages: [TripGalleryAsset] = []
 
     @State private var photos: [TripPhoto] = []
     @State private var loading = true
     @State private var errorText: String?
     @State private var lightbox: TripPhoto?
+    @State private var diaryLightbox: TripGalleryAsset?
     @State private var photoItem: PhotosPickerItem?
     @State private var uploading = false
     @Environment(\.dismiss) private var dismiss
@@ -30,7 +38,7 @@ struct TripGalleryView: View {
             Group {
                 if loading {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if photos.isEmpty {
+                } else if photos.isEmpty && diaryImages.isEmpty {
                     VStack(spacing: 8) {
                         Image(systemName: "photo.on.rectangle").font(.system(size: 30)).foregroundColor(Color.textSecondary)
                         Text("ยังไม่มีรูปในทริปนี้").font(.system(size: 15, weight: .semibold))
@@ -41,6 +49,17 @@ struct TripGalleryView: View {
                 } else {
                     ScrollView {
                         LazyVGrid(columns: columns, spacing: 6) {
+                            ForEach(diaryImages) { image in
+                                Button { diaryLightbox = image } label: {
+                                    Color.clear
+                                        .frame(width: 104, height: 104)
+                                        .overlay(Image(image.name).resizable().scaledToFill())
+                                        .clipped()
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(image.title)
+                            }
                             ForEach(photos) { photo in
                                 Button { lightbox = photo } label: {
                                     AsyncImage(url: TripPhotoAPI.publicURL(photo)) { phase in
@@ -77,6 +96,9 @@ struct TripGalleryView: View {
                 LightboxView(photo: photo, dayLabel: dayLabel(for: photo)) {
                     Task { await remove(photo) }
                 }
+            }
+            .fullScreenCover(item: $diaryLightbox) { image in
+                ProfileImageViewer(assetName: image.name, title: image.title)
             }
             .onChange(of: photoItem) { _, item in
                 guard let item else { return }

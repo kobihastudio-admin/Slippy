@@ -629,7 +629,8 @@ struct JourneyWorkspaceView: View {
             TripProfileManagerSheet(participants: people, save: saveTripProfile)
         }
         .sheet(isPresented: $showGallery, onDismiss: { Task { await loadExtras() } }) {
-            TripGalleryView(trip: trip, days: vm.itineraryDays)
+            TripGalleryView(trip: trip, days: vm.itineraryDays,
+                            diaryImages: Self.animeMoments.map { TripGalleryAsset(name: $0.name, title: $0.title) })
         }
         .fullScreenCover(isPresented: $showCover) {
             CoverViewerSheet(url: coverURL, onPick: changeCover, onReset: resetCover)
@@ -933,7 +934,6 @@ struct JourneyWorkspaceView: View {
                 }
                 budgetPlanCard
                 remindersCard
-                kyushuGallery
                 travelCommandCenter
                 Button { tab = 1 } label: {
                     Label(vm.itineraryDays.isEmpty ? "เริ่มวางแผนรายวัน" : "เปิดแผนการเดินทาง", systemImage: "arrow.right.circle.fill")
@@ -2131,10 +2131,72 @@ private struct MomentRequest: Identifiable {
 private func dayImageName(_ day: TripItineraryDay?) -> String {
     let text = ((day?.city ?? "") + " " + (day?.title ?? "")).lowercased()
     if text.contains("depart") { return "KyushuTripCover" }
+    if text.contains("dazaifu") { return "KyushuShrine" }
     if text.contains("temple") { return "KyushuShrine" }
     if text.contains("yufuin") { return "KyushuYufuin" }
     if text.contains("kumamoto") { return "KyushuKumamoto" }
     return "KyushuFukuoka"
+}
+
+private struct TripReferencePhoto: Decodable {
+    let name: String
+    let title: String
+    let aliases: [String]
+    let source: String
+    let author: String
+    let license: String
+    let licenseURL: String
+
+    static let all: [TripReferencePhoto] = {
+        guard let data = NSDataAsset(name: "KyushuReferencePhotos")?.data else { return [] }
+        return (try? JSONDecoder().decode([TripReferencePhoto].self, from: data)) ?? []
+    }()
+
+    static func matching(_ text: String) -> TripReferencePhoto? {
+        let normalized = text.lowercased()
+        return all.first { photo in photo.aliases.contains { normalized.contains($0) } }
+    }
+}
+
+private struct ReferencePhotoCredit: View {
+    let photo: TripReferencePhoto
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if let source = URL(string: photo.source) {
+                Link("\(photo.author) · Wikimedia Commons", destination: source)
+            }
+            if let license = URL(string: photo.licenseURL) {
+                Link("\(photo.license) · cropped preview", destination: license)
+            } else {
+                Text("\(photo.license) · cropped preview")
+            }
+        }
+        .font(.system(size: 10)).foregroundColor(.white.opacity(0.8)).lineLimit(1)
+    }
+}
+
+private struct PlaceReferencePhoto: View {
+    let photo: TripReferencePhoto
+    @State private var showViewer = false
+
+    var body: some View {
+        Button { showViewer = true } label: {
+            Color.clear
+                .frame(width: 44, height: 44)
+                .overlay(Image(photo.name).resizable().scaledToFill())
+                .clipped()
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("ดูรูป \(photo.title)")
+        .accessibilityHint("เปิดรูปเต็มจอและเครดิตภาพ")
+        .fullScreenCover(isPresented: $showViewer) {
+            ProfileImageViewer(assetName: photo.name, title: photo.title) {
+                ReferencePhotoCredit(photo: photo)
+            }
+        }
+    }
 }
 
 private func journeyItemStyle(_ type: String) -> (icon: String, tint: Color) {
@@ -2233,6 +2295,10 @@ private struct DayHeroView: View {
                     .font(.system(size: 20, weight: .bold)).foregroundColor(.white).lineLimit(2)
             }
             .padding(14)
+            if let photo = TripReferencePhoto.all.first(where: { $0.name == imageName }) {
+                VStack { HStack { Spacer(); ReferencePhotoCredit(photo: photo) }; Spacer() }
+                    .padding(10)
+            }
         }
         .frame(height: height)
         .frame(maxWidth: .infinity)
@@ -2258,10 +2324,14 @@ private struct DayItemRow: View {
     var body: some View {
         let style = journeyItemStyle(item.type)
         HStack(alignment: .top, spacing: 11) {
-            Image(systemName: style.icon)
-                .font(.system(size: 14, weight: .bold)).foregroundColor(style.tint)
-                .frame(width: 32, height: 32)
-                .background(style.tint.opacity(0.16), in: RoundedRectangle(cornerRadius: 10))
+            if let photo = TripReferencePhoto.matching(item.title + " " + (item.location ?? "")) {
+                PlaceReferencePhoto(photo: photo)
+            } else {
+                Image(systemName: style.icon)
+                    .font(.system(size: 14, weight: .bold)).foregroundColor(style.tint)
+                    .frame(width: 32, height: 32)
+                    .background(style.tint.opacity(0.16), in: RoundedRectangle(cornerRadius: 10))
+            }
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     if let time = item.timeFrom {
@@ -2387,7 +2457,11 @@ private struct DayDetailSheet: View {
             .navigationTitle("รายละเอียดวัน").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("ปิด") { dismiss() } } }
             .fullScreenCover(isPresented: $showImage) {
-                ProfileImageViewer(assetName: imageName, title: day?.title)
+                ProfileImageViewer(assetName: imageName, title: day?.title) {
+                    if let photo = TripReferencePhoto.all.first(where: { $0.name == imageName }) {
+                        ReferencePhotoCredit(photo: photo)
+                    }
+                }
             }
             .itineraryEditor(target: $editorTarget, actions: actions)
             .confirmationDialog("ลบรายการนี้?", isPresented: Binding(
@@ -3797,6 +3871,9 @@ private struct TripPlacesSheet: View {
         let count = voters(item).count
         return VStack(alignment: .leading, spacing: 9) {
             HStack(alignment: .top, spacing: 8) {
+                if let photo = TripReferencePhoto.matching(item.title) {
+                    PlaceReferencePhoto(photo: photo)
+                }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.title).font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
                     if let note = item.note, !note.isEmpty {

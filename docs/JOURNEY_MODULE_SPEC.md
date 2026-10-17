@@ -58,6 +58,16 @@ Three phases of the "Trip Full Loop" are gated **off by default**, the opposite 
 - **`POST /api/trips`** — the dashboard/LIFF creation path described above (`journey_type: "trip"` always).
 - **`create_trip_full`** (`SECURITY DEFINER` SQL function) — an alternate, atomic creation path used elsewhere (e.g. LINE `/tripgroup`) that agrees with the same `trip_type`-only-when-`journey_type='trip'` convention.
 
+## iOS trip reference photos
+
+The trip workspace uses the existing bundled Kyushu illustrations for day headers and 44pt offline reference-photo thumbnails beside matching itinerary/place-vote entries. These are destination references, separate from member uploads in `trip_photos`. Tap a thumbnail to open the existing full-screen zoom viewer with photographer, source-page and license attribution. Place-vote entries retain their Google Maps action.
+
+The full-screen profile/reference image viewer supports iPhone landscape rotation and a rotate button. Closing it restores the normal portrait-only app interface. Zoom/pan reset when the viewer dimensions change.
+
+The Kyushu workspace's four visual-diary illustrations now appear in the trip gallery alongside uploaded photos, rather than in a separate overview section. Bundled illustrations open in the full-screen viewer and have no deletion action; gallery uploads retain their existing upload/delete flow.
+
+`ios/Slippy/Assets.xcassets/KyushuReferencePhotos.dataset` holds the matching aliases and attribution. `ios/scripts/import-kyushu-reference-photos.mjs` imports licensed JPEGs from Wikimedia Commons into the existing asset catalog; it can resume interrupted imports. Unmatched places keep their original text/icon presentation; no substitute image is assigned to an unrelated location. No database or storage-policy changes are required.
+
 ## Known gaps
 
 - No current route creates a `life_journeys` row with any `journey_type` other than `"trip"`; `"event"` is mentioned only in a stale code comment as a historical possibility, not a live path. Do not assume other journey types are reachable without checking again.
