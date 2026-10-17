@@ -17,6 +17,7 @@ struct MoreMenuView: View {
     }
 
     private let items: [Item] = [
+        Item(icon: "person.2", label: "จัดการเพื่อน", sub: "เพื่อนในระบบและนอกระบบ", tint: Color.brand500),
         Item(icon: "person.3.fill",       label: "โซเชียล",        sub: "เพื่อน กิจกรรม และฟีด",         tint: Color(hex: "#db2777")),
         Item(icon: "airplane",             label: "ทริป",           sub: "จัดการทริปและที่พัก",            tint: Color(hex: "#2563eb")),
         Item(icon: "checkmark.circle.fill", label: "ภารกิจ",        sub: "รายการสิ่งที่ต้องทำ",            tint: Color(hex: "#2563eb")),
@@ -66,6 +67,7 @@ struct MoreMenuView: View {
     @ViewBuilder
     private func destination(for label: String) -> some View {
         switch label {
+        case "จัดการเพื่อน":                      FriendManagementView()
         case "โซเชียล":                          SocialView()
         case "ทริป":                              TripsView()
         case "ภารกิจ":                            TasksView()

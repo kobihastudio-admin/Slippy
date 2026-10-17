@@ -130,7 +130,7 @@ struct SplitFriendPickerSheet: View {
     }
 }
 
-private struct SplitContactPicker: UIViewControllerRepresentable {
+struct SplitContactPicker: UIViewControllerRepresentable {
     let onCancel: () -> Void
     let onSelect: (String) -> Void
 

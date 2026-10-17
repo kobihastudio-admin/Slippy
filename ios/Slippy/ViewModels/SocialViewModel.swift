@@ -4,6 +4,7 @@ import Supabase
 @MainActor
 final class SocialViewModel: ObservableObject {
     @Published var friends: [UserProfile] = []
+    @Published var acceptedFriendships: [Friendship] = []
     @Published var pendingRequests: [Friendship] = []
     @Published var isLoading = false
     @Published var searchResults: [UserProfile] = []
@@ -136,6 +137,7 @@ final class SocialViewModel: ObservableObject {
                 }
             }
             pendingRequests = pendingWithProfiles
+            acceptedFriendships = accepted
 
         } catch {
             errorMessage = error.localizedDescription

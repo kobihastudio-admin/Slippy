@@ -120,6 +120,7 @@ private struct AppearancePreviewContent: View {
         Group {
             switch screen {
             case "trip": TripAppearancePreview()
+            case "friends-management-test": NavigationStack { FriendManagementView() }
             case "split-redesign-details":
                 CreateSplitView.redesignPreview(vm: splitVM, step: .details)
                     .environment(\.colorScheme, ProcessInfo.processInfo.environment["SLIPPY_SPLIT_TEST_STYLE"] == "light" ? .light : .dark)

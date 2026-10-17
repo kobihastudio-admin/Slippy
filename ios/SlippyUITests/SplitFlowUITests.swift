@@ -1,6 +1,41 @@
 import XCTest
 
 final class SplitFlowUITests: XCTestCase {
+    func testFriendManagementLocalEditAndChannels() {
+        let app = launch("friends-management-test")
+        defer { app.terminate() }
+        XCTAssertTrue(app.staticTexts["เพื่อนในระบบทดสอบ"].waitForExistence(timeout: 15))
+        app.buttons["friends.addLocal"].tap()
+        let save = app.buttons["friends.editor.save"]
+        XCTAssertFalse(save.isEnabled)
+        let name = app.textFields["friends.editor.name"]
+        name.tap()
+        let original = "Guest-\(UUID().uuidString.prefix(6))"
+        name.typeText(original)
+        XCTAssertEqual(app.textFields["friends.editor.line"].value as? String, "")
+        save.tap()
+        XCTAssertTrue(app.staticTexts[original].waitForExistence(timeout: 10))
+        app.staticTexts[original].tap()
+        name.tap()
+        name.typeText(" Edited")
+        app.textFields["friends.editor.line"].tap()
+        app.textFields["friends.editor.line"].typeText("manual-line")
+        save.tap()
+        XCTAssertTrue(app.staticTexts[original + " Edited"].waitForExistence(timeout: 10))
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.staticTexts[original + " Edited"].waitForExistence(timeout: 10))
+        app.segmentedControls["friends.filter"].buttons["ในระบบ"].tap()
+        XCTAssertFalse(app.staticTexts[original + " Edited"].exists)
+        app.staticTexts["เพื่อนในระบบทดสอบ"].tap()
+        XCTAssertTrue(app.staticTexts["ส่งแจ้งเตือน"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["อีเมล"].exists)
+        XCTAssertTrue(app.staticTexts["LINE ID"].exists)
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "Friend channels empty without inferred delivery"
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
     func testSplitRedesignItemAssignmentAndVAT() {
         for style in ["light", "dark"] {
             let app = launch("split-redesign-items", style: style)

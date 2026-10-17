@@ -9,11 +9,12 @@ struct LocalSplitFriend: Codable, Identifiable {
 /// Device-only address book. No phone numbers or account credentials are stored.
 struct LocalSplitFriendStore {
     enum ValidationError: LocalizedError {
-        case emptyName, missingAccount
+        case emptyName, missingAccount, missingFriend
         var errorDescription: String? {
             switch self {
             case .emptyName: return "กรุณาใส่ชื่อ"
             case .missingAccount: return "กรุณาเข้าสู่ระบบอีกครั้ง"
+            case .missingFriend: return "ไม่พบเพื่อนในบัญชีนี้"
             }
         }
     }
@@ -43,6 +44,18 @@ struct LocalSplitFriendStore {
         friends.append(friend)
         defaults.set(try JSONEncoder().encode(friends), forKey: try key(accountID))
         return friend
+    }
+
+    func update(id: UUID, name: String, lineID: String, accountID: String) throws {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { throw ValidationError.emptyName }
+        var friends = try load(accountID: accountID)
+        guard let index = friends.firstIndex(where: { $0.id == id }) else {
+            throw ValidationError.missingFriend
+        }
+        friends[index].name = name
+        friends[index].lineID = lineID.trimmingCharacters(in: .whitespacesAndNewlines)
+        defaults.set(try JSONEncoder().encode(friends), forKey: try key(accountID))
     }
 
     func remove(id: UUID, accountID: String) throws {
