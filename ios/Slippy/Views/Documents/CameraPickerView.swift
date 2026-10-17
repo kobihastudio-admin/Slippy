@@ -142,30 +142,30 @@ struct CameraPickerView: View {
 
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 16) {
                     methodTile(icon: "camera.fill", label: "กล้องถ่ายรูป", sub: "ถ่ายเอกสารทันที",
-                               bg: Color(hex: "#ede9fe"), fg: Color(hex: "#7c3aed")) {
+                               bg: Color.brand50, fg: Color(hex: "#7c3aed")) {
                         hapticLight()
                         if UIImagePickerController.isSourceTypeAvailable(.camera) { showPlainCamera = true }
                         else { showSimulatorHint = true }
                     }
                     methodTile(icon: "viewfinder", label: "สแกนเอกสาร", sub: "สแกนด้วยเครื่อง",
-                               bg: Color(hex: "#dbeafe"), fg: Color(hex: "#2563eb")) {
+                               bg: Color.infoSurface, fg: Color(hex: "#2563eb")) {
                         hapticLight()
                         if DocumentScannerView.isSupported { scannerSession = UUID(); showScanner = true }
                         else { showSimulatorHint = true }
                     }
                     methodTile(icon: "photo.fill", label: "เลือกจากแกลเลอรี", sub: "รูปภาพในเครื่อง",
-                               bg: Color(hex: "#dcfce7"), fg: Color(hex: "#16a34a")) {
+                               bg: Color.successSurface, fg: Color(hex: "#16a34a")) {
                         hapticLight()
                         showPhotoPicker = true
                     }
                     methodTile(icon: "folder.fill", label: "ไฟล์จากอุปกรณ์", sub: "เลือกไฟล์ที่บันทึกไว้",
-                               bg: Color(hex: "#ffedd5"), fg: Color(hex: "#ea580c")) {
+                               bg: Color.warningSurface, fg: Color(hex: "#ea580c")) {
                         hapticLight()
                         showFileImport = true
                     }
                     methodTile(icon: "tray.full.fill", label: "คลังพัก",
                                sub: gallery.count > 0 ? "\(gallery.count) รายการรอส่ง" : "พักไว้ส่งทีหลัง",
-                               bg: Color(hex: "#e0e7ff"), fg: Color(hex: "#4f46e5")) {
+                               bg: Color.brand50, fg: Color.brand600) {
                         hapticLight()
                         showGallery = true
                     }

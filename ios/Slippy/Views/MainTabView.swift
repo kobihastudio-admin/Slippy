@@ -70,11 +70,11 @@ struct MainTabView: View {
                         ZStack {
                             Circle()
                                 .fill(LinearGradient(
-                                    colors: [Color(hex: "#7c72f5"), Color(hex: "#6366f1")],
+                                    colors: [Color(hex: "#7c72f5"), Color.brand500],
                                     startPoint: .topLeading, endPoint: .bottomTrailing
                                 ))
                                 .frame(width: 56, height: 56)
-                                .shadow(color: Color(hex: "#6366f1").opacity(0.45), radius: 12, x: 0, y: 6)
+                                .shadow(color: Color.brand500.opacity(0.45), radius: 12, x: 0, y: 6)
                             Image(systemName: "camera.viewfinder")
                                 .font(.system(size: 24, weight: .semibold))
                                 .foregroundColor(.white)

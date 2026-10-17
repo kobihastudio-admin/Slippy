@@ -136,9 +136,9 @@ struct TripsView: View {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: space.icon)
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(Color(hex: "#08783F"))
+                    .foregroundColor(Color.successText)
                     .frame(width: 42, height: 42)
-                    .background(Color(hex: "#ECFDF5"))
+                    .background(Color.successSurface)
                     .clipShape(RoundedRectangle(cornerRadius: 13))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(space.title).font(.system(size: 19, weight: .bold)).foregroundColor(.textPrimary)
@@ -158,7 +158,7 @@ struct TripsView: View {
         .padding(16)
         .background(
             LinearGradient(
-                colors: [Color(hex: "#F0FDF4"), Color.surface],
+                colors: [Color.successSurface, Color.surface],
                 startPoint: .topLeading, endPoint: .bottomTrailing
             )
         )

@@ -13,7 +13,7 @@ struct SlippyLoadingView: View {
 
     var body: some View {
         ZStack {
-            Color(hex: "#07091a").ignoresSafeArea()
+            Color.background.ignoresSafeArea()
 
             VStack(spacing: 24) {
                 ZStack {
@@ -45,7 +45,7 @@ struct SlippyLoadingView: View {
                 if let msg = message {
                     Text(msg)
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(Color(hex: "#94a3b8"))
+                        .foregroundColor(Color.textSecondary)
                         .opacity(appeared ? 1 : 0)
                 }
             }
@@ -91,11 +91,11 @@ struct SlippyLoadingOverlay: View {
                 if let msg = message {
                     Text(msg)
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.white.opacity(0.85))
+                        .foregroundColor(Color.textPrimary)
                 }
             }
             .padding(28)
-            .background(Color(hex: "#111827").opacity(0.92))
+            .background(Color.surface.opacity(0.96))
             .clipShape(RoundedRectangle(cornerRadius: 24))
             .shadow(color: .black.opacity(0.4), radius: 30)
         }
@@ -126,7 +126,7 @@ extension View {
 
 #Preview("Overlay") {
     ZStack {
-        Color(hex: "#07091a").ignoresSafeArea()
+        Color.background.ignoresSafeArea()
         Text("Content behind").foregroundColor(.white)
         SlippyLoadingOverlay(message: "กำลังอัพโหลด...")
     }

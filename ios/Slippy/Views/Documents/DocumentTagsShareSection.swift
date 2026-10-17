@@ -135,14 +135,14 @@ struct DocumentTagsShareSection: View {
                     HStack(spacing: -8) {
                         ForEach(Array(sharedUserIds.prefix(3)), id: \.self) { fid in
                             if let friend = socialVM.friends.first(where: { $0.id == fid }) {
-                                Circle().fill(Color(hex: "#ede9fe")).frame(width: 30, height: 30)
+                                Circle().fill(Color.brand50).frame(width: 30, height: 30)
                                     .overlay(Text(friend.displayName.prefix(1).uppercased())
                                         .font(.system(size: 12, weight: .bold)).foregroundColor(Color.brand500))
                                     .overlay(Circle().stroke(Color.surface, lineWidth: 2))
                             }
                         }
                         if sharedUserIds.count > 3 {
-                            Circle().fill(Color(hex: "#e5e7eb")).frame(width: 30, height: 30)
+                            Circle().fill(Color.border).frame(width: 30, height: 30)
                                 .overlay(Text("+\(sharedUserIds.count - 3)").font(.system(size: 10, weight: .bold)).foregroundColor(Color.textSecondary))
                                 .overlay(Circle().stroke(Color.surface, lineWidth: 2))
                         }
@@ -353,7 +353,7 @@ struct FriendSharePickerSheet: View {
                     else { selected.insert(friend.id) }
                 } label: {
                     HStack(spacing: 12) {
-                        Circle().fill(Color(hex: "#ede9fe")).frame(width: 40, height: 40)
+                        Circle().fill(Color.brand50).frame(width: 40, height: 40)
                             .overlay(Text(friend.displayName.prefix(1).uppercased())
                                 .font(.system(size: 15, weight: .bold)).foregroundColor(Color.brand500))
                         Text(friend.displayName)

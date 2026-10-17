@@ -36,7 +36,7 @@ struct FriendChatRoomView: View {
                     .focused($inputFocused)
                     .font(.system(size: 14))
                     .padding(.horizontal, 14).padding(.vertical, 10)
-                    .background(Color(hex: "#f3f4f6"))
+                    .background(Color.surfaceMuted)
                     .clipShape(RoundedRectangle(cornerRadius: 20))
                     .lineLimit(1...4)
 
@@ -47,14 +47,14 @@ struct FriendChatRoomView: View {
                 } label: {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 30))
-                        .foregroundColor(input.trimmingCharacters(in: .whitespaces).isEmpty ? Color(hex: "#d1d5db") : Color(hex: "#6366f1"))
+                        .foregroundColor(input.trimmingCharacters(in: .whitespaces).isEmpty ? Color.border : Color.brand500)
                 }
                 .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty || vm.isSending)
             }
             .padding(12)
-            .background(Color.white)
+            .background(Color.surface)
         }
-        .background(Color(hex: "#f4f3ff").ignoresSafeArea())
+        .background(Color.surfaceMuted.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .task { await vm.loadMessages(conversationId: conversationId) }
         .onReceive(refreshTimer) { _ in
@@ -72,9 +72,9 @@ private struct FriendChatBubble: View {
             if isMe { Spacer(minLength: 40) }
             Text(message.body ?? "")
                 .font(.system(size: 14))
-                .foregroundColor(isMe ? .white : Color(hex: "#1e1b4b"))
+                .foregroundColor(isMe ? .white : Color.textPrimary)
                 .padding(.horizontal, 14).padding(.vertical, 10)
-                .background(isMe ? Color(hex: "#6366f1") : Color.white)
+                .background(isMe ? Color.brand500 : Color.surface)
                 .clipShape(RoundedRectangle(cornerRadius: 18))
                 .shadow(color: .black.opacity(isMe ? 0 : 0.04), radius: 4, x: 0, y: 2)
             if !isMe { Spacer(minLength: 40) }

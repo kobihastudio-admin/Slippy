@@ -80,7 +80,7 @@ struct SplitView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color(hex: "#f4f3ff").ignoresSafeArea()
+                Color.surfaceMuted.ignoresSafeArea()
 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
@@ -136,14 +136,14 @@ struct SplitView: View {
             SlippyLogoMark(size: 36)
             Text("Slippy")
                 .font(.system(size: 22, weight: .black, design: .rounded))
-                .foregroundColor(Color(hex: "#1e1b4b"))
+                .foregroundColor(Color.textPrimary)
 
             Spacer()
 
             Button { hapticLight(); showNotifications = true } label: {
                 Image(systemName: "bell.fill")
                     .font(.system(size: 18))
-                    .foregroundColor(Color(hex: "#1e1b4b"))
+                    .foregroundColor(Color.textPrimary)
                     .frame(width: 40, height: 40)
             }
 
@@ -159,7 +159,7 @@ struct SplitView: View {
     @ViewBuilder
     private var profileAvatar: some View {
         ZStack {
-            Circle().fill(Color(hex: "#ede9fe")).frame(width: 40, height: 40)
+            Circle().fill(Color.brand50).frame(width: 40, height: 40)
             if let urlStr = authVM.profile?.avatarUrl, let url = URL(string: urlStr) {
                 AsyncImage(url: url) { phase in
                     switch phase {
@@ -168,13 +168,13 @@ struct SplitView: View {
                     default:
                         Text(authVM.profile?.displayName.prefix(1).uppercased() ?? "S")
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(Color(hex: "#6366f1"))
+                            .foregroundColor(Color.accent)
                     }
                 }
             } else {
                 Text(authVM.profile?.displayName.prefix(1).uppercased() ?? "S")
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(Color(hex: "#6366f1"))
+                    .foregroundColor(Color.accent)
             }
         }
     }
@@ -186,10 +186,10 @@ struct SplitView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("การหารบิล")
                     .font(.system(size: 26, weight: .black, design: .rounded))
-                    .foregroundColor(Color(hex: "#1e1b4b"))
+                    .foregroundColor(Color.textPrimary)
                 Text("จัดการบิลและแบ่งจ่ายกับเพื่อน")
                     .font(.system(size: 13))
-                    .foregroundColor(Color(hex: "#6b7280"))
+                    .foregroundColor(Color.textSecondary)
             }
             Spacer()
             Button { hapticLight(); showCreate = true } label: {
@@ -199,7 +199,7 @@ struct SplitView: View {
                 }
                 .foregroundColor(.white)
                 .padding(.horizontal, 14).padding(.vertical, 10)
-                .background(Color(hex: "#6366f1"))
+                .background(Color.brand500)
                 .clipShape(Capsule())
             }
         }
@@ -211,19 +211,19 @@ struct SplitView: View {
 
     private var summaryCard: some View {
         HStack(spacing: 0) {
-            summaryStat(icon: "doc.text.fill", iconBg: Color(hex: "#ede9fe"), iconFg: Color(hex: "#6366f1"),
-                        label: "บิลทั้งหมด", value: "\(vm.bills.count)", sub: "บิล", subColor: Color(hex: "#9ca3af"))
+            summaryStat(icon: "doc.text.fill", iconBg: Color.brand50, iconFg: Color.brand500,
+                        label: "บิลทั้งหมด", value: "\(vm.bills.count)", sub: "บิล", subColor: Color.textSecondary)
             Divider().frame(height: 44)
-            summaryStat(icon: "person.2.fill", iconBg: Color(hex: "#fce7f3"), iconFg: Color(hex: "#db2777"),
+            summaryStat(icon: "person.2.fill", iconBg: Color.errorSurface, iconFg: Color(hex: "#db2777"),
                         label: "รอชำระจากเพื่อน", value: fmtTHB(pendingFromFriends.total),
                         sub: "\(pendingFromFriends.count) บิล", subColor: Color(hex: "#db2777"))
             Divider().frame(height: 44)
-            summaryStat(icon: "checkmark.circle.fill", iconBg: Color(hex: "#dcfce7"), iconFg: Color(hex: "#16a34a"),
+            summaryStat(icon: "checkmark.circle.fill", iconBg: Color.successSurface, iconFg: Color(hex: "#16a34a"),
                         label: "จ่ายครบแล้ว", value: fmtTHB(paidInFull.total),
                         sub: "\(paidInFull.count) บิล", subColor: Color(hex: "#16a34a"))
         }
         .padding(.vertical, 16)
-        .background(Color.white)
+        .background(Color.surface)
         .clipShape(RoundedRectangle(cornerRadius: 18))
         .shadow(color: .black.opacity(0.04), radius: 10, x: 0, y: 4)
         .padding(.horizontal, 20)
@@ -238,12 +238,12 @@ struct SplitView: View {
             }
             Text(value)
                 .font(.system(size: 15, weight: .bold))
-                .foregroundColor(Color(hex: "#1e1b4b"))
+                .foregroundColor(Color.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Text(label)
                 .font(.system(size: 10.5))
-                .foregroundColor(Color(hex: "#9ca3af"))
+                .foregroundColor(Color.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
             Text(sub)
@@ -270,17 +270,17 @@ struct SplitView: View {
                         Image(systemName: filterIcon(option)).font(.system(size: 10, weight: .semibold))
                         Text(option.rawValue).font(.system(size: 11.5, weight: filter == option ? .semibold : .medium))
                     }
-                    .foregroundColor(filter == option ? .white : Color(hex: "#6b7280"))
+                    .foregroundColor(filter == option ? .white : Color.textSecondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
                     .frame(maxWidth: .infinity)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 9)
                     .background(
-                        Capsule().fill(filter == option ? Color(hex: "#6366f1") : Color.white)
+                        Capsule().fill(filter == option ? Color.brand500 : Color.surface)
                     )
                     .overlay(
-                        Capsule().stroke(filter == option ? Color.clear : Color(hex: "#e5e7eb"), lineWidth: 1)
+                        Capsule().stroke(filter == option ? Color.clear : Color.border, lineWidth: 1)
                     )
                 }
             }
@@ -303,11 +303,11 @@ struct SplitView: View {
             HStack {
                 Text("บิลล่าสุด")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(Color(hex: "#1e1b4b"))
+                    .foregroundColor(Color.textPrimary)
                 Spacer()
                 NavigationLink("ดูทั้งหมด") { AllSplitBillsView(vm: vm) }
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Color(hex: "#6366f1"))
+                    .foregroundColor(Color.accent)
             }
             .padding(.horizontal, 20)
 
@@ -331,10 +331,10 @@ struct SplitView: View {
                 .foregroundColor(Color(hex: "#c4b5fd"))
             Text("ยังไม่มีรายการหารบิล")
                 .font(.system(size: 15, weight: .medium))
-                .foregroundColor(Color(hex: "#6b7280"))
+                .foregroundColor(Color.textSecondary)
             Text("กด “สร้างการหารบิล” เพื่อเริ่มต้น")
                 .font(.system(size: 12))
-                .foregroundColor(Color(hex: "#9ca3af"))
+                .foregroundColor(Color.textSecondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 48)
@@ -348,12 +348,12 @@ struct SplitView: View {
         } label: {
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 20)
-                    .fill(Color(hex: "#6366f1").opacity(0.08))
+                    .fill(Color.brand500.opacity(0.08))
 
                 HStack(spacing: 14) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 16)
-                            .fill(LinearGradient(colors: [Color(hex: "#7c72f5"), Color(hex: "#6366f1")],
+                            .fill(LinearGradient(colors: [Color(hex: "#7c72f5"), Color.brand500],
                                                   startPoint: .topLeading, endPoint: .bottomTrailing))
                             .frame(width: 56, height: 56)
                         SlippyLogoMark(size: 34)
@@ -363,10 +363,10 @@ struct SplitView: View {
                         HStack(spacing: 6) {
                             Text("หารบิลง่ายๆ ใน 3 ขั้นตอน")
                                 .font(.system(size: 13.5, weight: .bold))
-                                .foregroundColor(Color(hex: "#1e1b4b"))
+                                .foregroundColor(Color.textPrimary)
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(Color(hex: "#6366f1"))
+                                .foregroundColor(Color.accent)
                         }
 
                         HStack(spacing: 8) {
@@ -390,12 +390,12 @@ struct SplitView: View {
     private func howItWorksStep(icon: String, label: String) -> some View {
         VStack(spacing: 4) {
             ZStack {
-                Circle().fill(Color(hex: "#6366f1")).frame(width: 30, height: 30)
+                Circle().fill(Color.brand500).frame(width: 30, height: 30)
                 Image(systemName: icon).font(.system(size: 12)).foregroundColor(.white)
             }
             Text(label)
                 .font(.system(size: 9, weight: .medium))
-                .foregroundColor(Color(hex: "#4b5563"))
+                .foregroundColor(Color.textSecondary)
                 .fixedSize()
         }
     }
@@ -420,7 +420,7 @@ struct SplitBillRow: View {
         } else if t.contains("shop") || t.contains("ช้อป") || t.contains("ห้าง") {
             return ("🛍️", Color(hex: "#db2777"))
         } else {
-            return ("🧾", Color(hex: "#6366f1"))
+            return ("🧾", Color.brand500)
         }
     }
 
@@ -428,7 +428,7 @@ struct SplitBillRow: View {
         if bill.isSettled { return ("จ่ายครบแล้ว", Color(hex: "#16a34a")) }
         if stance?.label == "คุณจะได้รับ" { return ("รอชำระจากเพื่อน", Color(hex: "#db2777")) }
         if stance?.label == "คุณต้องจ่าย"  { return ("รอฉันจ่าย", Color(hex: "#ea580c")) }
-        return ("รอชำระ", Color(hex: "#9ca3af"))
+        return ("รอชำระ", Color.textSecondary)
     }
 
     var body: some View {
@@ -442,11 +442,11 @@ struct SplitBillRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(bill.title)
                         .font(.system(size: 14.5, weight: .semibold))
-                        .foregroundColor(Color(hex: "#1e1b4b"))
+                        .foregroundColor(Color.textPrimary)
                         .lineLimit(1)
                     Text("\(thaiShortDate(bill.createdAt)) · \(bill.totalCount) คน")
                         .font(.system(size: 11.5))
-                        .foregroundColor(Color(hex: "#9ca3af"))
+                        .foregroundColor(Color.textSecondary)
                     avatarStack
                 }
 
@@ -462,7 +462,7 @@ struct SplitBillRow: View {
 
                     Text(fmtTHB(bill.totalAmount))
                         .font(.system(size: 15.5, weight: .bold))
-                        .foregroundColor(Color(hex: "#1e1b4b"))
+                        .foregroundColor(Color.textPrimary)
 
                     if let stance {
                         Text("\(stance.label) \(fmtTHB(stance.amount))")
@@ -473,7 +473,7 @@ struct SplitBillRow: View {
             }
         }
         .padding(14)
-        .background(Color.white)
+        .background(Color.surface)
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.04), radius: 6, x: 0, y: 2)
     }
@@ -482,19 +482,19 @@ struct SplitBillRow: View {
         HStack(spacing: -8) {
             ForEach(Array((bill.participants ?? []).prefix(4).enumerated()), id: \.offset) { _, p in
                 ZStack {
-                    Circle().fill(Color(hex: "#ddd6fe")).frame(width: 22, height: 22)
+                    Circle().fill(Color.brand50).frame(width: 22, height: 22)
                     Text(p.name.prefix(1).uppercased())
                         .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(Color(hex: "#6366f1"))
+                        .foregroundColor(Color.accent)
                 }
                 .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
             }
             if bill.totalCount > 4 {
                 ZStack {
-                    Circle().fill(Color(hex: "#e5e7eb")).frame(width: 22, height: 22)
+                    Circle().fill(Color.border).frame(width: 22, height: 22)
                     Text("+\(bill.totalCount - 4)")
                         .font(.system(size: 8, weight: .bold))
-                        .foregroundColor(Color(hex: "#6b7280"))
+                        .foregroundColor(Color.textSecondary)
                 }
                 .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
             }
@@ -531,7 +531,7 @@ struct AllSplitBillsView: View {
             }
             .padding(16)
         }
-        .background(Color(hex: "#f4f3ff").ignoresSafeArea())
+        .background(Color.surfaceMuted.ignoresSafeArea())
         .navigationTitle("บิลทั้งหมด")
         .navigationBarTitleDisplayMode(.inline)
     }

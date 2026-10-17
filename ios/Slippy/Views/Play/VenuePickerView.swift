@@ -98,7 +98,7 @@ struct VenuePickerView: View {
 
     private func favoriteRow(_ f: SportVenueFavorite) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: "star.fill").font(.system(size: 13)).foregroundColor(Color(hex: "#f59e0b"))
+            Image(systemName: "star.fill").font(.system(size: 13)).foregroundColor(Color.warningText)
             VStack(alignment: .leading, spacing: 2) {
                 Text(f.name).font(.system(size: 14, weight: .medium)).foregroundColor(Color.textPrimary)
                 if let address = f.address {

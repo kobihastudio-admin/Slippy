@@ -33,7 +33,7 @@ private struct CosmicLandscape: View {
                     p.addLine(to: CGPoint(x: w, y: h))
                     p.addLine(to: CGPoint(x: 0, y: h))
                 }
-                .fill(Color(hex: "#2d1b69").opacity(0.6))
+                .fill(Color.brand100.opacity(0.6))
 
                 // Near hill (darker)
                 Path { p in
@@ -44,7 +44,7 @@ private struct CosmicLandscape: View {
                     p.addLine(to: CGPoint(x: w, y: h))
                     p.addLine(to: CGPoint(x: 0, y: h))
                 }
-                .fill(Color(hex: "#1a0b3b").opacity(0.9))
+                .fill(Color.brand50.opacity(0.9))
             }
         }
         .frame(height: 200)
@@ -88,13 +88,13 @@ private struct SplashView: View {
         VStack(spacing: 6) {
             Image(systemName: sys)
                 .font(.system(size: 18))
-                .foregroundColor(Color(hex: "#a78bfa"))
+                .foregroundColor(Color.accent)
                 .frame(width: 44, height: 44)
-                .background(Color.white.opacity(0.08))
+                .background(Color.surfaceMuted)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
             Text(label)
                 .font(.system(size: 10, weight: .medium))
-                .foregroundColor(Color(hex: "#94a3b8"))
+                .foregroundColor(Color.textSecondary)
         }
     }
 
@@ -102,22 +102,19 @@ private struct SplashView: View {
         GeometryReader { geo in
             ZStack(alignment: .bottom) {
                 // ── Deep space background ──────────────────────────────
-                LinearGradient(
-                    colors: [Color(hex: "#0d0720"), Color(hex: "#1a0b3b"), Color(hex: "#0f0527")],
-                    startPoint: .top, endPoint: .bottom
-                ).ignoresSafeArea()
+                Color.background.ignoresSafeArea()
 
                 // Glow blobs
                 Circle().fill(Color(hex: "#7c3aed").opacity(0.22))
                     .frame(width: 340).blur(radius: 90)
                     .offset(x: -60, y: -geo.size.height * 0.22)
-                Circle().fill(Color(hex: "#4f46e5").opacity(0.15))
+                Circle().fill(Color.brand600.opacity(0.15))
                     .frame(width: 260).blur(radius: 80)
                     .offset(x: 100, y: geo.size.height * 0.1)
 
                 // Stars
                 ForEach(stars, id: \.id) { s in
-                    Circle().fill(Color.white.opacity(s.opacity))
+                    Circle().fill(Color.textTertiary.opacity(s.opacity))
                         .frame(width: s.size, height: s.size)
                         .offset(x: s.x * geo.size.width * 0.5,
                                 y: s.y * geo.size.height * 0.5)
@@ -155,10 +152,7 @@ private struct SplashView: View {
                     // Title + tagline
                     Text("Slippy")
                         .font(.system(size: 38, weight: .black, design: .rounded))
-                        .foregroundStyle(
-                            LinearGradient(colors: [.white, Color(hex: "#c4b5fd")],
-                                           startPoint: .topLeading, endPoint: .bottomTrailing)
-                        )
+                        .foregroundStyle(Color.textPrimary)
                         .opacity(appeared ? 1 : 0)
                         .offset(y: appeared ? 0 : 12)
 
@@ -166,7 +160,7 @@ private struct SplashView: View {
 
                     Text("Your AI Life Assistant")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(Color(hex: "#a78bfa"))
+                        .foregroundColor(Color.accent)
                         .opacity(appeared ? 1 : 0)
                         .offset(y: appeared ? 0 : 8)
 
@@ -189,16 +183,16 @@ private struct SplashView: View {
                     VStack(spacing: 12) {
                         Text("กำลังเตรียมทุกอย่างให้พร้อม...")
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(Color(hex: "#94a3b8"))
+                            .foregroundColor(Color.textSecondary)
 
                         GeometryReader { bar in
                             ZStack(alignment: .leading) {
                                 RoundedRectangle(cornerRadius: 4)
-                                    .fill(Color.white.opacity(0.12))
+                                    .fill(Color.border)
                                     .frame(height: 6)
                                 RoundedRectangle(cornerRadius: 4)
                                     .fill(LinearGradient(
-                                        colors: [Color(hex: "#a78bfa"), Color(hex: "#6366f1")],
+                                        colors: [Color(hex: "#a78bfa"), Color.brand500],
                                         startPoint: .leading, endPoint: .trailing
                                     ))
                                     .frame(width: bar.size.width * progress, height: 6)
@@ -209,7 +203,7 @@ private struct SplashView: View {
 
                         Text("\(progressPct)%")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(Color(hex: "#7c72f5"))
+                            .foregroundColor(Color.accent)
                     }
                     .padding(.horizontal, 40)
                     .opacity(appeared ? 1 : 0)

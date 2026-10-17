@@ -124,14 +124,14 @@ struct PlayDashboardView: View {
             }
 
             HStack(spacing: 0) {
-                liveMetric(value: formatElapsed(live.elapsedSeconds), label: "เวลา",   color: .white)
+                liveMetric(value: formatElapsed(live.elapsedSeconds), label: "เวลา",   color: .textPrimary)
                 liveMetric(value: "\(live.totalShots)", label: "ลูกตี",  color: .green)
-                liveMetric(value: "\(live.smashCount)", label: "Smash",  color: .yellow)
+                liveMetric(value: "\(live.smashCount)", label: "Smash",  color: .warningText)
                 liveMetric(value: "\(live.heartRate)",  label: "HR",     color: .red)
             }
         }
         .padding(16)
-        .background(Color(hex: "#0f172a"))
+        .background(Color.surface)
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
@@ -219,12 +219,12 @@ struct PlayDashboardView: View {
         } label: {
             HStack(spacing: 14) {
                 Circle()
-                    .fill(Color(hex: "#dcfce7"))
+                    .fill(Color.successSurface)
                     .frame(width: 44, height: 44)
                     .overlay(
                         Image(systemName: "sportscourt.fill")
                             .font(.system(size: 18))
-                            .foregroundColor(Color(hex: "#16a34a"))
+                            .foregroundColor(Color.successText)
                     )
 
                 VStack(alignment: .leading, spacing: 3) {

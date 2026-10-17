@@ -54,7 +54,7 @@ struct JourneyPrototypeView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             tabBar
         }
-        .background(Color(hex: "#F7F8F5"))
+        .background(Color.background)
         .navigationTitle("Slippy Journey")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -83,7 +83,7 @@ struct JourneyPrototypeView: View {
         .foregroundColor(forest)
         .padding(.horizontal, 14)
         .frame(height: 30)
-        .background(Color(hex: "#D1FAE5"))
+        .background(Color.successSurface)
     }
 
     private var tabBar: some View {
@@ -233,9 +233,9 @@ private struct JourneyPlanView: View {
                                 Text(day.1).font(.system(size: 13, weight: .bold))
                                 Text(day.2).font(.system(size: 9))
                             }
-                            .foregroundColor(day.0 == 2 ? Color(hex: "#08783F") : .textSecondary)
+                            .foregroundColor(day.0 == 2 ? Color.successText : .textSecondary)
                             .padding(11).frame(width: 78, alignment: .leading)
-                            .background(day.0 == 2 ? Color(hex: "#ECFDF5") : Color.surface)
+                            .background(day.0 == 2 ? Color.successSurface : Color.surface)
                             .clipShape(RoundedRectangle(cornerRadius: 15))
                             .overlay(RoundedRectangle(cornerRadius: 15).stroke(day.0 == 2 ? Color(hex: "#6EE7B7") : Color.border))
                         }
@@ -317,7 +317,7 @@ private struct JourneyMapCard: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                Color(hex: "#DFECE1")
+                Color.successSurface
                 Capsule().fill(.white.opacity(0.8)).frame(width: geo.size.width * 1.2, height: 26).rotationEffect(.degrees(19)).offset(x: -30, y: -25)
                 Capsule().fill(.white.opacity(0.75)).frame(width: 25, height: geo.size.height * 1.2).rotationEffect(.degrees(-28)).offset(x: 40)
                 Path { path in
@@ -354,7 +354,7 @@ private struct JourneyBudgetView: View {
                 }
                 .padding(20).background(LinearGradient(colors: [Color(hex: "#064E3B"), Color(hex: "#08783F")], startPoint: .leading, endPoint: .trailing)).clipShape(RoundedRectangle(cornerRadius: 22))
                 VStack(spacing: 16) {
-                    HStack { Text("Categories").font(.system(size: 17, weight: .bold)); Spacer(); Text("Details").font(.system(size: 11, weight: .bold)).foregroundColor(Color(hex: "#08783F")) }
+                    HStack { Text("Categories").font(.system(size: 17, weight: .bold)); Spacer(); Text("Details").font(.system(size: 11, weight: .bold)).foregroundColor(Color.successText) }
                     ForEach(categories, id: \.0) { item in
                         VStack(spacing: 7) {
                             HStack { Text(item.0); Spacer(); Text(item.2).fontWeight(.bold) }.font(.system(size: 11))
@@ -367,7 +367,7 @@ private struct JourneyBudgetView: View {
                     HStack {
                         VStack(alignment: .leading) { Text("Recent expenses").font(.system(size: 17, weight: .bold)); Text("Original currency + stored rate").font(.system(size: 9)).foregroundColor(.textSecondary) }
                         Spacer()
-                        Button("＋ Add", action: onAddExpense).font(.system(size: 11, weight: .bold)).foregroundColor(Color(hex: "#08783F"))
+                        Button("＋ Add", action: onAddExpense).font(.system(size: 11, weight: .bold)).foregroundColor(Color.successText)
                     }.padding(16)
                     ForEach([("🏨", "Hotel Gracery", "฿18,400"), ("🚆", "Shinkansen", "฿7,920"), ("🍜", "Lunch in Gion", "฿1,340")], id: \.1) { row in
                         Divider().padding(.leading, 16)
@@ -393,8 +393,8 @@ private struct JourneyMoreView: View {
                     ForEach(items, id: \.1) { item in
                         Button { selection = item.1 } label: {
                             VStack(alignment: .leading, spacing: 8) {
-                                Image(systemName: item.0).font(.system(size: 20, weight: .semibold)).foregroundColor(Color(hex: "#08783F"))
-                                    .frame(width: 42, height: 42).background(Color(hex: "#ECFDF5")).clipShape(RoundedRectangle(cornerRadius: 13))
+                                Image(systemName: item.0).font(.system(size: 20, weight: .semibold)).foregroundColor(Color.successText)
+                                    .frame(width: 42, height: 42).background(Color.successSurface).clipShape(RoundedRectangle(cornerRadius: 13))
                                 Text(item.1).font(.system(size: 12, weight: .bold)).foregroundColor(.textPrimary)
                                 Text(item.2).font(.system(size: 9)).foregroundColor(.textSecondary)
                             }
@@ -480,7 +480,7 @@ private struct JourneyPrototypeSheet: View {
             prototypeTextField("Search places or activities", text: .constant(""))
             ScrollView(.horizontal, showsIndicators: false) { HStack { ForEach(["Attraction", "Food", "Culture", "Nature", "Shopping"], id: \.self) { Text($0).font(.system(size: 9, weight: .semibold)).padding(.horizontal, 11).padding(.vertical, 8).background(Color.surface).clipShape(Capsule()).overlay(Capsule().stroke(Color.border)) } } }
             ForEach([("Kinkaku-ji Temple", "Kyoto · 4.7 ★"), ("Nishiki Market", "Kyoto · 4.5 ★"), ("Arashiyama Bamboo Grove", "Kyoto · 4.6 ★")], id: \.0) { place in
-                HStack { RoundedRectangle(cornerRadius: 10).fill(LinearGradient(colors: [.green.opacity(0.25), .green], startPoint: .topLeading, endPoint: .bottomTrailing)).frame(width: 52, height: 52); VStack(alignment: .leading) { Text(place.0).font(.system(size: 12, weight: .bold)); Text(place.1).font(.system(size: 9)).foregroundColor(.textSecondary) }; Spacer(); Image(systemName: "plus.circle").foregroundColor(Color(hex: "#08783F")) }.padding(10).background(Color.surface).clipShape(RoundedRectangle(cornerRadius: 14)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.border))
+                HStack { RoundedRectangle(cornerRadius: 10).fill(LinearGradient(colors: [.green.opacity(0.25), .green], startPoint: .topLeading, endPoint: .bottomTrailing)).frame(width: 52, height: 52); VStack(alignment: .leading) { Text(place.0).font(.system(size: 12, weight: .bold)); Text(place.1).font(.system(size: 9)).foregroundColor(.textSecondary) }; Spacer(); Image(systemName: "plus.circle").foregroundColor(Color.successText) }.padding(10).background(Color.surface).clipShape(RoundedRectangle(cornerRadius: 14)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.border))
             }
             HStack { prototypeRow("Day", value: "Day 2"); prototypeRow("Time", value: "15:00") }
         }
@@ -488,12 +488,12 @@ private struct JourneyPrototypeSheet: View {
 
     private var expenseFields: some View {
         Group {
-            ScrollView(.horizontal, showsIndicators: false) { HStack { ForEach(["Hotel", "Transport", "Food", "Activity"], id: \.self) { Text($0).font(.system(size: 9, weight: .semibold)).foregroundColor($0 == "Food" ? Color(hex: "#08783F") : .textSecondary).padding(.horizontal, 12).padding(.vertical, 8).background($0 == "Food" ? Color(hex: "#ECFDF5") : Color.surface).clipShape(Capsule()).overlay(Capsule().stroke(Color.border)) } } }
+            ScrollView(.horizontal, showsIndicators: false) { HStack { ForEach(["Hotel", "Transport", "Food", "Activity"], id: \.self) { Text($0).font(.system(size: 9, weight: .semibold)).foregroundColor($0 == "Food" ? Color(hex: "#08783F") : .textSecondary).padding(.horizontal, 12).padding(.vertical, 8).background($0 == "Food" ? Color.successSurface : Color.surface).clipShape(Capsule()).overlay(Capsule().stroke(Color.border)) } } }
             prototypeTextField("Amount (THB)", text: $amount)
             prototypeRow("Description", value: "Lunch at Asakusa")
             prototypeRow("Paid by", value: "Chain")
             prototypeRow("Split method", value: "Equal · 4 people")
-            VStack(spacing: 6) { Image(systemName: "camera.fill").font(.title3); Text("Attach receipt").font(.system(size: 10, weight: .semibold)) }.foregroundColor(Color(hex: "#08783F")).frame(maxWidth: .infinity).frame(height: 82).background(Color.surface).clipShape(RoundedRectangle(cornerRadius: 15)).overlay(RoundedRectangle(cornerRadius: 15).stroke(Color(hex: "#6EE7B7"), style: StrokeStyle(lineWidth: 1, dash: [5])))
+            VStack(spacing: 6) { Image(systemName: "camera.fill").font(.title3); Text("Attach receipt").font(.system(size: 10, weight: .semibold)) }.foregroundColor(Color.successText).frame(maxWidth: .infinity).frame(height: 82).background(Color.surface).clipShape(RoundedRectangle(cornerRadius: 15)).overlay(RoundedRectangle(cornerRadius: 15).stroke(Color(hex: "#6EE7B7"), style: StrokeStyle(lineWidth: 1, dash: [5])))
         }
     }
 
@@ -594,8 +594,8 @@ struct JourneyWorkspaceView: View {
             // every tab here sat underneath the bar.
             Color.clear.frame(height: FloatingTabBar.clearance)
         }
-        .background(Color(hex: "#080C1A").ignoresSafeArea())
-        .preferredColorScheme(.dark)
+        .background(Color.background.ignoresSafeArea())
+
         .navigationTitle("").navigationBarTitleDisplayMode(.inline)
         // The system navigation bar is hidden to give the page the whole screen;
         // the header carries its own back button, which steps back to the tab the
@@ -711,7 +711,7 @@ struct JourneyWorkspaceView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         Label("การเตือนสำคัญ", systemImage: "bell.badge.fill")
-                            .font(.system(size: 16, weight: .bold)).foregroundColor(.white)
+                            .font(.system(size: 16, weight: .bold)).foregroundColor(Color.textPrimary)
                         Spacer()
                         Toggle("", isOn: Binding(
                             get: { remindersOn },
@@ -724,11 +724,11 @@ struct JourneyWorkspaceView: View {
                     ForEach(upcoming.prefix(4)) { item in
                         HStack(alignment: .top, spacing: 10) {
                             Text(item.fireAt.formatted(.dateTime.day().month(.abbreviated)))
-                                .font(.system(size: 11, weight: .bold)).foregroundColor(.brand300)
+                                .font(.system(size: 11, weight: .bold)).foregroundColor(Color.accent)
                                 .frame(width: 52, alignment: .leading)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(item.title).font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
-                                Text(item.body).font(.system(size: 10)).foregroundColor(Color(hex: "#9CA9C4")).lineLimit(2)
+                                Text(item.title).font(.system(size: 12, weight: .semibold)).foregroundColor(Color.textPrimary)
+                                Text(item.body).font(.system(size: 10)).foregroundColor(Color.textSecondary).lineLimit(2)
                             }
                         }
                     }
@@ -736,7 +736,7 @@ struct JourneyWorkspaceView: View {
                         Text(reminderMessage).font(.system(size: 11, weight: .medium)).foregroundColor(.orange)
                     }
                 }
-                .padding(14).background(Color(hex: "#0E1527")).clipShape(RoundedRectangle(cornerRadius: 18))
+                .padding(14).background(Color.surface).clipShape(RoundedRectangle(cornerRadius: 18))
             }
         }
     }
@@ -856,22 +856,22 @@ struct JourneyWorkspaceView: View {
         HStack(spacing: 12) {
             Button { stepBack() } label: {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 15, weight: .semibold)).foregroundColor(.white)
+                    .font(.system(size: 15, weight: .semibold)).foregroundColor(Color.textPrimary)
                     .frame(width: 34, height: 34)
-                    .background(Color(hex: "#1B2540"), in: Circle())
+                    .background(Color.surface, in: Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("ย้อนกลับ")
             Image(systemName: "sparkles")
                 .font(.system(size: 14, weight: .bold))
-                .foregroundColor(Color.brand300)
+                .foregroundColor(Color.accent)
                 .frame(width: 34, height: 34)
-                .background(Color.brand600.opacity(0.55), in: Circle())
+                .background(Color.brand50, in: Circle())
                 .onTapGesture { showCover = true }
             VStack(alignment: .leading, spacing: 3) {
-                Text(trip.title).font(.system(size: 20, weight: .bold)).foregroundColor(.white).lineLimit(1)
+                Text(trip.title).font(.system(size: 20, weight: .bold)).foregroundColor(Color.textPrimary).lineLimit(1)
                 Text([trip.destination, "\(vm.itineraryDays.count) วัน"].compactMap { $0 }.joined(separator: " · "))
-                    .font(.system(size: 11)).foregroundColor(Color(hex: "#94A3B8"))
+                    .font(.system(size: 11)).foregroundColor(Color.textSecondary)
             }
             .contentShape(Rectangle())
             .onTapGesture { showCover = true }   // view the full background, or change it
@@ -884,13 +884,13 @@ struct JourneyWorkspaceView: View {
             }
             Button { showTripProfileManager = true } label: {
                 Image(systemName: "person.crop.circle.badge.pencil")
-                    .font(.system(size: 18, weight: .medium)).foregroundColor(.brand300)
+                    .font(.system(size: 18, weight: .medium)).foregroundColor(Color.accent)
                     .padding(.leading, 5)
             }
             .buttonStyle(.plain)
         }
         .padding(.horizontal, 14).padding(.vertical, 8)
-        .background(Color(hex: "#0E1527").ignoresSafeArea(edges: .top))
+        .background(Color.surface.ignoresSafeArea(edges: .top))
     }
 
     private var journeyTabBar: some View {
@@ -904,16 +904,16 @@ struct JourneyWorkspaceView: View {
             }
             .padding(.horizontal, 16).padding(.vertical, 8)
         }
-        .background(Color(hex: "#0B1120"))
+        .background(Color.background)
     }
 
     private func journeyTab(_ title: String, icon: String, index: Int) -> some View {
         Button { withAnimation(.easeInOut(duration: 0.2)) { tab = index } } label: {
             Label(title, systemImage: icon)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(tab == index ? .white : Color(hex: "#9CA9C4"))
+                .foregroundColor(tab == index ? .white : Color.textSecondary)
                 .padding(.horizontal, 13).padding(.vertical, 9)
-                .background(tab == index ? Color.brand500 : Color(hex: "#151D32"), in: Capsule())
+                .background(tab == index ? Color.brand500 : Color.surfaceMuted, in: Capsule())
         }
         .buttonStyle(.plain)
     }
@@ -937,16 +937,12 @@ struct JourneyWorkspaceView: View {
                 travelCommandCenter
                 Button { tab = 1 } label: {
                     Label(vm.itineraryDays.isEmpty ? "เริ่มวางแผนรายวัน" : "เปิดแผนการเดินทาง", systemImage: "arrow.right.circle.fill")
-                        .font(.system(size: 15, weight: .semibold)).foregroundColor(.white)
+                        .font(.system(size: 15, weight: .semibold)).foregroundColor(.textOnBrand)
                         .frame(maxWidth: .infinity).padding(14).background(LinearGradient(colors: [.brand500, .brand600], startPoint: .leading, endPoint: .trailing))
                         .clipShape(RoundedRectangle(cornerRadius: 14))
                 }
             }.padding(16)
         }
-        // This page is drawn on fixed dark cards. Resolve adaptive colours (and
-        // default text) as dark here so a light system appearance cannot turn
-        // section titles black on the dark background.
-        .environment(\.colorScheme, .dark)
     }
 
     private var journeyHero: some View {
@@ -978,10 +974,10 @@ struct JourneyWorkspaceView: View {
                     ForEach(Array(people.prefix(3).enumerated()), id: \.offset) { index, member in
                         JourneyAvatar(url: member.profileSharedWithTrip ? member.avatarUrl : nil, initials: String(member.displayName.prefix(1)), tint: [Color.statusProcessing, .statusApproved, .statusPushed][index], name: member.displayName)
                     }
-                    Text("  \(people.count) ผู้ร่วมเดินทาง").font(.system(size: 11, weight: .semibold)).foregroundColor(.brand100)
+                    Text("  \(people.count) ผู้ร่วมเดินทาง").font(.system(size: 11, weight: .semibold)).foregroundColor(.white.opacity(0.85))
                 }
             }
-            .font(.system(size: 13)).foregroundColor(.brand100)
+            .font(.system(size: 13)).foregroundColor(.white.opacity(0.85))
             .padding(19).frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(height: 250)
@@ -1030,11 +1026,11 @@ struct JourneyWorkspaceView: View {
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Label("Kyushu visual diary", systemImage: "photo.stack.fill")
-                    .font(.system(size: 16, weight: .bold)).foregroundColor(.white)
+                    .font(.system(size: 16, weight: .bold)).foregroundColor(Color.textPrimary)
                 Spacer()
                 Button { showGallery = true } label: {
                     Label("แกลเลอรี · เพิ่มรูป", systemImage: "plus.circle.fill")
-                        .font(.system(size: 11, weight: .semibold)).foregroundColor(.brand300)
+                        .font(.system(size: 11, weight: .semibold)).foregroundColor(Color.accent)
                 }
                 .buttonStyle(.plain)
             }
@@ -1049,7 +1045,7 @@ struct JourneyWorkspaceView: View {
                 }
             }
         }
-        .padding(15).background(Color(hex: "#0E1527")).clipShape(RoundedRectangle(cornerRadius: 18))
+        .padding(15).background(Color.surface).clipShape(RoundedRectangle(cornerRadius: 18))
     }
 
     private func sharedAvatarURL(_ crew: KyushuCrew) -> URL? {
@@ -1061,9 +1057,9 @@ struct JourneyWorkspaceView: View {
         return VStack(alignment: .leading, spacing: 9) {
             HStack {
                 Label("Kyushu travel crew", systemImage: "person.3.sequence.fill")
-                    .font(.system(size: 16, weight: .bold)).foregroundColor(.white)
+                    .font(.system(size: 16, weight: .bold)).foregroundColor(Color.textPrimary)
                 Spacer()
-                Text("Nov 2026").font(.system(size: 11, weight: .semibold)).foregroundColor(.brand300)
+                Text("Nov 2026").font(.system(size: 11, weight: .semibold)).foregroundColor(Color.accent)
             }
             Text("แตะรูปเพื่อดู Profile ดูรูปใหญ่ เปลี่ยนรูป และแก้ไขข้อมูล")
                 .font(.system(size: 11)).foregroundColor(.textSecondary)
@@ -1075,9 +1071,9 @@ struct JourneyWorkspaceView: View {
                 }
             }
             if !sharedProfiles.isEmpty {
-                Divider().overlay(Color(hex: "#27324D"))
+                Divider().overlay(Color.surfaceMuted)
                 Text("Profile ที่สมาชิกเลือกแชร์")
-                    .font(.system(size: 10, weight: .semibold)).foregroundColor(.brand300)
+                    .font(.system(size: 10, weight: .semibold)).foregroundColor(Color.accent)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 9) {
                         ForEach(sharedProfiles) { member in
@@ -1087,16 +1083,16 @@ struct JourneyWorkspaceView: View {
                 }
             }
         }
-        .padding(14).background(Color(hex: "#0E1527")).clipShape(RoundedRectangle(cornerRadius: 18))
+        .padding(14).background(Color.surface).clipShape(RoundedRectangle(cornerRadius: 18))
     }
 
     private var travelIdentityTags: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack {
                 Label("Travel identity tags", systemImage: "tag.fill")
-                    .font(.system(size: 16, weight: .bold)).foregroundColor(.white)
+                    .font(.system(size: 16, weight: .bold)).foregroundColor(Color.textPrimary)
                 Spacer()
-                Text("พร้อมติดกระเป๋า").font(.system(size: 11, weight: .semibold)).foregroundColor(.brand300)
+                Text("พร้อมติดกระเป๋า").font(.system(size: 11, weight: .semibold)).foregroundColor(Color.accent)
             }
             Text("บัตรสัมภาระเฉพาะตัวของทีม · แตะเพื่อดูรูปใหญ่และแก้ไขชื่อ สัตว์ประจำตัว หรือรูป")
                 .font(.system(size: 11)).foregroundColor(.textSecondary)
@@ -1111,7 +1107,7 @@ struct JourneyWorkspaceView: View {
                 }
             }
         }
-        .padding(14).background(Color(hex: "#0E1527")).clipShape(RoundedRectangle(cornerRadius: 18))
+        .padding(14).background(Color.surface).clipShape(RoundedRectangle(cornerRadius: 18))
     }
 
     private var nextKyushuMoment: some View {
@@ -1133,22 +1129,22 @@ struct JourneyWorkspaceView: View {
 
             VStack(alignment: .leading, spacing: 5) {
                 Text("NEXT KYUSHU MOMENT")
-                    .font(.system(size: 10, weight: .bold)).tracking(0.9).foregroundColor(.brand300)
-                Text(title).font(.system(size: 15, weight: .bold)).foregroundColor(.white).lineLimit(1)
-                Text(detail).font(.system(size: 11)).foregroundColor(Color(hex: "#B8C2D9")).lineLimit(2)
+                    .font(.system(size: 10, weight: .bold)).tracking(0.9).foregroundColor(Color.accent)
+                Text(title).font(.system(size: 15, weight: .bold)).foregroundColor(Color.textPrimary).lineLimit(1)
+                Text(detail).font(.system(size: 11)).foregroundColor(Color.textSecondary).lineLimit(2)
             }
             .contentShape(Rectangle())
             .onTapGesture { momentRequest = MomentRequest(dayId: day?.id, imageName: dayImageName(day)) }
             Spacer(minLength: 0)
             Button { tab = 1 } label: {
                 Image(systemName: "arrow.right")
-                    .font(.system(size: 12, weight: .bold)).foregroundColor(.white)
+                    .font(.system(size: 12, weight: .bold)).foregroundColor(.textOnBrand)
                     .frame(width: 31, height: 31).background(Color.brand500, in: Circle())
             }
             .buttonStyle(.plain)
         }
         .padding(10)
-        .background(Color(hex: "#151D32"), in: RoundedRectangle(cornerRadius: 19))
+        .background(Color.surfaceMuted, in: RoundedRectangle(cornerRadius: 19))
         .overlay(RoundedRectangle(cornerRadius: 19).stroke(Color.brand500.opacity(0.36), lineWidth: 1))
     }
 
@@ -1156,11 +1152,11 @@ struct JourneyWorkspaceView: View {
         VStack(alignment: .leading, spacing: 11) {
             HStack {
                 Label("จัดการทริป", systemImage: "slider.horizontal.3")
-                    .font(.system(size: 16, weight: .bold)).foregroundColor(.white)
+                    .font(.system(size: 16, weight: .bold)).foregroundColor(Color.textPrimary)
                 Spacer()
                 Text("ทุกอย่างในที่เดียว")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.brand300)
+                    .foregroundColor(Color.accent)
             }
             Text("เปิดส่วนที่ต้องจัดการได้ทันที โดยยังคงบรรยากาศทริป Kyushu ไว้ในหน้าเดียว")
                 .font(.system(size: 11)).foregroundColor(.textSecondary)
@@ -1208,7 +1204,7 @@ struct JourneyWorkspaceView: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(14).background(Color(hex: "#0E1527")).clipShape(RoundedRectangle(cornerRadius: 18))
+        .padding(14).background(Color.surface).clipShape(RoundedRectangle(cornerRadius: 18))
     }
 
     /// One operational home for the things travellers otherwise lose between
@@ -1218,7 +1214,7 @@ struct JourneyWorkspaceView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Label("Travel Command Center", systemImage: "suitcase.rolling.fill")
-                    .font(.system(size: 16, weight: .bold)).foregroundColor(.white)
+                    .font(.system(size: 16, weight: .bold)).foregroundColor(Color.textPrimary)
                 Spacer()
                 if applyingKyushuTemplate { ProgressView().controlSize(.small) }
             }
@@ -1250,19 +1246,19 @@ struct JourneyWorkspaceView: View {
                 .foregroundColor(Color(hex: "#9A3412"))
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(hex: "#FFF7ED"), in: RoundedRectangle(cornerRadius: 11))
+                .background(Color.warningSurface, in: RoundedRectangle(cornerRadius: 11))
         }
-        .padding(15).background(Color(hex: "#0E1527")).clipShape(RoundedRectangle(cornerRadius: 18))
+        .padding(15).background(Color.surface).clipShape(RoundedRectangle(cornerRadius: 18))
     }
 
     private func commandAction(_ title: String, _ subtitle: String, _ icon: String) -> some View {
         VStack(alignment: .leading, spacing: 7) {
-            Image(systemName: icon).font(.system(size: 17, weight: .semibold)).foregroundColor(.brand300)
-            Text(title).font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
+            Image(systemName: icon).font(.system(size: 17, weight: .semibold)).foregroundColor(Color.accent)
+            Text(title).font(.system(size: 12, weight: .semibold)).foregroundColor(Color.textPrimary)
             Text(subtitle).font(.system(size: 10)).foregroundColor(.textSecondary).lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading).padding(11)
-        .background(Color(hex: "#171E33"), in: RoundedRectangle(cornerRadius: 13))
+        .background(Color.surface, in: RoundedRectangle(cornerRadius: 13))
     }
 
     private struct KyushuDay {
@@ -1348,8 +1344,8 @@ struct JourneyWorkspaceView: View {
     }
 
     private func workspaceStat(_ label: String, _ value: String, _ icon: String) -> some View {
-        VStack(spacing: 6) { Image(systemName: icon).foregroundColor(.brand400); Text(value).font(.system(size: 14, weight: .bold)).foregroundColor(.white).lineLimit(1).minimumScaleFactor(0.7); Text(label).font(.system(size: 10)).foregroundColor(Color(hex: "#94A3B8")) }
-            .frame(maxWidth: .infinity).padding(.vertical, 14).background(Color(hex: "#0E1527")).clipShape(RoundedRectangle(cornerRadius: 14))
+        VStack(spacing: 6) { Image(systemName: icon).foregroundColor(Color.accent); Text(value).font(.system(size: 14, weight: .bold)).foregroundColor(Color.textPrimary).lineLimit(1).minimumScaleFactor(0.7); Text(label).font(.system(size: 10)).foregroundColor(Color.textSecondary) }
+            .frame(maxWidth: .infinity).padding(.vertical, 14).background(Color.surface).clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
     private var itinerary: some View {
@@ -1357,14 +1353,14 @@ struct JourneyWorkspaceView: View {
             VStack(spacing: 16) {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("แผนรายวัน").font(.system(size: 20, weight: .bold)).foregroundColor(.white)
+                        Text("แผนรายวัน").font(.system(size: 20, weight: .bold)).foregroundColor(Color.textPrimary)
                         Text("\(vm.itineraryDays.count) วัน · \(vm.itineraryDays.reduce(0) { $0 + ($1.items?.count ?? 0) }) รายการ")
-                            .font(.system(size: 11)).foregroundColor(Color(hex: "#9CA9C4"))
+                            .font(.system(size: 11)).foregroundColor(Color.textSecondary)
                     }
                     Spacer()
                     Button { editorTarget = .addDay } label: {
                         Label("เพิ่มวัน", systemImage: "plus")
-                            .font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
+                            .font(.system(size: 12, weight: .semibold)).foregroundColor(.textOnBrand)
                             .padding(.horizontal, 13).padding(.vertical, 8)
                             .background(Color.brand500, in: Capsule())
                     }
@@ -1394,22 +1390,22 @@ struct JourneyWorkspaceView: View {
                                 }
                                 Button { editorTarget = .addItem(day) } label: {
                                     Label("เพิ่มรายการ", systemImage: "plus.circle.fill")
-                                        .font(.system(size: 12, weight: .semibold)).foregroundColor(.brand300)
+                                        .font(.system(size: 12, weight: .semibold)).foregroundColor(Color.accent)
                                         .frame(maxWidth: .infinity).padding(.vertical, 10)
-                                        .background(Color(hex: "#151D32").opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
+                                        .background(Color.surfaceMuted.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
                                 }
                                 .buttonStyle(.plain)
                             }
                             .padding(12)
                         }
-                        .background(Color(hex: "#0E1527"))
+                        .background(Color.surface)
                         .clipShape(RoundedRectangle(cornerRadius: 20))
                         .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.brand300.opacity(0.18), lineWidth: 1))
                     }
                 }
             }.padding(16)
         }
-        .environment(\.colorScheme, .dark)
+
         .confirmationDialog("ลบรายการนี้?", isPresented: Binding(
             get: { pendingPlanDelete != nil }, set: { if !$0 { pendingPlanDelete = nil } }), titleVisibility: .visible) {
             Button("ลบ \(pendingPlanDelete?.title ?? "")", role: .destructive) {
@@ -1442,7 +1438,7 @@ struct JourneyWorkspaceView: View {
     }
 
     private func workspaceAction(_ title: String, _ subtitle: String, _ icon: String) -> some View {
-        HStack(spacing: 12) { Image(systemName: icon).foregroundColor(Color(hex: "#08783F")).frame(width: 40, height: 40).background(Color(hex: "#ECFDF5")).clipShape(RoundedRectangle(cornerRadius: 12)); VStack(alignment: .leading) { Text(title).font(.system(size: 14, weight: .semibold)); Text(subtitle).font(.system(size: 11)).foregroundColor(.textSecondary) }; Spacer(); Image(systemName: "chevron.right").foregroundColor(.textSecondary) }
+        HStack(spacing: 12) { Image(systemName: icon).foregroundColor(Color.successText).frame(width: 40, height: 40).background(Color.successSurface).clipShape(RoundedRectangle(cornerRadius: 12)); VStack(alignment: .leading) { Text(title).font(.system(size: 14, weight: .semibold)); Text(subtitle).font(.system(size: 11)).foregroundColor(.textSecondary) }; Spacer(); Image(systemName: "chevron.right").foregroundColor(.textSecondary) }
             .padding(14).background(Color.surface).clipShape(RoundedRectangle(cornerRadius: 15))
     }
 
@@ -1506,7 +1502,7 @@ private struct JourneyAvatar: View {
         }
         .frame(width: 31, height: 31)
         .clipShape(Circle())
-        .overlay(Circle().stroke(Color(hex: "#0E1527"), lineWidth: 2))
+        .overlay(Circle().stroke(Color.surface, lineWidth: 2))
         // Only a real photo can be enlarged; an initials badge has nothing more to show.
         .contentShape(Circle())
         .onTapGesture { if imageURL != nil { hapticLight(); showViewer = true } }
@@ -1531,7 +1527,7 @@ private struct KyushuMomentCard: View {
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            Color(hex: "#151D32")
+            Color.surfaceMuted
                 .overlay(photo)
                 .clipped()
             LinearGradient(colors: [.clear, Color(hex: "#071126").opacity(0.92)], startPoint: .top, endPoint: .bottom)
@@ -1593,8 +1589,8 @@ private struct KyushuCrewBadge: View {
             portrait
                 .overlay(Circle().stroke(Color.brand300.opacity(0.65), lineWidth: 1.5))
                 .frame(maxWidth: .infinity)
-            Text(crew.name).font(.system(size: 10, weight: .bold)).foregroundColor(.white).lineLimit(1)
-            Text(crew.role).font(.system(size: 8, weight: .medium)).foregroundColor(Color(hex: "#94A3B8")).lineLimit(1)
+            Text(crew.name).font(.system(size: 10, weight: .bold)).foregroundColor(Color.textPrimary).lineLimit(1)
+            Text(crew.role).font(.system(size: 8, weight: .medium)).foregroundColor(Color.textSecondary).lineLimit(1)
         }
         .frame(maxWidth: .infinity)
     }
@@ -1624,16 +1620,16 @@ private struct KyushuMascotIdentityTag: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Color(hex: "#181F3A")
+            Color.surface
                 .frame(width: 104, height: 104)
                 .overlay(picture)
                 .clipShape(RoundedRectangle(cornerRadius: 13))
-            Text(name).font(.system(size: 11, weight: .bold)).foregroundColor(.white).lineLimit(1)
-            Text(animal).font(.system(size: 9, weight: .medium)).foregroundColor(.brand300).lineLimit(1)
+            Text(name).font(.system(size: 11, weight: .bold)).foregroundColor(Color.textPrimary).lineLimit(1)
+            Text(animal).font(.system(size: 9, weight: .medium)).foregroundColor(Color.accent).lineLimit(1)
         }
         .padding(9)
         .frame(width: 122, alignment: .leading)
-        .background(Color(hex: "#151D32"), in: RoundedRectangle(cornerRadius: 16))
+        .background(Color.surfaceMuted, in: RoundedRectangle(cornerRadius: 16))
         .contentShape(RoundedRectangle(cornerRadius: 16))
     }
 
@@ -1658,12 +1654,12 @@ private struct SharedTripProfileBadge: View {
                 .scaleEffect(0.65)
                 .frame(width: 30, height: 30)
             VStack(alignment: .leading, spacing: 1) {
-                Text(member.displayName).font(.system(size: 10, weight: .bold)).foregroundColor(.white).lineLimit(1)
-                Text(member.tripRole?.nilIfBlank ?? "Traveller").font(.system(size: 8)).foregroundColor(Color(hex: "#9CA9C4")).lineLimit(1)
+                Text(member.displayName).font(.system(size: 10, weight: .bold)).foregroundColor(Color.textPrimary).lineLimit(1)
+                Text(member.tripRole?.nilIfBlank ?? "Traveller").font(.system(size: 8)).foregroundColor(Color.textSecondary).lineLimit(1)
             }
         }
         .padding(7)
-        .background(Color(hex: "#171E33"), in: RoundedRectangle(cornerRadius: 11))
+        .background(Color.surface, in: RoundedRectangle(cornerRadius: 11))
     }
 }
 
@@ -1681,13 +1677,13 @@ private struct JourneyManagementAction: View {
                 .frame(width: 31, height: 31)
                 .background(tint.opacity(0.16), in: RoundedRectangle(cornerRadius: 9))
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 12, weight: .bold)).foregroundColor(.white).lineLimit(1)
-                Text(detail).font(.system(size: 9, weight: .medium)).foregroundColor(Color(hex: "#9CA9C4")).lineLimit(1)
+                Text(title).font(.system(size: 12, weight: .bold)).foregroundColor(Color.textPrimary).lineLimit(1)
+                Text(detail).font(.system(size: 9, weight: .medium)).foregroundColor(Color.textSecondary).lineLimit(1)
             }
             Spacer(minLength: 0)
         }
         .padding(10)
-        .background(Color(hex: "#151D32"), in: RoundedRectangle(cornerRadius: 13))
+        .background(Color.surfaceMuted, in: RoundedRectangle(cornerRadius: 13))
     }
 }
 
@@ -1938,10 +1934,10 @@ private struct TripRouteMapView: View {
                 }
             }
             if loading && pins.isEmpty {
-                HStack(spacing: 8) { ProgressView().tint(.white); Text("กำลังค้นหาสถานที่…").font(.system(size: 12)).foregroundColor(.white) }
+                HStack(spacing: 8) { ProgressView().tint(.white); Text("กำลังค้นหาสถานที่…").font(.system(size: 12)).foregroundColor(Color.textPrimary) }
             } else if shown.isEmpty {
                 Text(pins.isEmpty ? "ยังไม่มีสถานที่ — เพิ่มชื่อสถานที่ในรายการของแผน แล้วจะแสดงบนแผนที่" : "วันนี้ยังไม่มีสถานที่ที่ระบุตำแหน่งได้")
-                    .font(.system(size: 12)).foregroundColor(Color(hex: "#9CA9C4"))
+                    .font(.system(size: 12)).foregroundColor(Color.textSecondary)
             } else {
                 ScrollView {
                     VStack(spacing: 6) {
@@ -1952,35 +1948,35 @@ private struct TripRouteMapView: View {
                 HStack(spacing: 8) {
                     Button { openRouteInGoogleMaps() } label: {
                         Label("เส้นทางใน Google Maps", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
-                            .font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
+                            .font(.system(size: 12, weight: .semibold)).foregroundColor(.textOnBrand)
                             .frame(maxWidth: .infinity).padding(.vertical, 10)
                             .background(Color.brand500, in: RoundedRectangle(cornerRadius: 12))
                     }
                     Button { openFirstInAppleMaps() } label: {
                         Label("Apple Maps", systemImage: "map")
-                            .font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
+                            .font(.system(size: 12, weight: .semibold)).foregroundColor(Color.textPrimary)
                             .padding(.horizontal, 14).padding(.vertical, 10)
                             .background(.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
                     }
                 }
                 if shown.count > 5 {
                     Text("Google Maps รับจุดแวะสูงสุด 3 จุดต่อลิงก์ — เส้นทางจะใช้จุดแรก จุดสุดท้าย และอีก 3 จุดระหว่างทาง")
-                        .font(.system(size: 9)).foregroundColor(Color(hex: "#9CA9C4"))
+                        .font(.system(size: 9)).foregroundColor(Color.textSecondary)
                 }
             }
         }
         .padding(12)
-        .background(Color(hex: "#0B1120").opacity(0.94), in: RoundedRectangle(cornerRadius: 20))
+        .background(Color.background.opacity(0.94), in: RoundedRectangle(cornerRadius: 20))
         .padding(.horizontal, 10).padding(.bottom, 8)
-        .environment(\.colorScheme, .dark)
+
     }
 
     private func dayChip(_ title: String, day: Int?) -> some View {
         Button { selectedDay = day } label: {
             Text(title).font(.system(size: 11, weight: .semibold))
-                .foregroundColor(selectedDay == day ? .white : Color(hex: "#9CA9C4"))
+                .foregroundColor(selectedDay == day ? .white : Color.textSecondary)
                 .padding(.horizontal, 12).padding(.vertical, 6)
-                .background(selectedDay == day ? Color.brand500 : Color(hex: "#151D32"), in: Capsule())
+                .background(selectedDay == day ? Color.brand500 : Color.surfaceMuted, in: Capsule())
         }
         .buttonStyle(.plain)
     }
@@ -1992,8 +1988,8 @@ private struct TripRouteMapView: View {
                 .frame(width: 26, height: 26).background(style.tint.opacity(0.16), in: Circle())
             VStack(alignment: .leading, spacing: 1) {
                 Text((selectedDay == nil ? "D\(pin.dayNumber) · " : "\(pin.order). ") + pin.title)
-                    .font(.system(size: 12, weight: .semibold)).foregroundColor(.white).lineLimit(1)
-                Text(pin.subtitle).font(.system(size: 9)).foregroundColor(Color(hex: "#9CA9C4")).lineLimit(1)
+                    .font(.system(size: 12, weight: .semibold)).foregroundColor(Color.textPrimary).lineLimit(1)
+                Text(pin.subtitle).font(.system(size: 9)).foregroundColor(Color.textSecondary).lineLimit(1)
             }
             .contentShape(Rectangle())
             .onTapGesture {
@@ -2006,13 +2002,13 @@ private struct TripRouteMapView: View {
             Button {
                 GoogleMapsLinks.open(GoogleMapsLinks.pinURL((pin.coordinate.latitude, pin.coordinate.longitude), label: pin.title))
             } label: {
-                Image(systemName: "location.north.circle.fill").font(.system(size: 20)).foregroundColor(.brand300)
+                Image(systemName: "location.north.circle.fill").font(.system(size: 20)).foregroundColor(Color.accent)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("เปิดใน Google Maps")
         }
         .padding(8)
-        .background(Color(hex: "#151D32"), in: RoundedRectangle(cornerRadius: 12))
+        .background(Color.surfaceMuted, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private func resolvePins() async {
@@ -2283,7 +2279,7 @@ private struct DayHeroView: View {
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            Color(hex: "#151D32")
+            Color.surfaceMuted
                 .overlay(Image(imageName).resizable().scaledToFill())
                 .clipped()
             LinearGradient(colors: [.clear, Color(hex: "#071126").opacity(0.55), Color(hex: "#071126").opacity(0.94)],
@@ -2307,6 +2303,45 @@ private struct DayHeroView: View {
 }
 
 /// One itinerary line in the plan: icon, time, title, place, notes, status and (for bookings) the amount.
+private struct ItemPhotoThumbnail: View {
+    let url: URL?
+    let assetName: String?
+    let title: String
+    var fallback: TripReferencePhoto? = nil
+    @State private var showViewer = false
+    @State private var remoteFailed = false
+
+    var body: some View {
+        Button { showViewer = true } label: {
+            Color.surfaceMuted.overlay {
+                if let url {
+                    AsyncImage(url: url) { phase in
+                        if let image = phase.image { image.resizable().scaledToFill() }
+                        else if phase.error != nil {
+                            Group {
+                                if let fallback { Image(fallback.name).resizable().scaledToFill() }
+                                else { Image(systemName: "photo").foregroundColor(Color.textSecondary) }
+                            }.onAppear { remoteFailed = true }
+                        }
+                        else { Image(systemName: "photo").foregroundColor(Color.textSecondary) }
+                    }
+                } else if let assetName { Image(assetName).resizable().scaledToFill() }
+            }
+            .frame(width: 44, height: 44).clipped().cornerRadius(8)
+        }
+        .buttonStyle(.plain)
+        .disabled(remoteFailed && fallback == nil)
+        .onChange(of: url) { _, _ in remoteFailed = false }
+        .accessibilityLabel("ดูรูป \(title)")
+        .fullScreenCover(isPresented: $showViewer) {
+            if remoteFailed, let fallback {
+                ProfileImageViewer(assetName: fallback.name, title: fallback.title) { ReferencePhotoCredit(photo: fallback) }
+            } else if let url { ProfileImageViewer(url: url, title: title) }
+            else if let assetName { ProfileImageViewer(assetName: assetName, title: title) }
+        }
+    }
+}
+
 private struct DayItemRow: View {
     let item: TripItineraryItem
     var onEdit: (() -> Void)? = nil
@@ -2314,8 +2349,8 @@ private struct DayItemRow: View {
 
     private var statusLabel: (text: String, tint: Color)? {
         switch item.status {
-        case "confirmed": return ("ยืนยันแล้ว", .green)
-        case "optional": return ("ตัวเลือก", .orange)
+        case "confirmed": return ("ยืนยันแล้ว", .successText)
+        case "optional": return ("ตัวเลือก", .warningText)
         case "cancelled": return ("ยกเลิก", .red)
         default: return nil
         }
@@ -2324,7 +2359,12 @@ private struct DayItemRow: View {
     var body: some View {
         let style = journeyItemStyle(item.type)
         HStack(alignment: .top, spacing: 11) {
-            if let photo = TripReferencePhoto.matching(item.title + " " + (item.location ?? "")) {
+            if let path = item.itemPhotoPath, let url = TripPhotoAPI.publicURL(path: path) {
+                ItemPhotoThumbnail(url: url, assetName: nil, title: item.title,
+                                   fallback: TripReferencePhoto.matching(item.title + " " + (item.location ?? "")))
+            } else if let asset = item.itemPhotoAsset {
+                ItemPhotoThumbnail(url: nil, assetName: asset, title: item.title)
+            } else if let photo = TripReferencePhoto.matching(item.title + " " + (item.location ?? "")) {
                 PlaceReferencePhoto(photo: photo)
             } else {
                 Image(systemName: style.icon)
@@ -2335,15 +2375,15 @@ private struct DayItemRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     if let time = item.timeFrom {
-                        Text(String(time.prefix(5))).font(.system(size: 11, weight: .bold)).foregroundColor(.brand300)
+                        Text(String(time.prefix(5))).font(.system(size: 11, weight: .bold)).foregroundColor(Color.accent)
                     }
-                    Text(item.title).font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
+                    Text(item.title).font(.system(size: 14, weight: .semibold)).foregroundColor(Color.textPrimary)
                 }
                 if let place = item.location, !place.isEmpty {
-                    Text(place).font(.system(size: 11)).foregroundColor(Color(hex: "#9CA9C4")).lineLimit(1)
+                    Text(place).font(.system(size: 11)).foregroundColor(Color.textSecondary).lineLimit(1)
                 }
                 if let notes = item.notes, !notes.isEmpty {
-                    Text(notes).font(.system(size: 11)).foregroundColor(Color(hex: "#C9D3E8")).lineLimit(3)
+                    Text(notes).font(.system(size: 11)).foregroundColor(Color.textSecondary).lineLimit(3)
                 }
                 HStack(spacing: 6) {
                     if let status = statusLabel {
@@ -2353,27 +2393,27 @@ private struct DayItemRow: View {
                     }
                     if let amount = item.amount, amount > 0 {
                         Text((item.currency == "JPY" ? "¥" : "") + amount.formatted(.number.precision(.fractionLength(0))))
-                            .font(.system(size: 10, weight: .semibold)).foregroundColor(Color(hex: "#9CA9C4"))
+                            .font(.system(size: 10, weight: .semibold)).foregroundColor(Color.textSecondary)
                     }
                     if let code = item.confirmationCode, !code.isEmpty {
-                        Text("#\(code)").font(.system(size: 10, weight: .medium)).foregroundColor(.brand300)
+                        Text("#\(code)").font(.system(size: 10, weight: .medium)).foregroundColor(Color.accent)
                     }
                 }
             }
             Spacer(minLength: 0)
             if onEdit != nil {
-                Image(systemName: "pencil").font(.system(size: 11, weight: .semibold)).foregroundColor(Color(hex: "#7C879F"))
+                Image(systemName: "pencil").font(.system(size: 11, weight: .semibold)).foregroundColor(Color.textSecondary)
                     .frame(width: 24, height: 30)
             }
             Button(action: onDelete) {
-                Image(systemName: "trash").font(.system(size: 12)).foregroundColor(Color(hex: "#7C879F"))
+                Image(systemName: "trash").font(.system(size: 12)).foregroundColor(Color.textSecondary)
                     .frame(width: 30, height: 30)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("ลบรายการ")
         }
         .padding(11)
-        .background(Color(hex: "#151D32"), in: RoundedRectangle(cornerRadius: 14))
+        .background(Color.surfaceMuted, in: RoundedRectangle(cornerRadius: 14))
         .contentShape(RoundedRectangle(cornerRadius: 14))
         .onTapGesture { onEdit?() }
     }
@@ -2418,16 +2458,16 @@ private struct DayDetailSheet: View {
                             .onTapGesture { showImage = true }
 
                         if let summary = day.summary, !summary.isEmpty {
-                            Text(summary).font(.system(size: 13)).foregroundColor(Color(hex: "#C9D3E8"))
+                            Text(summary).font(.system(size: 13)).foregroundColor(Color.textSecondary)
                         }
 
                         HStack {
                             Text("รายการของวัน (\((day.items ?? []).count))")
-                                .font(.system(size: 15, weight: .bold)).foregroundColor(.white)
+                                .font(.system(size: 15, weight: .bold)).foregroundColor(Color.textPrimary)
                             Spacer()
                             Button { editorTarget = .addItem(day) } label: {
                                 Label("เพิ่มรายการ", systemImage: "plus.circle.fill")
-                                    .font(.system(size: 12, weight: .semibold)).foregroundColor(.brand300)
+                                    .font(.system(size: 12, weight: .semibold)).foregroundColor(Color.accent)
                             }
                         }
                         VStack(spacing: 8) {
@@ -2435,7 +2475,7 @@ private struct DayDetailSheet: View {
                                 DayItemRow(item: item, onEdit: { editorTarget = .editItem(item, day) }) { pendingDelete = item }
                             }
                             if (day.items ?? []).isEmpty {
-                                Text("ยังไม่มีรายการในวันนี้").font(.system(size: 12)).foregroundColor(Color(hex: "#9CA9C4"))
+                                Text("ยังไม่มีรายการในวันนี้").font(.system(size: 12)).foregroundColor(Color.textSecondary)
                                     .frame(maxWidth: .infinity).padding(.vertical, 18)
                             }
                         }
@@ -2446,14 +2486,14 @@ private struct DayDetailSheet: View {
                                 .background(Color.brand500, in: RoundedRectangle(cornerRadius: 14))
                         }
                     } else {
-                        Text("ยังไม่มีแผนเดินทาง").font(.system(size: 18, weight: .bold)).foregroundColor(.white)
+                        Text("ยังไม่มีแผนเดินทาง").font(.system(size: 18, weight: .bold)).foregroundColor(Color.textPrimary)
                         Text("เพิ่มวันแรกในแท็บแผน แล้วรายละเอียดของวันจะแสดงที่นี่")
-                            .font(.system(size: 13)).foregroundColor(Color(hex: "#9CA9C4"))
+                            .font(.system(size: 13)).foregroundColor(Color.textSecondary)
                     }
                 }
                 .padding(16)
             }
-            .background(Color(hex: "#080C1A").ignoresSafeArea())
+            .background(Color.background.ignoresSafeArea())
             .navigationTitle("รายละเอียดวัน").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("ปิด") { dismiss() } } }
             .fullScreenCover(isPresented: $showImage) {
@@ -2478,7 +2518,7 @@ private struct DayDetailSheet: View {
                 Button("ตกลง") { errorText = nil }
             } message: { Text(errorText ?? "") }
         }
-        .preferredColorScheme(.dark)
+
     }
 }
 
@@ -2513,11 +2553,11 @@ private struct CrewProfileSheet: View {
                         .padding(.top, 8)
 
                     VStack(spacing: 4) {
-                        Text(crew.name).font(.system(size: 24, weight: .bold)).foregroundColor(.white)
+                        Text(crew.name).font(.system(size: 24, weight: .bold)).foregroundColor(Color.textPrimary)
                         if displayName != crew.name {
-                            Text(displayName).font(.system(size: 13)).foregroundColor(Color(hex: "#9CA9C4"))
+                            Text(displayName).font(.system(size: 13)).foregroundColor(Color.textSecondary)
                         }
-                        Text(role).font(.system(size: 12, weight: .semibold)).foregroundColor(.brand300)
+                        Text(role).font(.system(size: 12, weight: .semibold)).foregroundColor(Color.accent)
                             .padding(.horizontal, 12).padding(.vertical, 5)
                             .background(Color.brand500.opacity(0.18), in: Capsule())
                     }
@@ -2529,7 +2569,7 @@ private struct CrewProfileSheet: View {
                                     participant.profileSharedWithTrip ? "แชร์รูปและบทบาทให้ทีม" : "รูปและบทบาทแสดงเฉพาะเจ้าของ/โฮสต์")
                         }
                         .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color(hex: "#151D32"), in: RoundedRectangle(cornerRadius: 15))
+                        .background(Color.surfaceMuted, in: RoundedRectangle(cornerRadius: 15))
 
                         Button { editing = participant } label: {
                             Label("เปลี่ยนรูป / แก้ไข Profile", systemImage: "pencil.circle.fill")
@@ -2539,14 +2579,14 @@ private struct CrewProfileSheet: View {
                         }
                     } else {
                         Text("ยังไม่พบสมาชิกในทริปที่ตรงกับ \(crew.name) — เพิ่มสมาชิกที่แท็บทีมก่อน จึงจะเปลี่ยนรูปหรือแก้ไข Profile ได้")
-                            .font(.system(size: 12)).foregroundColor(Color(hex: "#9CA9C4"))
+                            .font(.system(size: 12)).foregroundColor(Color.textSecondary)
                             .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color(hex: "#151D32"), in: RoundedRectangle(cornerRadius: 15))
+                            .background(Color.surfaceMuted, in: RoundedRectangle(cornerRadius: 15))
                     }
                 }
                 .padding(16)
             }
-            .background(Color(hex: "#080C1A").ignoresSafeArea())
+            .background(Color.background.ignoresSafeArea())
             .navigationTitle("Profile").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("ปิด") { dismiss() } } }
             .fullScreenCover(isPresented: $showViewer) {
@@ -2557,12 +2597,12 @@ private struct CrewProfileSheet: View {
                 TripProfileEditorSheet(member: member, save: save)
             }
         }
-        .preferredColorScheme(.dark)
+
     }
 
     @ViewBuilder private var portrait: some View {
         if let avatarURL {
-            Color(hex: "#151D32")
+            Color.surfaceMuted
                 .frame(width: 190, height: 190)
                 .overlay(
                     AsyncImage(url: avatarURL) { phase in
@@ -2578,8 +2618,8 @@ private struct CrewProfileSheet: View {
 
     private func infoRow(_ icon: String, _ text: String) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: icon).foregroundColor(.brand300).frame(width: 22)
-            Text(text).font(.system(size: 13)).foregroundColor(.white)
+            Image(systemName: icon).foregroundColor(Color.accent).frame(width: 22)
+            Text(text).font(.system(size: 13)).foregroundColor(Color.textPrimary)
             Spacer(minLength: 0)
         }
     }
@@ -2619,7 +2659,7 @@ private struct IdentityTagSheet: View {
                 Section {
                     HStack {
                         Spacer()
-                        Color(hex: "#181F3A")
+                        Color.surface
                             .frame(width: 220, height: 220)
                             .overlay(picture)
                             .clipShape(RoundedRectangle(cornerRadius: 20))
@@ -2881,36 +2921,36 @@ private struct BudgetPlanView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Label("งบประมาณทริป", systemImage: "banknote.fill")
-                    .font(.system(size: 16, weight: .bold)).foregroundColor(.white)
+                    .font(.system(size: 16, weight: .bold)).foregroundColor(Color.textPrimary)
                 Spacer()
-                Text("\(plan["people"]?.intValue ?? 0) คน").font(.system(size: 11, weight: .semibold)).foregroundColor(.brand300)
+                Text("\(plan["people"]?.intValue ?? 0) คน").font(.system(size: 11, weight: .semibold)).foregroundColor(Color.accent)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(thb(number(plan["total_thb_min"]))) – \(thb(number(plan["total_thb_max"])))")
-                    .font(.system(size: 20, weight: .heavy)).foregroundColor(.white)
+                    .font(.system(size: 20, weight: .heavy)).foregroundColor(Color.textPrimary)
                 Text("ต่อคน \(thb(number(plan["per_person_thb_min"]))) – \(thb(number(plan["per_person_thb_max"])))")
-                    .font(.system(size: 11)).foregroundColor(Color(hex: "#9CA9C4"))
+                    .font(.system(size: 11)).foregroundColor(Color.textSecondary)
             }
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                 let status = item["status"]?.stringValue ?? "estimate"
                 let low = number(item["thb_min"]), high = number(item["thb_max"])
                 HStack {
-                    Text(item["label"]?.stringValue ?? "").font(.system(size: 12)).foregroundColor(.white)
+                    Text(item["label"]?.stringValue ?? "").font(.system(size: 12)).foregroundColor(Color.textPrimary)
                     Spacer()
                     Text(low == high ? thb(low) : "\(thb(low)) – \(thb(high))")
-                        .font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
+                        .font(.system(size: 12, weight: .semibold)).foregroundColor(Color.textPrimary)
                     Text(status == "paid" ? "จ่ายแล้ว" : status == "unpaid" ? "ยังไม่จ่าย" : "ประมาณ")
                         .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(status == "paid" ? .green : status == "unpaid" ? .orange : Color(hex: "#9CA9C4"))
+                        .foregroundColor(status == "paid" ? .green : status == "unpaid" ? .orange : Color.textSecondary)
                         .padding(.horizontal, 7).padding(.vertical, 3)
                         .background((status == "paid" ? Color.green : status == "unpaid" ? Color.orange : Color.gray).opacity(0.16), in: Capsule())
                 }
             }
             if let note = plan["note"]?.stringValue {
-                Text(note).font(.system(size: 10)).foregroundColor(Color(hex: "#9CA9C4"))
+                Text(note).font(.system(size: 10)).foregroundColor(Color.textSecondary)
             }
         }
-        .padding(14).background(Color(hex: "#0E1527")).clipShape(RoundedRectangle(cornerRadius: 18))
+        .padding(14).background(Color.surface).clipShape(RoundedRectangle(cornerRadius: 18))
     }
 }
 
@@ -3004,9 +3044,9 @@ private struct TripMoneyView: View {
 
     init(trip: Trip) { _trip = State(initialValue: trip) }
 
-    private let card = Color(hex: "#0E1527")
-    private let inner = Color(hex: "#151D32")
-    private let muted = Color(hex: "#9CA9C4")
+    private let card = Color.surface
+    private let inner = Color.surfaceMuted
+    private let muted = Color.textSecondary
 
     private var participants: [TripParticipant] { trip.participants ?? [] }
     private var expenses: [TripExpense] { trip.expenses ?? [] }
@@ -3033,7 +3073,7 @@ private struct TripMoneyView: View {
             }
             .padding(16)
         }
-        .environment(\.colorScheme, .dark)
+
         .sheet(isPresented: $showAddExpense) {
             AddExpenseSheet(journeyId: trip.id, userId: authVM.session?.user.id.uuidString ?? "", participants: participants) {
                 Task { await reload() }
@@ -3065,11 +3105,11 @@ private struct TripMoneyView: View {
         let share = participants.isEmpty ? 0 : total / Double(participants.count)
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("รวมค่าใช้จ่ายทั้งทริป").font(.system(size: 10, weight: .bold)).tracking(1).foregroundColor(.brand300)
+                Text("รวมค่าใช้จ่ายทั้งทริป").font(.system(size: 10, weight: .bold)).tracking(1).foregroundColor(Color.accent)
                 Spacer()
                 Text("\(participants.count) คน").font(.system(size: 11, weight: .semibold)).foregroundColor(muted)
             }
-            Text(fmtTHB(total)).font(.system(size: 34, weight: .heavy)).foregroundColor(.white)
+            Text(fmtTHB(total)).font(.system(size: 34, weight: .heavy)).foregroundColor(Color.textPrimary)
             ProgressView(value: min(paid, max(total, 1)), total: max(total, 1)).tint(.green)
             HStack(spacing: 8) {
                 stat("จ่ายแล้ว", fmtTHB(paid), .green)
@@ -3078,7 +3118,7 @@ private struct TripMoneyView: View {
             }
         }
         .padding(16)
-        .background(LinearGradient(colors: [Color(hex: "#18244A"), card], startPoint: .topLeading, endPoint: .bottomTrailing),
+        .background(LinearGradient(colors: [Color.surfaceMuted, card], startPoint: .topLeading, endPoint: .bottomTrailing),
                     in: RoundedRectangle(cornerRadius: 22))
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.brand300.opacity(0.3), lineWidth: 1))
     }
@@ -3108,10 +3148,10 @@ private struct TripMoneyView: View {
 
     private func sectionHeader(_ title: String, _ action: String, _ icon: String, _ run: @escaping () -> Void) -> some View {
         HStack {
-            Text(title).font(.system(size: 15, weight: .bold)).foregroundColor(.white)
+            Text(title).font(.system(size: 15, weight: .bold)).foregroundColor(Color.textPrimary)
             Spacer()
             Button { hapticLight(); run() } label: {
-                Label(action, systemImage: icon).font(.system(size: 12, weight: .semibold)).foregroundColor(.brand300)
+                Label(action, systemImage: icon).font(.system(size: 12, weight: .semibold)).foregroundColor(Color.accent)
             }
         }
     }
@@ -3157,14 +3197,14 @@ private struct TripMoneyView: View {
                     Image(systemName: style.icon).font(.system(size: 14, weight: .bold)).foregroundColor(style.tint)
                         .frame(width: 36, height: 36).background(style.tint.opacity(0.16), in: RoundedRectangle(cornerRadius: 11))
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(expense.title).font(.system(size: 14, weight: .semibold)).foregroundColor(.white).lineLimit(2)
+                        Text(expense.title).font(.system(size: 14, weight: .semibold)).foregroundColor(Color.textPrimary).lineLimit(2)
                         Text("\(byId[expense.paidById ?? ""]?.displayName ?? "—") จ่าย · \(String(expense.createdAt.prefix(10)))")
                             .font(.system(size: 11)).foregroundColor(muted)
                     }
                     Spacer(minLength: 6)
                     VStack(alignment: .trailing, spacing: 2) {
                         // baseAmount, not amount: a ¥35,600 ticket must not read as "฿35,600".
-                        Text(fmtTHB(expense.baseAmount)).font(.system(size: 14, weight: .bold)).foregroundColor(.white)
+                        Text(fmtTHB(expense.baseAmount)).font(.system(size: 14, weight: .bold)).foregroundColor(Color.textPrimary)
                         if let original = expense.originalAmount(tripCurrency: trip.baseCurrency ?? "THB") {
                             Text(original).font(.system(size: 10)).foregroundColor(muted)
                         }
@@ -3178,14 +3218,14 @@ private struct TripMoneyView: View {
 
             if expandedId == expense.id {
                 VStack(alignment: .leading, spacing: 7) {
-                    Text("แบ่งกัน \(expense.splitModeLabel)").font(.system(size: 11, weight: .semibold)).foregroundColor(.brand300)
+                    Text("แบ่งกัน \(expense.splitModeLabel)").font(.system(size: 11, weight: .semibold)).foregroundColor(Color.accent)
                     ForEach(expense.expenseSplits ?? []) { split in
                         HStack {
                             Text(byId[split.participantId]?.displayName ?? "—")
-                                .font(.system(size: 12)).foregroundColor(split.isPaid ? muted : .white)
+                                .font(.system(size: 12)).foregroundColor(split.isPaid ? muted : .textPrimary)
                                 .strikethrough(split.isPaid)
                             Spacer()
-                            Text(fmtTHB(split.amount)).font(.system(size: 12, weight: .semibold)).foregroundColor(split.isPaid ? muted : .white)
+                            Text(fmtTHB(split.amount)).font(.system(size: 12, weight: .semibold)).foregroundColor(split.isPaid ? muted : .textPrimary)
                         }
                     }
                 }
@@ -3237,14 +3277,14 @@ private struct TripMoneyView: View {
         } label: {
             HStack(spacing: 10) {
                 initials(row.fromName)
-                Image(systemName: "arrow.right").font(.system(size: 11, weight: .bold)).foregroundColor(.brand300)
+                Image(systemName: "arrow.right").font(.system(size: 11, weight: .bold)).foregroundColor(Color.accent)
                 initials(row.toName)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("\(row.fromName) → \(row.toName)").font(.system(size: 13, weight: .semibold)).foregroundColor(.white).lineLimit(1)
+                    Text("\(row.fromName) → \(row.toName)").font(.system(size: 13, weight: .semibold)).foregroundColor(Color.textPrimary).lineLimit(1)
                     Text("แตะเพื่อบันทึกการโอน").font(.system(size: 10)).foregroundColor(muted)
                 }
                 Spacer(minLength: 4)
-                Text(fmtTHB(row.amount)).font(.system(size: 15, weight: .heavy)).foregroundColor(.brand300)
+                Text(fmtTHB(row.amount)).font(.system(size: 15, weight: .heavy)).foregroundColor(Color.accent)
             }
             .padding(13).background(card, in: RoundedRectangle(cornerRadius: 16))
         }
@@ -3259,12 +3299,12 @@ private struct TripMoneyView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("\(byId[payment.fromParticipant]?.displayName ?? "—") → \(byId[payment.toParticipant]?.displayName ?? "—")")
-                            .font(.system(size: 13, weight: .medium)).foregroundColor(.white)
+                            .font(.system(size: 13, weight: .medium)).foregroundColor(Color.textPrimary)
                         Text(payment.status == "confirmed" ? "ยืนยันแล้ว" : "รอยืนยัน")
                             .font(.system(size: 11)).foregroundColor(payment.status == "confirmed" ? .green : .orange)
                     }
                     Spacer()
-                    Text(fmtTHB(payment.amount)).font(.system(size: 13, weight: .bold)).foregroundColor(.white)
+                    Text(fmtTHB(payment.amount)).font(.system(size: 13, weight: .bold)).foregroundColor(Color.textPrimary)
                     if payment.status == "pending" {
                         Button("ยืนยันรับ") {
                             Task {
@@ -3273,7 +3313,7 @@ private struct TripMoneyView: View {
                                 await reload()
                             }
                         }
-                        .font(.system(size: 11, weight: .semibold)).foregroundColor(.brand300)
+                        .font(.system(size: 11, weight: .semibold)).foregroundColor(Color.accent)
                     }
                 }
                 .padding(12).background(card, in: RoundedRectangle(cornerRadius: 14))
@@ -3300,9 +3340,9 @@ private struct TripMoneyView: View {
                 initials(person.displayName)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(person.displayName).font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
+                        Text(person.displayName).font(.system(size: 14, weight: .semibold)).foregroundColor(Color.textPrimary)
                         if person.isHost {
-                            Text("โฮสต์").font(.system(size: 9, weight: .bold)).foregroundColor(.brand300)
+                            Text("โฮสต์").font(.system(size: 9, weight: .bold)).foregroundColor(Color.accent)
                                 .padding(.horizontal, 6).padding(.vertical, 2).background(Color.brand500.opacity(0.2), in: Capsule())
                         }
                     }
@@ -3391,11 +3431,58 @@ private let itineraryStatusChoices: [(id: String, label: String)] = [
 ]
 
 private enum FormTheme {
-    static let page = Color(hex: "#080C1A")
-    static let card = Color(hex: "#0E1527")
-    static let field = Color(hex: "#151D32")
-    static let muted = Color(hex: "#9CA9C4")
+    static let page = Color.background
+    static let card = Color.surface
+    static let field = Color.inputBg
+    static let muted = Color.textSecondary
 }
+
+#if DEBUG
+struct TripItemEditorPreview: View {
+    private let day = TripItineraryDay(id: "preview-day", journeyId: "00000000-0000-0000-0000-000000000000", dayNumber: 1,
+                                      date: "2026-11-21", title: "Fukuoka", city: "Fukuoka", summary: nil, items: nil)
+    private let item = try! JSONDecoder().decode(TripItineraryItem.self, from: Data(
+        #"{"id":"preview-item","day_id":"preview-day","sort_order":0,"type":"activity","title":"Kushida Shrine","location":"Fukuoka","notes":"Hakata old town","status":"confirmed"}"#.utf8))
+    var body: some View {
+        ItemEditorSheet(day: day, item: item, actions: ItineraryActions(
+            addItem: { _, _ in }, updateItem: { _, _ in }, removeItem: { _ in },
+            addDay: { _ in }, updateDay: { _, _ in }), isPreview: true)
+    }
+}
+
+struct TripAppearancePreview: View {
+    private let day = TripItineraryDay(id: "preview-day", journeyId: nil, dayNumber: 1,
+                                      date: "2026-11-21", title: "Fukuoka old town", city: "Fukuoka", summary: nil, items: nil)
+    private let item = try! JSONDecoder().decode(TripItineraryItem.self, from: Data(
+        #"{"id":"preview-item","day_id":"preview-day","sort_order":0,"type":"activity","title":"Kushida Shrine","location":"Fukuoka","notes":"Hakata old town","status":"confirmed"}"#.utf8))
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    DayHeroView(day: day, imageName: "KyushuFukuoka", height: 180)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    DayItemRow(item: item, onDelete: {})
+                    FormCard(title: "แผนรายวัน", icon: "calendar") {
+                        FormField(label: "สถานที่") {
+                            FormTextField(placeholder: "ชื่อสถานที่", text: .constant("Kushida Shrine"))
+                        }
+                        HStack {
+                            FormChip(title: "วางแผน", selected: true, action: {})
+                            FormChip(title: "ยืนยันแล้ว", selected: false, action: {})
+                        }
+                    }
+                    FormSaveBar(title: "บันทึก", saving: false, enabled: true, errorText: nil, action: {})
+                    HStack { Text("การแสดงผล").foregroundColor(Color.textPrimary); Spacer(); ThemePicker() }
+                }
+                .padding(16)
+            }
+            .background(Color.background)
+            .navigationTitle("Kyushu")
+        }
+    }
+}
+#endif
 
 /// A titled navy card holding form fields.
 private struct FormCard<Content: View>: View {
@@ -3406,8 +3493,8 @@ private struct FormCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 7) {
-                if let icon { Image(systemName: icon).font(.system(size: 12, weight: .bold)).foregroundColor(.brand300) }
-                Text(title).font(.system(size: 14, weight: .bold)).foregroundColor(.white)
+                if let icon { Image(systemName: icon).font(.system(size: 12, weight: .bold)).foregroundColor(Color.accent) }
+                Text(title).font(.system(size: 14, weight: .bold)).foregroundColor(Color.textPrimary)
             }
             content
         }
@@ -3439,8 +3526,8 @@ private struct FormTextField: View {
 
     var body: some View {
         TextField("", text: $text,
-                  prompt: Text(placeholder).foregroundColor(Color(hex: "#5F6B85")), axis: axis)
-            .font(.system(size: 14)).foregroundColor(.white).tint(.brand300)
+                  prompt: Text(placeholder).foregroundColor(Color.textTertiary), axis: axis)
+            .font(.system(size: 14)).foregroundColor(Color.textPrimary).tint(.brand300)
             .keyboardType(keyboard)
             .lineLimit(axis == .vertical ? 1...5 : 1...1)
             .padding(12)
@@ -3474,7 +3561,7 @@ private struct FormToggleRow: View {
 
     var body: some View {
         Toggle(isOn: $isOn) {
-            Text(title).font(.system(size: 13, weight: .medium)).foregroundColor(.white)
+            Text(title).font(.system(size: 13, weight: .medium)).foregroundColor(Color.textPrimary)
         }
         .tint(.brand500)
     }
@@ -3529,6 +3616,7 @@ private struct ItemEditorSheet: View {
     let day: TripItineraryDay
     let item: TripItineraryItem?
     let actions: ItineraryActions
+    let isPreview: Bool
 
     @Environment(\.dismiss) private var dismiss
     @State private var type: String
@@ -3547,11 +3635,21 @@ private struct ItemEditorSheet: View {
     @State private var saving = false
     @State private var errorText: String?
     @State private var confirmDelete = false
+    @State private var photoPath: String?
+    @State private var photoAsset: String?
+    @State private var photoChanged = false
+    @State private var photoPick: PhotosPickerItem?
+    @State private var photoData: Data?
+    @State private var loadingPhoto = false
+    @State private var gallery: [TripPhoto] = []
+    @State private var galleryError: String?
+    @State private var showPhotoGallery = false
 
-    init(day: TripItineraryDay, item: TripItineraryItem?, actions: ItineraryActions) {
+    init(day: TripItineraryDay, item: TripItineraryItem?, actions: ItineraryActions, isPreview: Bool = false) {
         self.day = day
         self.item = item
         self.actions = actions
+        self.isPreview = isPreview
         let startTime = parseClock(item?.timeFrom)
         let endTime = parseClock(item?.timeTo)
         _type = State(initialValue: item?.type ?? "activity")
@@ -3567,6 +3665,8 @@ private struct ItemEditorSheet: View {
         _code = State(initialValue: item?.confirmationCode ?? "")
         _amount = State(initialValue: (item?.amount ?? 0) > 0 ? (item?.amount ?? 0).formatted(.number.precision(.fractionLength(0...2)).grouping(.never)) : "")
         _currency = State(initialValue: item?.currency ?? "JPY")
+        _photoPath = State(initialValue: item?.itemPhotoPath)
+        _photoAsset = State(initialValue: item?.itemPhotoAsset)
     }
 
     private var typeChoices: [(id: String, label: String)] {
@@ -3579,7 +3679,7 @@ private struct ItemEditorSheet: View {
             ScrollView {
                 VStack(spacing: 14) {
                     HStack(spacing: 8) {
-                        Image(systemName: "calendar").foregroundColor(.brand300)
+                        Image(systemName: "calendar").foregroundColor(Color.accent)
                         Text(["วันที่ \(day.dayNumber)", day.date, day.city].compactMap { $0 }.joined(separator: " · "))
                             .font(.system(size: 12, weight: .semibold)).foregroundColor(FormTheme.muted)
                         Spacer()
@@ -3601,15 +3701,49 @@ private struct ItemEditorSheet: View {
                         FormField(label: "หมายเหตุ") { FormTextField(placeholder: "ที่จอดรถ ค่าเข้า สิ่งที่ต้องเตรียม", text: $notes, axis: .vertical) }
                     }
 
+                    FormCard(title: "รูปของรายการ", icon: "photo") {
+                        HStack(spacing: 12) {
+                            if let photoData, let preview = UIImage(data: photoData) {
+                                Image(uiImage: preview).resizable().scaledToFill()
+                                    .frame(width: 44, height: 44).clipped().cornerRadius(8)
+                            } else if let photoPath, let url = TripPhotoAPI.publicURL(path: photoPath) {
+                                ItemPhotoThumbnail(url: url, assetName: nil, title: title)
+                            } else if let photoAsset {
+                                ItemPhotoThumbnail(url: nil, assetName: photoAsset, title: title)
+                            } else if let automatic = TripReferencePhoto.matching(title + " " + location) {
+                                PlaceReferencePhoto(photo: automatic)
+                            }
+                            Button { showPhotoGallery = true } label: {
+                                Label("Gallery ของทริป", systemImage: "photo.on.rectangle")
+                            }
+                            PhotosPicker(selection: $photoPick, matching: .images) {
+                                Label("iPhone", systemImage: "photo.badge.plus")
+                            }
+                        }
+                        .font(.system(size: 12, weight: .semibold)).foregroundColor(Color.accent)
+                        .disabled(saving || loadingPhoto || day.journeyId == nil)
+                        if loadingPhoto { ProgressView() }
+                        if photoPath != nil || photoAsset != nil || photoData != nil {
+                            Button {
+                                photoPath = nil; photoAsset = nil; photoData = nil
+                                photoPick = nil; photoChanged = true
+                            } label: {
+                                Label("ใช้รูปอัตโนมัติ", systemImage: "arrow.counterclockwise")
+                            }
+                            .font(.system(size: 12)).foregroundColor(Color.textSecondary)
+                            .disabled(saving || loadingPhoto)
+                        }
+                    }
+
                     FormCard(title: "เวลา", icon: "clock.fill") {
                         FormToggleRow(title: "กำหนดเวลาเริ่ม", isOn: $hasStart)
                         if hasStart {
                             DatePicker("เริ่ม", selection: $start, displayedComponents: .hourAndMinute)
-                                .font(.system(size: 13)).foregroundColor(.white).tint(.brand300)
+                                .font(.system(size: 13)).foregroundColor(Color.textPrimary).tint(.brand300)
                             FormToggleRow(title: "กำหนดเวลาสิ้นสุด", isOn: $hasEnd)
                             if hasEnd {
                                 DatePicker("สิ้นสุด", selection: $end, displayedComponents: .hourAndMinute)
-                                    .font(.system(size: 13)).foregroundColor(.white).tint(.brand300)
+                                    .font(.system(size: 13)).foregroundColor(Color.textPrimary).tint(.brand300)
                             }
                         }
                     }
@@ -3638,7 +3772,7 @@ private struct ItemEditorSheet: View {
                         }
                     }
 
-                    FormSaveBar(title: item == nil ? "เพิ่มในแผน" : "บันทึกการแก้ไข", saving: saving, enabled: canSave, errorText: errorText) {
+                    FormSaveBar(title: item == nil ? "เพิ่มในแผน" : "บันทึกการแก้ไข", saving: saving, enabled: canSave && !loadingPhoto, errorText: errorText) {
                         Task { await save() }
                     }
 
@@ -3647,6 +3781,7 @@ private struct ItemEditorSheet: View {
                             Label("ลบรายการนี้", systemImage: "trash").font(.system(size: 13, weight: .semibold)).foregroundColor(.red)
                                 .frame(maxWidth: .infinity).padding(.vertical, 10)
                         }
+                        .disabled(saving || loadingPhoto)
                     }
                 }
                 .padding(16)
@@ -3654,10 +3789,33 @@ private struct ItemEditorSheet: View {
             .scrollDismissesKeyboard(.interactively)
             .background(FormTheme.page.ignoresSafeArea())
             .navigationTitle(item == nil ? "เพิ่มรายการ" : "แก้ไขรายการ").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("ปิด") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("ปิด") { dismiss() }.disabled(saving) } }
+            .sheet(isPresented: $showPhotoGallery) { itemPhotoGallery }
+            .onChange(of: photoPick) { _, pick in
+                guard let pick else { return }
+                loadingPhoto = true
+                Task {
+                    do {
+                        guard let raw = try await pick.loadTransferable(type: Data.self),
+                              let jpeg = downscaledJPEG(raw, maxSide: 1400) else {
+                            throw NSError(domain: "TripPhoto", code: 1, userInfo: [NSLocalizedDescriptionKey: "ไม่สามารถอ่านรูปนี้ได้"])
+                        }
+                        guard photoPick == pick else { return }
+                        photoData = jpeg; photoPath = nil; photoAsset = nil; photoChanged = true
+                        errorText = nil
+                    } catch {
+                        if photoPick == pick {
+                            errorText = error.localizedDescription
+                            loadingPhoto = false
+                            photoPick = nil
+                        }
+                    }
+                    if photoPick == pick { loadingPhoto = false }
+                }
+            }
             .confirmationDialog("ลบรายการนี้?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("ลบ", role: .destructive) {
-                    guard let item else { return }
+                    guard let item, !saving, !loadingPhoto else { return }
                     Task {
                         saving = true; defer { saving = false }
                         do { try await actions.removeItem(item.id); dismiss() } catch { errorText = error.localizedDescription }
@@ -3666,8 +3824,66 @@ private struct ItemEditorSheet: View {
                 Button("ยกเลิก", role: .cancel) {}
             }
         }
-        .preferredColorScheme(.dark)
+
         .presentationDragIndicator(.visible)
+        .interactiveDismissDisabled(saving)
+    }
+
+    private var itemPhotoGallery: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 12) {
+                    ForEach(gallery) { photo in
+                        if let url = TripPhotoAPI.publicURL(photo) {
+                            Button {
+                                photoPath = photo.storagePath; photoAsset = nil; photoData = nil
+                                photoPick = nil; photoChanged = true; showPhotoGallery = false
+                            } label: {
+                                Color.surfaceMuted.overlay {
+                                    AsyncImage(url: url) { phase in
+                                        if let image = phase.image { image.resizable().scaledToFill() }
+                                        else { Image(systemName: "photo").foregroundColor(Color.textSecondary) }
+                                    }
+                                }
+                                .frame(height: 100).clipped().cornerRadius(8)
+                            }
+                            .accessibilityLabel(photo.caption ?? "เลือกรูปจากทริป")
+                        }
+                    }
+                    ForEach(["KyushuFukuoka", "KyushuKumamoto", "KyushuYufuin", "KyushuShrine"], id: \.self) { asset in
+                        Button {
+                            photoAsset = asset; photoPath = nil; photoData = nil
+                            photoPick = nil; photoChanged = true; showPhotoGallery = false
+                        } label: {
+                            Color.surfaceMuted.overlay { Image(asset).resizable().scaledToFill() }
+                                .frame(height: 100).clipped().cornerRadius(8)
+                        }
+                        .accessibilityLabel("เลือกรูป \(asset)")
+                    }
+                }
+                .padding(16)
+                if let galleryError {
+                    Text(galleryError).font(.footnote).foregroundColor(Color.errorText).padding()
+                    Button("ลองอีกครั้ง") { Task { await loadPhotoGallery() } }
+                }
+            }
+            .background(Color.background)
+            .navigationTitle("Gallery ของทริป").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("ปิด") { showPhotoGallery = false } } }
+            .task { await loadPhotoGallery() }
+        }
+    }
+
+    private func loadPhotoGallery() async {
+        guard !isPreview else { return }
+        guard let journeyId = day.journeyId else { return }
+        galleryError = nil
+        do {
+            gallery = try await TripPhotoAPI.list(journeyId: journeyId).filter {
+                let caption = $0.caption ?? ""
+                return caption != "Trip cover" && caption != "Trip profile avatar" && !caption.hasPrefix("Trip identity tag")
+            }
+        } catch { galleryError = error.localizedDescription }
     }
 
     private func clean(_ text: String) -> String? {
@@ -3676,9 +3892,10 @@ private struct ItemEditorSheet: View {
     }
 
     private func save() async {
+        guard !saving, !loadingPhoto, canSave else { return }
         saving = true; errorText = nil
         defer { saving = false }
-        let fields = TripsViewModel.TripItemFields(
+        var fields = TripsViewModel.TripItemFields(
             type: type,
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             location: clean(location),
@@ -3691,6 +3908,19 @@ private struct ItemEditorSheet: View {
             amount: Double(amount.replacingOccurrences(of: ",", with: "").trimmingCharacters(in: .whitespaces)),
             currency: currency)
         do {
+            if !isPreview, let data = photoData, let journeyId = day.journeyId {
+                let uploaded = try await TripPhotoAPI.upload(journeyId: journeyId, itemId: item?.id, data: data, caption: title)
+                photoPath = uploaded.storagePath
+                photoData = nil
+            }
+            if photoChanged {
+                var details = item?.details ?? [:]
+                details.removeValue(forKey: "photo_path")
+                details.removeValue(forKey: "photo_asset")
+                if let photoPath { details["photo_path"] = .string(photoPath) }
+                if let photoAsset { details["photo_asset"] = .string(photoAsset) }
+                fields.details = details
+            }
             if let item { try await actions.updateItem(item.id, fields) }
             else { try await actions.addItem(day.id, fields) }
             hapticSuccess()
@@ -3736,7 +3966,7 @@ private struct DayEditorSheet: View {
                         FormToggleRow(title: "ระบุวันที่", isOn: $hasDate)
                         if hasDate {
                             DatePicker("วันที่", selection: $date, displayedComponents: .date)
-                                .font(.system(size: 13)).foregroundColor(.white).tint(.brand300)
+                                .font(.system(size: 13)).foregroundColor(Color.textPrimary).tint(.brand300)
                         }
                         FormField(label: "ชื่อวัน") { FormTextField(placeholder: "เช่น Fukuoka old town & Nakasu", text: $title) }
                         FormField(label: "เมือง") { FormTextField(placeholder: "เช่น Fukuoka (ใช้เลือกรูปประจำวัน)", text: $city) }
@@ -3753,7 +3983,7 @@ private struct DayEditorSheet: View {
             .navigationTitle(day == nil ? "เพิ่มวัน" : "แก้ไขวัน").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("ปิด") { dismiss() } } }
         }
-        .preferredColorScheme(.dark)
+
         .presentationDragIndicator(.visible)
     }
 
@@ -3864,7 +4094,7 @@ private struct TripPlacesSheet: View {
             .task { await load() }
             .refreshable { await load() }
         }
-        .preferredColorScheme(.dark)
+
     }
 
     private func card(_ item: TripPlaceCandidate) -> some View {
@@ -3875,7 +4105,7 @@ private struct TripPlacesSheet: View {
                     PlaceReferencePhoto(photo: photo)
                 }
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(item.title).font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
+                    Text(item.title).font(.system(size: 14, weight: .semibold)).foregroundColor(Color.textPrimary)
                     if let note = item.note, !note.isEmpty {
                         Text(note).font(.system(size: 11)).foregroundColor(FormTheme.muted).lineLimit(3)
                     }
@@ -3890,7 +4120,7 @@ private struct TripPlacesSheet: View {
                 Spacer(minLength: 4)
                 if let url = safeGoogleMapsURL(item.mapsUrl) {
                     Button { GoogleMapsLinks.open(url) } label: {
-                        Image(systemName: "location.north.circle.fill").font(.system(size: 22)).foregroundColor(.brand300)
+                        Image(systemName: "location.north.circle.fill").font(.system(size: 22)).foregroundColor(Color.accent)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("เปิดใน Google Maps")
@@ -3922,7 +4152,7 @@ private struct TripPlacesSheet: View {
                         Button("วัน \(day.dayNumber) · \(day.title ?? day.date ?? "")") { Task { await addToPlan(item, day: day) } }
                     }
                 } label: {
-                    Image(systemName: "calendar.badge.plus").font(.system(size: 15, weight: .semibold)).foregroundColor(.brand300)
+                    Image(systemName: "calendar.badge.plus").font(.system(size: 15, weight: .semibold)).foregroundColor(Color.accent)
                         .frame(width: 30, height: 30)
                 }
                 .accessibilityLabel("เพิ่มลงแผน")

@@ -26,6 +26,14 @@ final class AppSettings: ObservableObject {
             case .system: return nil
             }
         }
+
+        var label: String {
+            switch self {
+            case .light: return "สว่าง"
+            case .system: return "ตามระบบ"
+            case .dark: return "มืด"
+            }
+        }
     }
 
     static let shared = AppSettings()
@@ -40,16 +48,13 @@ final class AppSettings: ObservableObject {
     }
 }
 
-/// Segmented pill toggle — outline SF Symbols (sun / monitor / moon),
-/// pixel-styled to match the web's display-mode switch:
-/// selected segment gets a dark rounded chip with a solid white icon,
-/// unselected segments show muted outline icons on transparent background.
+/// Persisted appearance selection, using the shared palette in either mode.
 struct ThemePicker: View {
     @ObservedObject var settings = AppSettings.shared
 
-    private let trackBg     = Color(hex: "#0b0d18")
-    private let chipBg      = Color(hex: "#000000").opacity(0.55)
-    private let mutedIcon   = Color(hex: "#9ca3af")
+    private let trackBg = Color.surfaceMuted
+    private let chipBg = Color.brand600
+    private let mutedIcon = Color.textSecondary
 
     var body: some View {
         HStack(spacing: 2) {
@@ -63,27 +68,30 @@ struct ThemePicker: View {
                     Image(systemName: mode.symbol)
                         .font(.system(size: 13, weight: selected ? .semibold : .regular))
                         .foregroundColor(selected ? .white : mutedIcon)
-                        .frame(width: 34, height: 30)
+                        .frame(width: 44, height: 44)
                         .background(
                             selected
                                 ? RoundedRectangle(cornerRadius: 8).fill(chipBg)
                                 : RoundedRectangle(cornerRadius: 8).fill(Color.clear)
                         )
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(mode.label)
+                .accessibilityAddTraits(selected ? [.isSelected] : [])
             }
         }
         .padding(3)
         .background(trackBg)
         .clipShape(RoundedRectangle(cornerRadius: 11))
         .overlay(RoundedRectangle(cornerRadius: 11)
-            .stroke(Color.white.opacity(0.08), lineWidth: 1))
+            .stroke(Color.border, lineWidth: 1))
     }
 }
 
 #if DEBUG
 #Preview {
     ZStack {
-        Color(hex: "#070a18").ignoresSafeArea()
+        Color.background.ignoresSafeArea()
         ThemePicker()
     }
 }

@@ -43,7 +43,7 @@ struct SplitWorkflowExampleView: View {
 
         var tint: Color {
             switch self {
-            case .scan: return Color(hex: "#6366f1")
+            case .scan: return Color.brand500
             case .review: return Color(hex: "#8b5cf6")
             case .split: return Color(hex: "#db2777")
             case .collect: return Color(hex: "#16a34a")
@@ -61,14 +61,14 @@ struct SplitWorkflowExampleView: View {
 
     private let friends = [
         FriendShare(name: "มายด์", amount: 420, color: Color(hex: "#db2777"), paid: true),
-        FriendShare(name: "ต้น", amount: 390, color: Color(hex: "#6366f1"), paid: false),
+        FriendShare(name: "ต้น", amount: 390, color: Color.brand500, paid: false),
         FriendShare(name: "บีม", amount: 465, color: Color(hex: "#16a34a"), paid: false)
     ]
 
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [Color(hex: "#f4f3ff"), Color(hex: "#fff7fb"), Color.white],
+                colors: [Color.surfaceMuted, Color.background, Color.white],
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -96,7 +96,7 @@ struct SplitWorkflowExampleView: View {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .fill(
                     LinearGradient(
-                        colors: [Color(hex: "#7c72f5"), Color(hex: "#6366f1"), Color(hex: "#db2777")],
+                        colors: [Color(hex: "#7c72f5"), Color.brand500, Color(hex: "#db2777")],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
@@ -157,7 +157,7 @@ struct SplitWorkflowExampleView: View {
             .padding(20)
         }
         .frame(height: 248)
-        .shadow(color: Color(hex: "#6366f1").opacity(0.26), radius: 20, x: 0, y: 12)
+        .shadow(color: Color.brand500.opacity(0.26), radius: 20, x: 0, y: 12)
     }
 
     private func metricPill(_ label: String, _ value: String) -> some View {
@@ -189,7 +189,7 @@ struct SplitWorkflowExampleView: View {
                     VStack(spacing: 7) {
                         ZStack {
                             Circle()
-                                .fill(selectedStep == step ? step.tint : Color.white)
+                                .fill(selectedStep == step ? step.tint : Color.surface)
                                 .frame(width: 42, height: 42)
                                 .shadow(color: selectedStep == step ? step.tint.opacity(0.22) : .clear, radius: 8, y: 4)
                             Image(systemName: step.icon)
@@ -198,7 +198,7 @@ struct SplitWorkflowExampleView: View {
                         }
                         Text(step.title)
                             .font(.system(size: 10.5, weight: selectedStep == step ? .bold : .medium))
-                            .foregroundColor(selectedStep == step ? Color(hex: "#1e1b4b") : Color.textSecondary)
+                            .foregroundColor(selectedStep == step ? Color.textPrimary : Color.textSecondary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                     }
@@ -208,7 +208,7 @@ struct SplitWorkflowExampleView: View {
             }
         }
         .padding(12)
-        .background(Color.white)
+        .background(Color.surface)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .shadow(color: .black.opacity(0.04), radius: 10, x: 0, y: 4)
     }
@@ -231,7 +231,7 @@ struct SplitWorkflowExampleView: View {
         VStack(alignment: .leading, spacing: 14) {
             sectionHeader(selectedStep)
             HStack(spacing: 12) {
-                scanOption(icon: "camera.fill", title: "ถ่ายบิล", subtitle: "เปิดกล้องทันที", tint: Color(hex: "#6366f1"))
+                scanOption(icon: "camera.fill", title: "ถ่ายบิล", subtitle: "เปิดกล้องทันที", tint: Color.brand500)
                 scanOption(icon: "photo.on.rectangle", title: "เลือกรูป", subtitle: "เลือกได้หลายใบ", tint: Color(hex: "#db2777"))
             }
             receiptMockCard
@@ -256,7 +256,7 @@ struct SplitWorkflowExampleView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(Color(hex: "#f9fafb"))
+        .background(Color.inputBg)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
@@ -268,10 +268,10 @@ struct SplitWorkflowExampleView: View {
                 Spacer()
                 Text("OCR 96%")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(Color(hex: "#16a34a"))
+                    .foregroundColor(Color.successText)
                     .padding(.horizontal, 9)
                     .padding(.vertical, 4)
-                    .background(Color(hex: "#dcfce7"))
+                    .background(Color.successSurface)
                     .clipShape(Capsule())
             }
             receiptLine("Pasta Set", "฿520")
@@ -282,7 +282,7 @@ struct SplitWorkflowExampleView: View {
             receiptLine("Total", fmtTHB(1275), bold: true)
         }
         .padding(14)
-        .background(Color.white)
+        .background(Color.surface)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.border, lineWidth: 1))
     }
@@ -301,7 +301,7 @@ struct SplitWorkflowExampleView: View {
         VStack(alignment: .leading, spacing: 14) {
             sectionHeader(selectedStep)
             VStack(spacing: 10) {
-                editableRow(icon: "storefront.fill", label: "ร้านค้า", value: "Thonglor Table", tint: Color(hex: "#6366f1"))
+                editableRow(icon: "storefront.fill", label: "ร้านค้า", value: "Thonglor Table", tint: Color.brand500)
                 editableRow(icon: "calendar", label: "วันที่", value: "วันนี้ 19:42", tint: Color(hex: "#8b5cf6"))
                 editableRow(icon: "banknote.fill", label: "ยอดรวม", value: fmtTHB(1275), tint: Color(hex: "#16a34a"))
             }
@@ -336,7 +336,7 @@ struct SplitWorkflowExampleView: View {
                 .foregroundColor(Color.textSecondary)
         }
         .padding(12)
-        .background(Color(hex: "#f9fafb"))
+        .background(Color.inputBg)
         .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
     }
 
@@ -347,11 +347,11 @@ struct SplitWorkflowExampleView: View {
                 .foregroundColor(Color.textSecondary)
             Text(value)
                 .font(.system(size: 11, weight: .bold))
-                .foregroundColor(Color(hex: "#16a34a"))
+                .foregroundColor(Color.successText)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
-        .background(Color(hex: "#dcfce7").opacity(0.65))
+        .background(Color.successSurface.opacity(0.65))
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
@@ -378,7 +378,7 @@ struct SplitWorkflowExampleView: View {
             .foregroundColor(active ? .white : Color.textSecondary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
-            .background(active ? Color(hex: "#6366f1") : Color(hex: "#f3f4f6"))
+            .background(active ? Color.brand500 : Color.surfaceMuted)
             .clipShape(Capsule())
     }
 
@@ -404,7 +404,7 @@ struct SplitWorkflowExampleView: View {
                 .foregroundColor(Color.textPrimary)
         }
         .padding(12)
-        .background(Color(hex: "#f9fafb"))
+        .background(Color.inputBg)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
@@ -426,7 +426,7 @@ struct SplitWorkflowExampleView: View {
                         Text("มายด์จ่ายแล้ว")
                     }
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(Color(hex: "#16a34a"))
+                    .foregroundColor(Color.successText)
                 }
                 Spacer(minLength: 0)
             }
@@ -449,7 +449,7 @@ struct SplitWorkflowExampleView: View {
                 }
                 HStack(spacing: 5) {
                     qrBlock(size: 24)
-                    RoundedRectangle(cornerRadius: 4).fill(Color(hex: "#6366f1")).frame(width: 24, height: 24)
+                    RoundedRectangle(cornerRadius: 4).fill(Color.brand500).frame(width: 24, height: 24)
                     qrBlock(size: 24)
                 }
                 HStack(spacing: 5) {
@@ -463,7 +463,7 @@ struct SplitWorkflowExampleView: View {
 
     private func qrBlock(size: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: 4)
-            .fill(Color(hex: "#1e1b4b"))
+            .fill(Color.textPrimary)
             .frame(width: size, height: size)
             .opacity(0.88)
     }
@@ -477,18 +477,18 @@ struct SplitWorkflowExampleView: View {
                 Spacer()
                 Text("1/3 ชำระแล้ว")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(Color(hex: "#6366f1"))
+                    .foregroundColor(Color.accent)
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color(hex: "#e5e7eb")).frame(height: 9)
-                    Capsule().fill(Color(hex: "#6366f1")).frame(width: geo.size.width * 0.34, height: 9)
+                    Capsule().fill(Color.border).frame(height: 9)
+                    Capsule().fill(Color.brand500).frame(width: geo.size.width * 0.34, height: 9)
                 }
             }
             .frame(height: 9)
         }
         .padding(12)
-        .background(Color(hex: "#f9fafb"))
+        .background(Color.inputBg)
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
@@ -496,7 +496,7 @@ struct SplitWorkflowExampleView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("ลำดับประสบการณ์ที่ควรได้")
                 .font(.system(size: 16, weight: .bold))
-                .foregroundColor(Color(hex: "#1e1b4b"))
+                .foregroundColor(Color.textPrimary)
 
             VStack(spacing: 0) {
                 ForEach(WorkflowStep.allCases) { step in
@@ -518,7 +518,7 @@ struct SplitWorkflowExampleView: View {
                                 }
                                 if step != WorkflowStep.allCases.last {
                                     Rectangle()
-                                        .fill(Color(hex: "#e5e7eb"))
+                                        .fill(Color.border)
                                         .frame(width: 2, height: 34)
                                 }
                             }
@@ -548,7 +548,7 @@ struct SplitWorkflowExampleView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("หลัก UX ที่หน้าจอนี้ตั้งใจสื่อ")
                 .font(.system(size: 16, weight: .bold))
-                .foregroundColor(Color(hex: "#1e1b4b"))
+                .foregroundColor(Color.textPrimary)
             designNote(icon: "bolt.fill", title: "เริ่มจากสแกนเร็ว", body: "ปุ่มกล้องและเลือกรูปต้องเด่น เพราะเป็น entry point หลักของงาน")
             designNote(icon: "checkmark.seal.fill", title: "ให้ AI ช่วย แต่ผู้ใช้คุมได้", body: "ทุก field ที่ OCR อ่านควรแก้ไขได้ก่อนส่งให้เพื่อน")
             designNote(icon: "person.2.fill", title: "เห็นยอดรายคนทันที", body: "ลดความลังเลด้วยการโชว์ยอด เพื่อน และสถานะในหน้าจอเดียว")
@@ -560,9 +560,9 @@ struct SplitWorkflowExampleView: View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(Color(hex: "#6366f1"))
+                .foregroundColor(Color.accent)
                 .frame(width: 30, height: 30)
-                .background(Color(hex: "#ede9fe"))
+                .background(Color.brand50)
                 .clipShape(Circle())
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -587,7 +587,7 @@ struct SplitWorkflowExampleView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Step \(step.rawValue): \(step.title)")
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(Color(hex: "#1e1b4b"))
+                    .foregroundColor(Color.textPrimary)
                 Text(step.subtitle)
                     .font(.system(size: 12))
                     .foregroundColor(Color.textSecondary)
@@ -601,7 +601,7 @@ private extension View {
     func sectionShell() -> some View {
         self
             .padding(16)
-            .background(Color.white)
+            .background(Color.surface)
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             .shadow(color: .black.opacity(0.04), radius: 10, x: 0, y: 4)
     }

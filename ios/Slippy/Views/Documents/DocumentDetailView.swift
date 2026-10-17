@@ -216,7 +216,7 @@ struct DocumentDetailContentView: View {
             // Document glyph tile
             ZStack {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(LinearGradient(colors: [Color(hex: "#8b83f7"), Color(hex: "#6366f1")],
+                    .fill(LinearGradient(colors: [Color(hex: "#8b83f7"), Color.brand500],
                                          startPoint: .topLeading, endPoint: .bottomTrailing))
                     .frame(width: 68, height: 78)
                 Image(systemName: "doc.text.fill")
@@ -239,7 +239,7 @@ struct DocumentDetailContentView: View {
                     if let type = docTypeLabel {
                         Text(type)
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(Color(hex: "#6366f1"))
+                            .foregroundColor(Color.accent)
                             .padding(.horizontal, 8).padding(.vertical, 3)
                             .background(Color.brand500.opacity(0.12))
                             .clipShape(Capsule())
@@ -252,7 +252,7 @@ struct DocumentDetailContentView: View {
                         Text("ซื้อร้านนี้มาแล้ว \(n) ครั้ง")
                             .font(.system(size: 11, weight: .semibold))
                     }
-                    .foregroundColor(Color(hex: "#059669"))
+                    .foregroundColor(Color.successText)
                     .padding(.horizontal, 8).padding(.vertical, 3)
                     .background(Color(hex: "#059669").opacity(0.12))
                     .clipShape(Capsule())
@@ -628,7 +628,7 @@ struct DocumentDetailContentView: View {
                 HStack {
                     TextField("ชื่อรายการ", text: item.description)
                         .font(.system(size: 13))
-                        .foregroundColor(Color(hex: "#1e1b4b"))
+                        .foregroundColor(Color.textPrimary)
                         .padding(8)
                         .background(Color.inputBg)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -674,7 +674,7 @@ struct DocumentDetailContentView: View {
             TextField("0", text: text)
                 .keyboardType(isInteger ? .numberPad : .decimalPad)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(Color(hex: "#1e1b4b"))
+                .foregroundColor(Color.textPrimary)
                 .onChange(of: text.wrappedValue) { _, newValue in
                     if isInteger {
                         let digitsOnly = newValue.filter(\.isNumber)
@@ -755,7 +755,7 @@ struct DocumentDetailContentView: View {
                 editAmountField("หัก ณ ที่จ่าย (WHT)", text: $whtText) { recalcTotal() }
                 if !lineItems.isEmpty {
                     Text("* ยอดก่อนภาษีคำนวณจากรายการสินค้าอัตโนมัติ")
-                        .font(.system(size: 10)).foregroundColor(Color(hex: "#9ca3af"))
+                        .font(.system(size: 10)).foregroundColor(Color.textSecondary)
                 }
             } else {
                 summaryRow("ราคาก่อนภาษี (Subtotal)", value: fmtTHB(Double(subtotalText) ?? 0))
@@ -776,7 +776,7 @@ struct DocumentDetailContentView: View {
                 Spacer()
                 Text(fmtTHB(Double(totalText) ?? 0))
                     .font(.system(size: 22, weight: .black, design: .rounded))
-                    .foregroundColor(Color(hex: "#059669"))
+                    .foregroundColor(Color.successText)
                     .lineLimit(1).minimumScaleFactor(0.6)
             }
         }
@@ -854,7 +854,7 @@ struct DocumentDetailContentView: View {
             if isEditing {
                 TextEditor(text: $notesText)
                     .font(.system(size: 13))
-                    .foregroundColor(Color(hex: "#1e1b4b"))
+                    .foregroundColor(Color.textPrimary)
                     .scrollContentBackground(.hidden)
                     .frame(minHeight: 80)
                     .padding(8)
@@ -892,10 +892,10 @@ struct DocumentDetailContentView: View {
 
     private func editField(_ label: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(label).font(.system(size: 10)).foregroundColor(Color(hex: "#6b7280"))
+            Text(label).font(.system(size: 10)).foregroundColor(Color.textSecondary)
             TextField(label, text: text)
                 .font(.system(size: 13))
-                .foregroundColor(Color(hex: "#1e1b4b"))
+                .foregroundColor(Color.textPrimary)
                 .padding(8)
                 .background(Color.inputBg)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -909,11 +909,11 @@ struct DocumentDetailContentView: View {
     /// classification and gets overwritten on reprocessing.)
     private var categoryPickerRow: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text("หมวดหมู่").font(.system(size: 10)).foregroundColor(Color(hex: "#6b7280"))
+            Text("หมวดหมู่").font(.system(size: 10)).foregroundColor(Color.textSecondary)
             HStack(spacing: 8) {
                 TextField("หมวดหมู่", text: $categoryText)
                     .font(.system(size: 13))
-                    .foregroundColor(Color(hex: "#1e1b4b"))
+                    .foregroundColor(Color.textPrimary)
                     .padding(8)
                     .background(Color.inputBg)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -957,7 +957,7 @@ struct DocumentDetailContentView: View {
     private func editDateField(_ label: String, date: Binding<Date>,
                                 onChange: @escaping (Date) -> Void) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(label).font(.system(size: 10)).foregroundColor(Color(hex: "#6b7280"))
+            Text(label).font(.system(size: 10)).foregroundColor(Color.textSecondary)
             DatePicker("", selection: date, displayedComponents: .date)
                 .datePickerStyle(.compact)
                 .labelsHidden()
@@ -974,16 +974,16 @@ struct DocumentDetailContentView: View {
     private func editAmountField(_ label: String, text: Binding<String>, disabled: Bool = false,
                                   onChange: @escaping () -> Void) -> some View {
         HStack {
-            Text(label).font(.system(size: 12)).foregroundColor(Color(hex: "#6b7280"))
+            Text(label).font(.system(size: 12)).foregroundColor(Color.textSecondary)
             Spacer()
             TextField("0", text: text)
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.trailing)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(Color(hex: "#1e1b4b"))
+                .foregroundColor(Color.textPrimary)
                 .frame(width: 110)
                 .padding(8)
-                .background(disabled ? Color(hex: "#f3f4f6") : Color(hex: "#f9fafb"))
+                .background(disabled ? Color.surfaceMuted : Color.inputBg)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .disabled(disabled)
                 .onChange(of: text.wrappedValue) { _, _ in onChange() }
@@ -992,7 +992,7 @@ struct DocumentDetailContentView: View {
 
     private func summaryRow(_ label: String, value: String, valueColor: Color = Color.textPrimary) -> some View {
         HStack {
-            Text(label).font(.system(size: 12)).foregroundColor(Color(hex: "#6b7280"))
+            Text(label).font(.system(size: 12)).foregroundColor(Color.textSecondary)
             Spacer()
             Text(value).font(.system(size: 13, weight: .semibold)).foregroundColor(valueColor)
         }

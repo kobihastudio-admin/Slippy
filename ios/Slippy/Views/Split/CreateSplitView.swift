@@ -95,7 +95,7 @@ enum SplitBillCategory: String, CaseIterable {
         case .travel: return Color(hex: "#38bdf8")
         case .shopping: return Color(hex: "#ec4899")
         case .activity: return Color(hex: "#8b5cf6")
-        case .other: return Color(hex: "#64748b")
+        case .other: return Color.textTertiary
         }
     }
 }
@@ -229,7 +229,7 @@ struct CreateSplitView: View {
                     .padding(.bottom, 16)
                     .background(
                         LinearGradient(
-                            colors: [Color.white.opacity(0), Color(hex: "#fbfaff")],
+                            colors: [Color.white.opacity(0), Color.background],
                             startPoint: .top,
                             endPoint: .bottom
                         )
@@ -301,9 +301,9 @@ struct CreateSplitView: View {
     private var splitCreateBackground: some View {
         LinearGradient(
             colors: [
-                Color(hex: "#fbfaff"),
-                Color(hex: "#f6f3ff"),
-                Color(hex: "#ffffff")
+                Color.background,
+                Color.surfaceMuted,
+                Color.surface
             ],
             startPoint: .top,
             endPoint: .bottom
@@ -318,7 +318,7 @@ struct CreateSplitView: View {
             } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundColor(Color(hex: "#15164f"))
+                    .foregroundColor(Color.textPrimary)
                     .frame(width: 44, height: 44)
             }
 
@@ -327,10 +327,10 @@ struct CreateSplitView: View {
             VStack(spacing: 2) {
                 Text("สร้างการหารบิล")
                     .font(.system(size: 24, weight: .black, design: .rounded))
-                    .foregroundColor(Color(hex: "#15164f"))
+                    .foregroundColor(Color.textPrimary)
                 Text("สร้างบิลใหม่ในไม่กี่ขั้นตอน")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(Color(hex: "#9aa0bf"))
+                    .foregroundColor(Color.textSecondary)
             }
 
             Spacer()
@@ -356,7 +356,7 @@ struct CreateSplitView: View {
                 VStack(spacing: 8) {
                     ZStack {
                         Circle()
-                            .fill(step.rawValue <= createStep.rawValue ? Color.brand500 : Color(hex: "#d8d8e8"))
+                            .fill(step.rawValue <= createStep.rawValue ? Color.brand500 : Color.border)
                             .frame(width: 40, height: 40)
                         Text("\(step.rawValue)")
                             .font(.system(size: 17, weight: .bold))
@@ -364,13 +364,13 @@ struct CreateSplitView: View {
                     }
                     Text(step.title)
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(step == createStep ? Color.brand500 : Color(hex: "#9aa0bf"))
+                        .foregroundColor(step == createStep ? Color.brand500 : Color.textSecondary)
                 }
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .topTrailing) {
                     if step != CreateSplitStep.allCases.last {
                         Rectangle()
-                            .fill(Color(hex: "#dcddec"))
+                            .fill(Color.border)
                             .frame(height: 2)
                             .offset(x: 44, y: 19)
                     }
@@ -914,7 +914,7 @@ struct CreateSplitView: View {
         VStack(alignment: .leading, spacing: 0) {
             Text("รายละเอียดบิล")
                 .font(.system(size: 18, weight: .black, design: .rounded))
-                .foregroundColor(Color(hex: "#15164f"))
+                .foregroundColor(Color.textPrimary)
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
                 .padding(.bottom, 10)
@@ -925,9 +925,10 @@ struct CreateSplitView: View {
                 label: "ชื่อบิล",
                 trailing: title.isEmpty ? nil : "xmark.circle.fill"
             ) {
-                TextField("Dinner Chinatown", text: $title)
+                TextField("Dinner Chinatown", text: $title,
+                          prompt: Text("Dinner Chinatown").foregroundColor(Color.textTertiary))
                     .font(.system(size: 18, weight: .bold))
-                    .foregroundColor(Color(hex: "#15164f"))
+                    .foregroundColor(Color.textPrimary)
             } trailingAction: {
                 title = ""
             }
@@ -935,48 +936,53 @@ struct CreateSplitView: View {
             Divider().padding(.leading, 108)
 
             detailInputRow(icon: "calendar", tint: Color(hex: "#ec4899"), label: "วันที่และเวลา") {
-                HStack(spacing: 12) {
-                    DatePicker("", selection: $billDate, displayedComponents: .date)
-                        .labelsHidden()
-                    Text("·")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(Color(hex: "#9aa0bf"))
-                    DatePicker("", selection: $billDate, displayedComponents: .hourAndMinute)
-                        .labelsHidden()
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        DatePicker("", selection: $billDate, displayedComponents: .date).labelsHidden()
+                        Text("·").foregroundColor(Color.textSecondary)
+                        DatePicker("", selection: $billDate, displayedComponents: .hourAndMinute).labelsHidden()
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        DatePicker("", selection: $billDate, displayedComponents: .date).labelsHidden()
+                        DatePicker("", selection: $billDate, displayedComponents: .hourAndMinute).labelsHidden()
+                    }
                 }
             }
 
             Divider().padding(.leading, 108)
 
             detailInputRow(icon: "mappin.circle.fill", tint: Color(hex: "#3b9df4"), label: "สถานที่") {
-                TextField("China Town Bangkok", text: $location)
+                TextField("China Town Bangkok", text: $location,
+                          prompt: Text("China Town Bangkok").foregroundColor(Color.textTertiary))
                     .font(.system(size: 17, weight: .bold))
-                    .foregroundColor(Color(hex: "#15164f"))
+                    .foregroundColor(Color.textPrimary)
             }
 
             Divider().padding(.leading, 108)
 
             detailInputRow(icon: "clipboard.fill", tint: Color(hex: "#fb923c"), label: "โน้ต (ไม่บังคับ)") {
-                TextField("เพิ่มโน้ตหรือรายละเอียดเพิ่มเติม...", text: $note)
+                TextField("เพิ่มโน้ตหรือรายละเอียดเพิ่มเติม...", text: $note,
+                          prompt: Text("เพิ่มโน้ตหรือรายละเอียดเพิ่มเติม...").foregroundColor(Color.textTertiary))
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(Color(hex: "#15164f"))
+                    .foregroundColor(Color.textPrimary)
             }
         }
-        .background(Color.white.opacity(0.96))
+        .background(Color.surface.opacity(0.96))
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .shadow(color: Color(hex: "#4f46e5").opacity(0.06), radius: 20, x: 0, y: 10)
+        .shadow(color: Color.brand600.opacity(0.06), radius: 20, x: 0, y: 10)
     }
 
     private var amountCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("ยอดรวมของบิล")
                 .font(.system(size: 17, weight: .black, design: .rounded))
-                .foregroundColor(Color(hex: "#15164f"))
+                .foregroundColor(Color.textPrimary)
 
             HStack(spacing: 12) {
-                TextField("2,850.00", text: $totalAmountText)
+                TextField("2,850.00", text: $totalAmountText,
+                          prompt: Text("2,850.00").foregroundColor(Color.textTertiary))
                     .font(.system(size: 30, weight: .black, design: .rounded))
-                    .foregroundColor(Color(hex: "#15164f"))
+                    .foregroundColor(Color.textPrimary)
                     .keyboardType(.decimalPad)
                     .onChange(of: totalAmountText) { _, _ in
                         if isProgrammaticTotalUpdate { isProgrammaticTotalUpdate = false }
@@ -987,11 +993,11 @@ struct CreateSplitView: View {
                 Divider().frame(height: 42)
                 Text("฿")
                     .font(.system(size: 24, weight: .bold))
-                    .foregroundColor(Color(hex: "#15164f"))
+                    .foregroundColor(Color.textPrimary)
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 14)
-            .background(Color.white)
+            .background(Color.surface)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: "#d7d3f4"), lineWidth: 1.2))
 
@@ -1036,13 +1042,13 @@ struct CreateSplitView: View {
         .padding(20)
         .background(
             LinearGradient(
-                colors: [Color.white.opacity(0.98), Color(hex: "#f1ecff")],
+                colors: [Color.surface.opacity(0.98), Color.surfaceMuted],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
         )
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .shadow(color: Color(hex: "#4f46e5").opacity(0.06), radius: 20, x: 0, y: 10)
+        .shadow(color: Color.brand600.opacity(0.06), radius: 20, x: 0, y: 10)
     }
 
     private var categoryAndModeRow: some View {
@@ -1070,10 +1076,10 @@ struct CreateSplitView: View {
             HStack {
                 Text("รายการในบิล")
                     .font(.system(size: 18, weight: .black, design: .rounded))
-                    .foregroundColor(Color(hex: "#15164f"))
+                    .foregroundColor(Color.textPrimary)
                 Text("(ไม่บังคับ)")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(Color(hex: "#a0a3bd"))
+                    .foregroundColor(Color.textSecondary)
                 Spacer()
                 Button {
                     hapticLight()
@@ -1107,22 +1113,22 @@ struct CreateSplitView: View {
                 if draftItems.count > 3 {
                     Text("ดูทั้งหมด \(draftItems.count) รายการ")
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(Color(hex: "#7b7fa0"))
+                        .foregroundColor(Color.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                 }
             }
         }
-        .background(Color.white.opacity(0.96))
+        .background(Color.surface.opacity(0.96))
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .shadow(color: Color(hex: "#4f46e5").opacity(0.05), radius: 18, x: 0, y: 8)
+        .shadow(color: Color.brand600.opacity(0.05), radius: 18, x: 0, y: 8)
     }
 
     private var reviewBillCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("ตรวจสอบก่อนบันทึก")
                 .font(.system(size: 18, weight: .black, design: .rounded))
-                .foregroundColor(Color(hex: "#15164f"))
+                .foregroundColor(Color.textPrimary)
             reviewRow("ชื่อบิล", title.trimmingCharacters(in: .whitespaces).isEmpty ? "-" : title)
             reviewRow("วันที่", splitDateLabel)
             reviewRow("สถานที่", location.isEmpty ? "-" : location)
@@ -1132,9 +1138,9 @@ struct CreateSplitView: View {
             reviewRow("รายการในบิล", "\(draftItems.count) รายการ")
         }
         .padding(20)
-        .background(Color.white.opacity(0.96))
+        .background(Color.surface.opacity(0.96))
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .shadow(color: Color(hex: "#4f46e5").opacity(0.05), radius: 18, x: 0, y: 8)
+        .shadow(color: Color.brand600.opacity(0.05), radius: 18, x: 0, y: 8)
     }
 
     private func detailInputRow<Content: View>(
@@ -1156,7 +1162,7 @@ struct CreateSplitView: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(label)
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(Color(hex: "#7b7fa0"))
+                    .foregroundColor(Color.textSecondary)
                 content()
             }
 
@@ -1168,7 +1174,7 @@ struct CreateSplitView: View {
                 } label: {
                     Image(systemName: trailing)
                         .font(.system(size: trailing == "chevron.right" ? 18 : 20, weight: .bold))
-                        .foregroundColor(Color(hex: "#a4a7c0"))
+                        .foregroundColor(Color.textSecondary)
                 }
                 .disabled(trailingAction == nil)
             }
@@ -1190,7 +1196,7 @@ struct CreateSplitView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text(label)
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(Color(hex: "#7b7fa0"))
+                    .foregroundColor(Color.textSecondary)
                 HStack(spacing: 12) {
                     ZStack {
                         Circle().fill(tint.opacity(0.16)).frame(width: 42, height: 42)
@@ -1200,19 +1206,19 @@ struct CreateSplitView: View {
                     }
                     Text(value)
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(Color(hex: "#15164f"))
+                        .foregroundColor(Color.textPrimary)
                         .lineLimit(1)
                     Spacer()
                     Image(systemName: "chevron.down")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(Color(hex: "#a4a7c0"))
+                        .foregroundColor(Color.textSecondary)
                 }
             }
             .padding(16)
             .frame(maxWidth: .infinity)
-            .background(Color.white.opacity(0.96))
+            .background(Color.surface.opacity(0.96))
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color(hex: "#ececf5"), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.surfaceMuted, lineWidth: 1))
         }
     }
 
@@ -1220,7 +1226,7 @@ struct CreateSplitView: View {
         HStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color(hex: "#fff7ed"))
+                    .fill(Color.warningSurface)
                     .frame(width: 54, height: 54)
                 Image(systemName: "fork.knife")
                     .font(.system(size: 20, weight: .bold))
@@ -1228,12 +1234,12 @@ struct CreateSplitView: View {
             }
             Text(item.name)
                 .font(.system(size: 16, weight: .medium))
-                .foregroundColor(Color(hex: "#15164f"))
+                .foregroundColor(Color.textPrimary)
                 .lineLimit(1)
             Spacer()
             Text(fmtTHB(item.price, decimals: 2))
                 .font(.system(size: 16, weight: .bold))
-                .foregroundColor(Color(hex: "#15164f"))
+                .foregroundColor(Color.textPrimary)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
@@ -1247,7 +1253,7 @@ struct CreateSplitView: View {
             Spacer(minLength: 20)
             Text(value)
                 .font(.system(size: 15, weight: .bold))
-                .foregroundColor(Color(hex: "#15164f"))
+                .foregroundColor(Color.textPrimary)
                 .multilineTextAlignment(.trailing)
         }
     }

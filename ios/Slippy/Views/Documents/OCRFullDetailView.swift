@@ -222,7 +222,7 @@ struct OCRFullDetailView: View {
                 }
 
                 // ── Vendor info ───────────────────────────────────────────────
-                infoCard(title: "ข้อมูลผู้ขาย", icon: "building.2.fill", iconColor: Color(hex: "#6366f1")) {
+                infoCard(title: "ข้อมูลผู้ขาย", icon: "building.2.fill", iconColor: Color.brand500) {
                     if isEditing {
                         editRow(label: "ชื่อร้าน / บริษัท", icon: "storefront", binding: $correction.vendorName)
                         editRow(label: "เลขผู้เสียภาษี", icon: "number", binding: $correction.vendorTaxId, keyboard: .numberPad)
@@ -308,7 +308,7 @@ struct OCRFullDetailView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(
-                            LinearGradient(colors: [Color(hex: "#6366f1"), Color(hex: "#818cf8")],
+                            LinearGradient(colors: [Color.brand500, Color.brand400],
                                            startPoint: .leading, endPoint: .trailing)
                         )
                         .cornerRadius(14)
@@ -334,7 +334,7 @@ struct OCRFullDetailView: View {
         ZStack {
             RoundedRectangle(cornerRadius: 20)
                 .fill(LinearGradient(
-                    colors: [Color(hex: "#6366f1"), Color(hex: "#818cf8")],
+                    colors: [Color.brand500, Color.brand400],
                     startPoint: .topLeading, endPoint: .bottomTrailing
                 ))
 
@@ -371,7 +371,7 @@ struct OCRFullDetailView: View {
             .padding(.vertical, 24)
             .padding(.horizontal, 20)
         }
-        .shadow(color: Color(hex: "#6366f1").opacity(0.3), radius: 12, x: 0, y: 6)
+        .shadow(color: Color.brand500.opacity(0.3), radius: 12, x: 0, y: 6)
     }
 
     private func amtChip(_ label: String, _ value: String) -> some View {
@@ -442,7 +442,7 @@ struct OCRFullDetailView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 13))
-                        .foregroundColor(Color(hex: "#d97706"))
+                        .foregroundColor(Color.warningText)
                     Text(w)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(Color.textPrimary)
@@ -570,7 +570,7 @@ struct OCRFullDetailView: View {
                         GeometryReader { geo in
                             HStack(spacing: 2) {
                                 RoundedRectangle(cornerRadius: 4)
-                                    .fill(Color(hex: "#6366f1"))
+                                    .fill(Color.brand500)
                                     .frame(width: geo.size.width * (sub / total))
                                 RoundedRectangle(cornerRadius: 4)
                                     .fill(Color(hex: "#f59e0b"))
@@ -582,7 +582,7 @@ struct OCRFullDetailView: View {
                         .padding(.top, 12)
 
                         HStack(spacing: 14) {
-                            legendDot(Color(hex: "#6366f1"), "ก่อนภาษี")
+                            legendDot(Color.brand500, "ก่อนภาษี")
                             legendDot(Color(hex: "#f59e0b"), "VAT")
                             Spacer()
                         }
@@ -590,7 +590,7 @@ struct OCRFullDetailView: View {
                     }
 
                     // Rows
-                    amtBreakRow("ราคาก่อนภาษี", extraction.subtotal, color: Color(hex: "#6366f1"))
+                    amtBreakRow("ราคาก่อนภาษี", extraction.subtotal, color: Color.brand500)
                     amtBreakRow("ภาษีมูลค่าเพิ่ม", extraction.vatAmount, color: Color(hex: "#f59e0b"))
                     if let wht = extraction.whtAmount {
                         amtBreakRow("หัก ณ ที่จ่าย", wht, color: Color(hex: "#ef4444"))
@@ -652,7 +652,7 @@ struct OCRFullDetailView: View {
     // Stats row
     private var statsRow: some View {
         HStack(spacing: 8) {
-            statChip("\(extraction.rawObservations.count)", "บรรทัด", "text.alignleft", Color(hex: "#6366f1"))
+            statChip("\(extraction.rawObservations.count)", "บรรทัด", "text.alignleft", Color.brand500)
             statChip("\(extraction.allAmountsFound.count)", "ตัวเลข", "number", Color(hex: "#10b981"))
             statChip("\(extraction.lineItems.count)", "รายการ", "list.bullet", Color(hex: "#f59e0b"))
         }
@@ -978,7 +978,7 @@ struct OCRFullDetailView: View {
     private func tagColor(_ tag: String) -> Color {
         switch tag {
         case "ยอดรวม":  return Color.brand500
-        case "ก่อนภาษี": return Color(hex: "#6366f1")
+        case "ก่อนภาษี": return Color.brand500
         case "VAT":     return Color(hex: "#f59e0b")
         case "WHT":     return Color(hex: "#ef4444")
         default:        return Color.textSecondary
@@ -1109,7 +1109,7 @@ struct OCRFullDetailView: View {
                         .padding(.vertical, 14)
                         .background(
                             LinearGradient(
-                                colors: [Color(hex: "#7c72f5"), Color(hex: "#6366f1"), Color(hex: "#4f46e5")],
+                                colors: [Color(hex: "#7c72f5"), Color.brand500, Color.brand600],
                                 startPoint: .topLeading, endPoint: .bottomTrailing
                             )
                         )

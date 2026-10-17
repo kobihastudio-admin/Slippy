@@ -103,8 +103,8 @@ struct NotificationsView: View {
     private func errorBanner(_ msg: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(Color(hex: "#f87171"))
-            Text(msg).font(.system(size: 13)).foregroundColor(Color(hex: "#f87171"))
+                .foregroundColor(Color.errorText)
+            Text(msg).font(.system(size: 13)).foregroundColor(Color.errorText)
         }
         .padding(12)
         .background(Color(hex: "#7f1d1d").opacity(0.12))
