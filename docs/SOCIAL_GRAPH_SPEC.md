@@ -1,5 +1,17 @@
 # Social Graph
 
+## iOS Friend Management (D-073, 2026-10-17)
+
+User acceptance 2026-10-17: the user confirmed the new friend-management screen works and explicitly authorized its commit, push and separate PR. This supersedes the pending user-acceptance status in the implementation evidence below; no additional production friendship mutations were made by the agent.
+
+The More menu exposes **จัดการเพื่อน**. One searchable list filters all, in-system and external friends. In-system profiles and relationship IDs reuse `SocialViewModel` and existing friendship queries/removal; adding and request handling link to the existing Social screen. No new server endpoint, schema or RLS policy is introduced.
+
+External friends reuse the account-isolated `LocalSplitFriendStore`, shared with the split composer. Add/edit preserves UUID on updates; removal does not mutate historical bill participant snapshots. Selected Contacts copy only the chosen display name. Names are required; manual LINE IDs are optional contact notes, not verified account links. Missing email, LINE or delivery channels stay blank. The screen neither registers nor sends notifications or messages.
+
+Implementation checks: local storage regression `ios/scripts/verify-friend-management.swift` covers identity preservation, trimming, empty-name rejection, account isolation and deletion. UI regression `testFriendManagementLocalEditAndChannels` uses an isolated synthetic account and covers blank channel fields, add/edit/reopen and type filtering. Signed build and actual UI evidence are recorded after execution; authenticated friendship changes are not performed automatically against production.
+
+Verification 2026-10-17: local-store regression PASS; signed device build `/private/tmp/slippy-friend-management-device-final.log` BUILD SUCCEEDED. Simulator `/private/tmp/slippy-friends-management-ui.log` and `.xcresult` TEST SUCCEEDED, 2 tests, 0 failures (management add/edit/reopen/filter/blank channels and existing split friend reuse). Inspected exported screenshot `/private/tmp/slippy-friends-management-images/1FD693E4-8E50-4951-930F-6C06A1777F77.png`: unavailable channels remain blank with legible labels. App installed on iPhone, installation suffix `095A8768-71BE-42FA-826F-0B27D2513ABA`. Actual authenticated in-system friend removal/addition and user acceptance of this new screen remain pending. No production friendship mutation was used in verification. Changes remain local and uncommitted.
+
 Status: **derived from code** (`web/src/app/api/friends/*`, `web/src/app/api/social/*`, `web/src/app/api/liff/community/*`), plus a read-only check of `friendships`' RLS policies. Where this document and the code disagree, the code is right. Human-to-human chat (`conversations`/`messages`) is a separate feature covered where it is used (trip chat in JOURNEY_MODULE_SPEC.md, LIFF friend chat in LINE_OA_SPEC.md) and not repeated here.
 
 Three largely independent sub-graphs share the "social" label: **friends** (mutual, request-based), **follows** (one-directional, feed-driving), and **community groups** (LIFF-only, LINE-group-linked). A fourth area — creator profiles and product/receipt-linked posts — exists only in the schema with no code wired to it yet.
