@@ -15,6 +15,7 @@ import {
   verifyLineAccessToken,
 } from "@/lib/liff-auth"
 import { checkRateLimit } from "@/lib/rate-limit"
+import { isPublicInviteLanding } from "@/lib/friend-invite"
 
 const PUBLIC_LIFF_API_PATHS = new Set([
   "/api/liff/bill-info",
@@ -127,6 +128,7 @@ export async function middleware(request: NextRequest) {
     || pathname.startsWith("/api/errors")     // client_error_logs — explicitly allows anon insert (route comment:
                                                  // "user might not be logged in yet"), but was missing here, so it
                                                  // was actually hitting this same redirect-instead-of-save bug
+    || isPublicInviteLanding(pathname, request.nextUrl.searchParams)  // static LINE landing for /friends/join/<token>?src=line — no DB, no session needed; the plain link stays behind login
     || pathname === "/"
 
   if (!user && !isPublic) {

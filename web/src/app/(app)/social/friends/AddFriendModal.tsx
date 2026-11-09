@@ -14,6 +14,7 @@ import QRCode  from "qrcode"
 import jsQR    from "jsqr"
 import { Icons } from "@/components/ui/icons"
 import { cn }     from "@/lib/utils"
+import { withLineSource } from "@/lib/friend-invite"
 
 /**
  * "เพิ่มเพื่อน" entry point covering the 3 recommended channels:
@@ -37,7 +38,8 @@ export default function AddFriendModal({
 }) {
   const [tab, setTab] = useState<Tab>("myqr")
 
-  const shareText = `มาเป็นเพื่อนกันใน Slippy กันเถอะ! ${inviteUrl}`
+  // Only the LINE share carries ?src=line (it opens the landing page); the QR and the copy-link keep the plain URL.
+  const shareText = `มาเป็นเพื่อนกันใน Slippy กันเถอะ! ${withLineSource(inviteUrl)}`
   const lineShareUrl = `https://line.me/R/msg/text/?${encodeURIComponent(shareText)}`
 
   return (
