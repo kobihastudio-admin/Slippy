@@ -147,6 +147,9 @@ private struct AppearancePreviewContent: View {
             case "more": MoreMenuView()
             case "login": LoginView()
             default: DashboardView()
+            case "chat-list-test": ChatListFixtureScreen()
+            case "chat-room-test": ChatRoomFixtureScreen()
+            case "add-friend-test": AddFriendFixtureScreen()
             }
         }
         .environmentObject(authVM)

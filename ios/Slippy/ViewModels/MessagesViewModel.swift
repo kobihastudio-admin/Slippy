@@ -15,11 +15,19 @@ final class MessagesViewModel: ObservableObject {
     @Published var isSending = false
     @Published var error: String?
 
+    #if DEBUG
+    /// Synthetic-data mode for simulator screenshots: no network reads or writes.
+    var isFixture = false
+    #endif
+
     private let db = SupabaseManager.shared.client
 
     // MARK: – Conversation list
 
     func loadConversations(myId: String) async {
+        #if DEBUG
+        if isFixture { return }
+        #endif
         isLoading = true
         defer { isLoading = false }
         do {
@@ -102,6 +110,9 @@ final class MessagesViewModel: ObservableObject {
     /// Finds an existing direct conversation with `friendId`, or creates one.
     /// Mirrors web/src/app/api/conversations/route.ts POST.
     func getOrCreateDirectConversation(myId: String, friendId: String) async -> String? {
+        #if DEBUG
+        if isFixture { return nil }
+        #endif
         do {
             let mine: [ConversationMemberRow] = try await db
                 .from("conversation_members")
@@ -159,6 +170,9 @@ final class MessagesViewModel: ObservableObject {
     // MARK: – Messages within a conversation
 
     func loadMessages(conversationId: String) async {
+        #if DEBUG
+        if isFixture { return }
+        #endif
         do {
             messages = try await db
                 .from("messages")
@@ -173,11 +187,22 @@ final class MessagesViewModel: ObservableObject {
         }
     }
 
-    func sendMessage(conversationId: String, senderId: String, body: String) async {
+    /// Returns `true` once the message is stored, `false` if it was not sent
+    /// (blank text, a send already in flight, or the insert failed). The
+    /// caller keeps the typed text on `false`.
+    @discardableResult
+    func sendMessage(conversationId: String, senderId: String, body: String) async -> Bool {
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !isSending else { return }
+        guard !trimmed.isEmpty, !isSending else { return false }
         isSending = true
         defer { isSending = false }
+
+        #if DEBUG
+        if isFixture {
+            error = "fixture: sending is disabled"
+            return false
+        }
+        #endif
 
         struct MsgInsert: Encodable {
             let conversation_id: String
@@ -193,7 +218,14 @@ final class MessagesViewModel: ObservableObject {
                 .execute()
                 .value
             if let msg = inserted.first { messages.append(msg) }
+        } catch {
+            self.error = error.localizedDescription
+            return false
+        }
 
+        // MESSAGE STORED: everything below is best-effort. A failure here must
+        // not make the caller restore the draft, or the message is sent twice.
+        do {
             struct TouchPatch: Encodable { let updated_at: String }
             let iso = ISO8601DateFormatter()
             iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -204,5 +236,6 @@ final class MessagesViewModel: ObservableObject {
         } catch {
             self.error = error.localizedDescription
         }
+        return true
     }
 }

@@ -1,41 +1,49 @@
 import SwiftUI
 import CoreImage.CIFilterBuiltins
 
-/// "เพิ่มเพื่อน" entry point — mirrors web/src/app/social/friends/AddFriendModal.tsx
-/// so both platforms recommend the same 3 channels:
-///   1. QR ของฉัน   — show a QR for others to scan (in-system, in-person)
-///   2. สแกน QR      — scan someone else's QR (in-system, in-person)
-///   3. แชร์ผ่าน LINE — out-of-system, reaches LINE's much larger install base
+/// "เพิ่มเพื่อน" — one scrolling screen: search by name, three ways to add
+/// (scan a QR, show my QR, share my link) and incoming requests. Mirrors the
+/// channels of web/src/app/social/friends/AddFriendModal.tsx.
 struct SocialAddFriendSheet: View {
     @EnvironmentObject var authVM: AuthViewModel
     @ObservedObject var vm: SocialViewModel
     @Environment(\.dismiss) private var dismiss
 
-    @State private var tab: Tab = .myQR
-    @State private var showScanner = false
+    @State private var route: Route?
     @State private var toast: String?
 
     private var userId: String { authVM.session?.user.id.uuidString ?? "" }
 
-    enum Tab: String, CaseIterable { case myQR = "QR ของฉัน", scan = "สแกน QR", line = "แชร์ LINE" }
+    enum Route: String, Identifiable, Hashable {
+        case scan, myQR, share
+        var id: String { rawValue }
+    }
 
     var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                Picker("", selection: $tab) {
-                    ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .padding()
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 20) {
+                    FriendSearchBar(vm: vm)
 
-                switch tab {
-                case .myQR: myQrPanel
-                case .scan: scanPanel
-                case .line: lineSharePanel
-                }
+                    if !vm.searchResults.isEmpty {
+                        FriendSearchResults(vm: vm, userId: userId)
+                    }
 
-                Spacer()
+                    HStack(spacing: 10) {
+                        tile(.scan, icon: "qrcode.viewfinder", title: "สแกน QR")
+                        tile(.myQR, icon: "qrcode", title: "QR ของฉัน")
+                        tile(.share, icon: "link", title: "แชร์ลิงก์")
+                    }
+
+                    if !vm.pendingRequests.isEmpty {
+                        FriendRequestList(vm: vm, userId: userId, showsCount: true)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 32)
             }
+            .background(Color.background.ignoresSafeArea())
             .navigationTitle("เพิ่มเพื่อน")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -43,23 +51,85 @@ struct SocialAddFriendSheet: View {
                     Button("ปิด") { dismiss() }
                 }
             }
+            .navigationDestination(item: $route) { route in
+                switch route {
+                case .scan:
+                    ScrollView { scanPanel }
+                        .background(Color.background.ignoresSafeArea())
+                        .navigationTitle("สแกน QR")
+                        .navigationBarTitleDisplayMode(.inline)
+                case .myQR:
+                    ScrollView { myQrPanel }
+                        .frame(maxWidth: .infinity)
+                        .background(Color.background.ignoresSafeArea())
+                        .navigationTitle("QR ของฉัน")
+                        .navigationBarTitleDisplayMode(.inline)
+                case .share:
+                    ScrollView { lineSharePanel }
+                        .background(Color.background.ignoresSafeArea())
+                        .navigationTitle("แชร์ลิงก์")
+                        .navigationBarTitleDisplayMode(.inline)
+                }
+            }
+            .onAppear { clearSearch() }
+            .onDisappear { clearSearch() }
             .task {
                 guard !userId.isEmpty, vm.inviteToken == nil else { return }
                 await vm.loadOrCreateInviteLink(userId: userId)
             }
-            .overlay(alignment: .bottom) {
-                if let toast {
-                    Text(toast)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 16).padding(.vertical, 10)
-                        .background(Color.black.opacity(0.8))
-                        .clipShape(Capsule())
-                        .padding(.bottom, 24)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
+        }
+        .overlay(alignment: .bottom) {
+            if let toast {
+                Text(toast)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .background(Color.black.opacity(0.8))
+                    .clipShape(Capsule())
+                    .padding(.bottom, 24)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+    }
+
+    /// The query and results live on the view model shared with the Social tab;
+    /// don't let one screen's search show up on the other.
+    private func clearSearch() {
+        vm.searchQuery = ""
+        vm.searchResults = []
+    }
+
+    private func showToast(_ message: String) {
+        withAnimation { toast = message }
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            withAnimation { if toast == message { toast = nil } }
+        }
+    }
+
+    private func tile(_ target: Route, icon: String, title: String) -> some View {
+        Button {
+            hapticLight()
+            route = target
+        } label: {
+            VStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(Color.brand500)
+                    .frame(width: 44, height: 44)
+                    .background(Color.brand50)
+                    .clipShape(Circle())
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Color.textPrimary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(Color.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.border, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: – Show my QR
@@ -83,6 +153,7 @@ struct SocialAddFriendSheet: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
         }
+        .frame(maxWidth: .infinity)
         .padding(.top, 24)
     }
 
@@ -124,12 +195,12 @@ struct SocialAddFriendSheet: View {
             do {
                 let name = try await vm.acceptInvite(token: String(token))
                 hapticSuccess()
-                withAnimation { toast = "เพิ่ม \(name) เป็นเพื่อนแล้ว 🎉" }
+                showToast("เพิ่ม \(name) เป็นเพื่อนแล้ว 🎉")
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 if !userId.isEmpty { await vm.load(userId: userId) }
                 dismiss()
             } catch {
-                withAnimation { toast = "QR ไม่ถูกต้องหรือหมดอายุแล้ว" }
+                showToast("QR ไม่ถูกต้องหรือหมดอายุแล้ว")
             }
         }
     }
@@ -153,7 +224,7 @@ struct SocialAddFriendSheet: View {
             Button {
                 guard let url = vm.inviteURL else { return }
                 UIPasteboard.general.string = url.absoluteString
-                withAnimation { toast = "คัดลอกลิงก์แล้ว!" }
+                showToast("คัดลอกลิงก์แล้ว!")
             } label: {
                 Text("คัดลอกลิงก์")
                     .font(.system(size: 14, weight: .medium))

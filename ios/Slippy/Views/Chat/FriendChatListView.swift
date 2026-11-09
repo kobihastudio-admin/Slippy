@@ -1,32 +1,50 @@
 import SwiftUI
 
-/// "แชทกับเพื่อน" — list of 1:1 conversations, matching the visual language
-/// of the rest of this redesigned app (Dashboard/Split screens). Tapping a
-/// friend who has no conversation yet creates one on the spot.
+/// "แชท" — flat LINE-style list of 1:1 conversations. Tapping a friend who has
+/// no conversation yet creates one on the spot.
 struct FriendChatListView: View {
     @EnvironmentObject var authVM: AuthViewModel
-    @StateObject private var vm = MessagesViewModel()
-    @StateObject private var socialVM = SocialViewModel()
+    @StateObject private var vm: MessagesViewModel
+    @StateObject private var socialVM: SocialViewModel
     @State private var showFriendPicker = false
     @State private var openConv: ConvId?
+    @State private var query = ""
 
     private struct ConvId: Identifiable, Hashable { let id: String }
 
+    /// The optional view models exist so Debug fixtures can inject synthetic
+    /// data; production callers use `FriendChatListView()`.
+    init(viewModel: MessagesViewModel? = nil, socialViewModel: SocialViewModel? = nil) {
+        _vm = StateObject(wrappedValue: viewModel ?? MessagesViewModel())
+        _socialVM = StateObject(wrappedValue: socialViewModel ?? SocialViewModel())
+    }
+
     private var myId: String { authVM.session?.user.id.uuidString ?? "" }
+
+    private var visibleConversations: [ChatConversation] {
+        vm.conversations.filter {
+            ChatPresentation.matches(
+                query: query,
+                name: $0.displayName,
+                lastMessage: ChatPresentation.previewText(type: $0.lastMessageType, body: $0.lastMessageBody))
+        }
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.surfaceMuted.ignoresSafeArea()
+                Color.surface.ignoresSafeArea()
 
-                if vm.isLoading {
+                if vm.isLoading && vm.conversations.isEmpty {
                     ProgressView().tint(Color.brand500)
                 } else if vm.conversations.isEmpty {
                     emptyState
+                } else if visibleConversations.isEmpty {
+                    noResults
                 } else {
                     ScrollView {
-                        LazyVStack(spacing: 10) {
-                            ForEach(vm.conversations) { conv in
+                        LazyVStack(spacing: 0) {
+                            ForEach(visibleConversations) { conv in
                                 Button {
                                     hapticLight()
                                     openConv = ConvId(id: conv.id)
@@ -34,24 +52,31 @@ struct FriendChatListView: View {
                                     ConversationRowView(conv: conv)
                                 }
                                 .buttonStyle(.plain)
+                                Divider().padding(.leading, 72)
                             }
                         }
-                        .padding(16)
                     }
                 }
             }
-            .navigationTitle("แชทกับเพื่อน")
+            .navigationTitle("แชท")
             .navigationBarTitleDisplayMode(.large)
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "ค้นหา")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { hapticLight(); showFriendPicker = true } label: {
                         Image(systemName: "square.and.pencil")
                             .foregroundColor(Color.brand500)
                     }
+                    .accessibilityLabel("เริ่มแชทใหม่")
                 }
             }
             .navigationDestination(item: $openConv) { conv in
-                FriendChatRoomView(vm: vm, conversationId: conv.id, currentUserId: myId)
+                let info = vm.conversations.first { $0.id == conv.id }
+                FriendChatRoomView(
+                    vm: vm, conversationId: conv.id, currentUserId: myId,
+                    friendName: info?.displayName,
+                    friendAvatarUrl: info?.displayAvatarUrl,
+                    showsAvatars: info?.type == "direct")
             }
             .sheet(isPresented: $showFriendPicker) {
                 FriendPickerSheet(friends: socialVM.friends) { friend in
@@ -65,10 +90,14 @@ struct FriendChatListView: View {
                 }
             }
             .task {
+                guard !myId.isEmpty else { return }
                 await vm.loadConversations(myId: myId)
                 await socialVM.load(userId: myId)
             }
-            .refreshable { await vm.loadConversations(myId: myId) }
+            .refreshable {
+                guard !myId.isEmpty else { return }
+                await vm.loadConversations(myId: myId)
+            }
         }
     }
 
@@ -76,7 +105,7 @@ struct FriendChatListView: View {
         VStack(spacing: 14) {
             Image(systemName: "message")
                 .font(.system(size: 44, weight: .light))
-                .foregroundColor(Color(hex: "#c4b5fd"))
+                .foregroundColor(Color.brand300)
             Text("ยังไม่มีการสนทนา")
                 .font(.system(size: 15, weight: .medium))
                 .foregroundColor(Color.textSecondary)
@@ -91,58 +120,47 @@ struct FriendChatListView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+
+    private var noResults: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 34, weight: .light))
+                .foregroundColor(Color.textSecondary.opacity(0.6))
+            Text("ไม่พบ “\(query.trimmingCharacters(in: .whitespacesAndNewlines))”")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(Color.textSecondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
 }
 
 private struct ConversationRowView: View {
     let conv: ChatConversation
 
-    private func lastMessagePreview() -> String {
-        switch conv.lastMessageType {
-        case "image": return "📷 รูปภาพ"
-        case "video": return "🎬 วิดีโอ"
-        case "file":  return "📎 ไฟล์แนบ"
-        default:      return conv.lastMessageBody ?? "เริ่มสนทนา..."
-        }
-    }
-
     var body: some View {
         HStack(spacing: 12) {
-            ZStack {
-                Circle().fill(Color.brand50).frame(width: 48, height: 48)
-                if let urlStr = conv.displayAvatarUrl, let url = URL(string: urlStr) {
-                    AsyncImage(url: url) { phase in
-                        if case .success(let img) = phase {
-                            img.resizable().scaledToFill().frame(width: 48, height: 48).clipShape(Circle())
-                        } else {
-                            Text(conv.displayName.prefix(1).uppercased())
-                                .font(.system(size: 17, weight: .bold)).foregroundColor(Color.accent)
-                        }
-                    }
-                } else {
-                    Text(conv.displayName.prefix(1).uppercased())
-                        .font(.system(size: 17, weight: .bold)).foregroundColor(Color.accent)
-                }
-            }
+            ChatAvatar(name: conv.displayName, url: conv.displayAvatarUrl, size: 44)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(conv.displayName)
-                    .font(.system(size: 14.5, weight: .semibold))
-                    .foregroundColor(Color.textPrimary)
-                    .lineLimit(1)
-                Text(lastMessagePreview())
-                    .font(.system(size: 12.5))
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(conv.displayName)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(Color.textPrimary)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Text(ChatPresentation.listTimeLabel(conv.updatedAt))
+                        .font(.system(size: 11))
+                        .foregroundColor(Color.textSecondary)
+                }
+                Text(ChatPresentation.previewText(type: conv.lastMessageType, body: conv.lastMessageBody))
+                    .font(.system(size: 13))
                     .foregroundColor(Color.textSecondary)
                     .lineLimit(1)
             }
-            Spacer()
-            Text(relTime(conv.updatedAt))
-                .font(.system(size: 10.5))
-                .foregroundColor(Color.textSecondary)
         }
-        .padding(12)
-        .background(Color.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.04), radius: 6, x: 0, y: 2)
+        .padding(.horizontal, 16).padding(.vertical, 10)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -156,15 +174,14 @@ private struct FriendPickerSheet: View {
             List(friends) { friend in
                 Button { onPick(friend) } label: {
                     HStack(spacing: 12) {
-                        Circle().fill(Color.brand50).frame(width: 40, height: 40)
-                            .overlay(Text(friend.displayName.prefix(1).uppercased())
-                                .font(.system(size: 15, weight: .bold)).foregroundColor(Color.accent))
+                        ChatAvatar(name: friend.displayName, url: friend.avatarUrl, size: 44)
                         Text(friend.displayName)
-                            .font(.system(size: 14.5))
+                            .font(.system(size: 15))
                             .foregroundColor(Color.textPrimary)
                     }
                 }
             }
+            .listStyle(.plain)
             .overlay {
                 if friends.isEmpty {
                     Text("ยังไม่มีเพื่อน — เพิ่มเพื่อนก่อนเริ่มแชทได้ที่แท็บโซเชียล")
