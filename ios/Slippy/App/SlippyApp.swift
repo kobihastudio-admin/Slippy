@@ -8,6 +8,7 @@ struct SlippyApp: App {
     @ObservedObject private var settings = AppSettings.shared
     @State private var sharedImages: [UIImage] = []
     @State private var showSharedImport = false
+    @StateObject private var pendingInvite = PendingInviteStore()
 
     init() {
         #if DEBUG
@@ -33,6 +34,9 @@ struct SlippyApp: App {
                         }
                         return
                     }
+                    // Friend-invite deep link (slippy://friends/join/<token>): only remembered here;
+                    // the confirmation sheet decides. Every other URL falls through to the LINE SDK below.
+                    if pendingInvite.receive(url) { return }
                     // LINE SDK — must handle every non-import URL so LINE callbacks work
                     _ = LoginManager.shared.application(UIApplication.shared, open: url)
                 }
@@ -43,6 +47,13 @@ struct SlippyApp: App {
                         SharedContainerReader.clearPending()
                     }
                     .environmentObject(authVM)
+                }
+                // `isSignedIn`, not `session != nil`: during the MFA challenge a session already exists
+                // but the user has not passed the second factor, and redeeming an invite must wait for it.
+                .inviteLinkSheet(pendingInvite, isSignedIn: authVM.isSignedIn)
+                // A pending/finished invite belongs to the account that opened it: sign-out or an account switch drops it.
+                .onChange(of: authVM.session?.user.id) { old, new in
+                    if old != nil && old != new { pendingInvite.dismiss() }
                 }
                 // Also pick up pending images when returning to foreground
                 .onReceive(NotificationCenter.default.publisher(
@@ -126,6 +137,7 @@ private struct AppearancePreviewContent: View {
             case "add-friend-test": AddFriendFixtureScreen()
             case "friend-balance-test": FriendBalanceFixtureScreen()
             case "balance-detail-test": BalanceDetailFixtureScreen()
+            case "invite-link-test": InviteLinkFixtureScreen()
             case "split-redesign-details":
                 CreateSplitView.redesignPreview(vm: splitVM, step: .details)
                     .environment(\.colorScheme, ProcessInfo.processInfo.environment["SLIPPY_SPLIT_TEST_STYLE"] == "light" ? .light : .dark)

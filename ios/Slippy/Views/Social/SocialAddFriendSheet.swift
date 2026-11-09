@@ -246,15 +246,19 @@ struct SocialAddFriendSheet: View {
     }
 
     private func shareViaLine() {
-        guard let url = vm.inviteURL else { return }
+        guard let inviteURL = vm.inviteURL else { return }
+        // Only the LINE share carries ?src=line (it opens the "open in Slippy" landing); QR and copy-link keep the plain URL.
+        let url = InviteLink.lineShareURL(inviteURL)
         let text = "มาเป็นเพื่อนกันใน Slippy กันเถอะ! \(url.absoluteString)"
-        let encoded = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? text
+        // The text is encoded like encodeURIComponent (InviteLink.percentEncodedForLine): with
+        // `.urlQueryAllowed` the `?src=line` would escape the message and become the URL's own query.
         // `line://` opens the LINE app's own share sheet directly if installed;
         // the https:// universal link is the fallback for everyone else,
         // same two-tier approach as api/src/services/line-flex.ts uses server-side.
-        if let appURL = URL(string: "line://msg/text/\(encoded)"), UIApplication.shared.canOpenURL(appURL) {
+        let urls = InviteLink.lineMessageURLs(text: text)
+        if let appURL = urls.app, UIApplication.shared.canOpenURL(appURL) {
             UIApplication.shared.open(appURL)
-        } else if let webURL = URL(string: "https://line.me/R/msg/text/?\(encoded)") {
+        } else if let webURL = urls.web {
             UIApplication.shared.open(webURL)
         }
     }
