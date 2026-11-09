@@ -1,4 +1,6 @@
--- 20261109130000_line_synced_groups.sql   (NOT APPLIED — gated by D-077; apply only after explicit approval)
+-- 20261109130000_line_synced_groups.sql
+-- APPLIED 2026-11-09 to Supabase project ntzztcnkedcxfjvfxjrf ("slippy") with the user's explicit approval; the hosted
+-- migration list records it as version 20261109131402 (name line_synced_groups), not as this file's timestamp.
 -- Per-user, per-group opt-in for ingesting the slips/images/files a user posts in a LINE group.
 -- Spec: docs/superpowers/specs/2026-11-09-line-group-sync-design.md
 --
