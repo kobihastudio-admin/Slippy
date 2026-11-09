@@ -32,7 +32,7 @@ final class SplitViewModel: ObservableObject {
         totalAmount: Double,
         note: String?,
         documentID: String? = nil,
-        participants: [(name: String, amount: Double)]
+        participants: [(name: String, amount: Double, userId: String?)]
     ) async throws -> String? {
         struct BillInsert: Encodable {
             let organization_id: String
@@ -68,10 +68,11 @@ final class SplitViewModel: ObservableObject {
             let split_bill_id: String
             let name: String
             let amount: Double
+            let user_id: String?   // nil is omitted from the JSON, so an unlinked person inserts exactly as before
         }
 
         let participantRows = participants.map {
-            ParticipantInsert(split_bill_id: row.id, name: $0.name, amount: $0.amount)
+            ParticipantInsert(split_bill_id: row.id, name: $0.name, amount: $0.amount, user_id: $0.userId)
         }
 
         try await db

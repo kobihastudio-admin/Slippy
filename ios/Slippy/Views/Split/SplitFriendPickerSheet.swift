@@ -5,6 +5,9 @@ import ContactsUI
 struct SplitFriendPickerSheet: View {
     let accountID: String
     let onAdd: (String, Double) -> Void
+    /// Accepted Slippy friends. Choosing one links the participant to their account.
+    var slippyFriends: [UserProfile] = []
+    var onAddSlippyFriend: ((UserProfile, Double) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var friends: [LocalSplitFriend] = []
     @State private var name = ""
@@ -28,6 +31,22 @@ struct SplitFriendPickerSheet: View {
         NavigationStack {
             Form {
                 if let error { Text(error).foregroundStyle(Color.statusFailed) }
+                if !slippyFriends.isEmpty {
+                    Section("เพื่อนใน Slippy") {
+                        ForEach(slippyFriends) { friend in
+                            Button {
+                                do {
+                                    let value = try parsedAmount()
+                                    if let onAddSlippyFriend { onAddSlippyFriend(friend, value) }
+                                    else { onAdd(friend.displayName, value) }
+                                    dismiss()
+                                } catch { self.error = error.localizedDescription }
+                            } label: {
+                                Text(friend.displayName).foregroundStyle(Color.textPrimary)
+                            }
+                        }
+                    }
+                }
                 Section("เพิ่มเพื่อน") {
                     TextField("ชื่อ", text: $name)
                         .focused($focusedField, equals: .name)

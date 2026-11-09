@@ -99,7 +99,8 @@ final class MessagesViewModel: ObservableObject {
                     id: conv.id, type: conv.type,
                     displayName: displayName, displayAvatarUrl: displayAvatar,
                     updatedAt: conv.updatedAt,
-                    lastMessageBody: last?.body, lastMessageType: last?.msgType
+                    lastMessageBody: last?.body, lastMessageType: last?.msgType,
+                    otherUserId: conv.type == "direct" ? other?.id : nil
                 )
             }
         } catch {

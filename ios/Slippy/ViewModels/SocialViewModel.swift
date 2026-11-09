@@ -99,12 +99,17 @@ final class SocialViewModel: ObservableObject {
                 .execute()
                 .value
 
+            // `userId` usually comes from `UUID.uuidString` (UPPERCASE) while Postgres
+            // returns lowercase uuids, so compare case-insensitively. A plain `==`
+            // never matched: the user was treated as the "other side" of their own
+            // requests and incoming requests were missed.
+            let me = userId.lowercased()
             let accepted = rows.filter { $0.status == "accepted" }
-            let incoming = rows.filter { $0.status == "pending" && $0.addresseeId == userId }
+            let incoming = rows.filter { $0.status == "pending" && $0.addresseeId.lowercased() == me }
 
             // Collect friend IDs from accepted friendships
             let friendIds = accepted.map { row in
-                row.requesterId == userId ? row.addresseeId : row.requesterId
+                row.requesterId.lowercased() == me ? row.addresseeId : row.requesterId
             }
 
             if !friendIds.isEmpty {

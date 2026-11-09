@@ -6,6 +6,7 @@ struct FriendChatListView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @StateObject private var vm: MessagesViewModel
     @StateObject private var socialVM: SocialViewModel
+    @StateObject private var balanceVM: BalanceViewModel
     @State private var showFriendPicker = false
     @State private var openConv: ConvId?
     @State private var query = ""
@@ -14,9 +15,10 @@ struct FriendChatListView: View {
 
     /// The optional view models exist so Debug fixtures can inject synthetic
     /// data; production callers use `FriendChatListView()`.
-    init(viewModel: MessagesViewModel? = nil, socialViewModel: SocialViewModel? = nil) {
+    init(viewModel: MessagesViewModel? = nil, socialViewModel: SocialViewModel? = nil, balanceViewModel: BalanceViewModel? = nil) {
         _vm = StateObject(wrappedValue: viewModel ?? MessagesViewModel())
         _socialVM = StateObject(wrappedValue: socialViewModel ?? SocialViewModel())
+        _balanceVM = StateObject(wrappedValue: balanceViewModel ?? BalanceViewModel())
     }
 
     private var myId: String { authVM.session?.user.id.uuidString ?? "" }
@@ -76,7 +78,9 @@ struct FriendChatListView: View {
                     vm: vm, conversationId: conv.id, currentUserId: myId,
                     friendName: info?.displayName,
                     friendAvatarUrl: info?.displayAvatarUrl,
-                    showsAvatars: info?.type == "direct")
+                    showsAvatars: info?.type == "direct",
+                    friendUserId: info?.otherUserId,
+                    balanceViewModel: info?.otherUserId == nil ? nil : balanceVM)
             }
             .sheet(isPresented: $showFriendPicker) {
                 FriendPickerSheet(friends: socialVM.friends) { friend in

@@ -121,6 +121,11 @@ private struct AppearancePreviewContent: View {
             switch screen {
             case "trip": TripAppearancePreview()
             case "friends-management-test": NavigationStack { FriendManagementView() }
+            case "chat-list-test": ChatListFixtureScreen()
+            case "chat-room-test": ChatRoomFixtureScreen()
+            case "add-friend-test": AddFriendFixtureScreen()
+            case "friend-balance-test": FriendBalanceFixtureScreen()
+            case "balance-detail-test": BalanceDetailFixtureScreen()
             case "split-redesign-details":
                 CreateSplitView.redesignPreview(vm: splitVM, step: .details)
                     .environment(\.colorScheme, ProcessInfo.processInfo.environment["SLIPPY_SPLIT_TEST_STYLE"] == "light" ? .light : .dark)
@@ -147,9 +152,6 @@ private struct AppearancePreviewContent: View {
             case "more": MoreMenuView()
             case "login": LoginView()
             default: DashboardView()
-            case "chat-list-test": ChatListFixtureScreen()
-            case "chat-room-test": ChatRoomFixtureScreen()
-            case "add-friend-test": AddFriendFixtureScreen()
             }
         }
         .environmentObject(authVM)

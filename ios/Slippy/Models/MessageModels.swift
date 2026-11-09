@@ -45,6 +45,8 @@ struct ChatConversation: Identifiable {
     let updatedAt: String
     var lastMessageBody: String?
     var lastMessageType: String?
+    /// The other person's user id in a direct chat; `nil` for groups.
+    var otherUserId: String? = nil
 }
 
 struct FriendMessage: Codable, Identifiable, Equatable {

@@ -86,13 +86,16 @@ struct ChatListFixtureScreen: View {
 
 struct ChatRoomFixtureScreen: View {
     @StateObject private var messages = MessagesViewModel.chatFixture()
+    @StateObject private var balances = BalanceViewModel.fixture()
     var body: some View {
         NavigationStack {
             FriendChatRoomView(
                 vm: messages,
                 conversationId: MessagesViewModel.fixtureConversationId,
                 currentUserId: MessagesViewModel.fixtureMyId,
-                friendName: "พลอย", friendAvatarUrl: nil, showsAvatars: true)
+                friendName: "พลอย", friendAvatarUrl: nil, showsAvatars: true,
+                friendUserId: MessagesViewModel.fixtureFriendId,
+                balanceViewModel: balances)
         }
     }
 }

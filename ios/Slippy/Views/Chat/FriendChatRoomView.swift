@@ -13,6 +13,9 @@ struct FriendChatRoomView: View {
     var friendAvatarUrl: String? = nil
     /// Show the sender's avatar next to a run of messages. Only meaningful for 1:1 chats.
     var showsAvatars = false
+    /// Set only for 1:1 chats so the trip chat is unchanged.
+    var friendUserId: String? = nil
+    var balanceViewModel: BalanceViewModel? = nil
 
     @State private var input = ""
     @State private var sendFailed = false
@@ -52,6 +55,9 @@ struct FriendChatRoomView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if let balanceViewModel, let friendUserId {
+                BalanceChatLine(vm: balanceViewModel, friendId: friendUserId, friendName: friendName ?? "")
+            }
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 6) {
@@ -86,6 +92,7 @@ struct FriendChatRoomView: View {
             // Never flash the previously opened conversation's messages.
             if let first = vm.messages.first, first.conversationId != conversationId { vm.messages = [] }
             await vm.loadMessages(conversationId: conversationId)
+            await balanceViewModel?.load()
         }
         .onReceive(refreshTimer) { _ in
             Task { await vm.loadMessages(conversationId: conversationId) }

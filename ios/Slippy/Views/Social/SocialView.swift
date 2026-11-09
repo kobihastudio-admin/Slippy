@@ -7,6 +7,8 @@ struct SocialView: View {
     @State private var selectedTab = 0
     @State private var showPlayDashboard = false
     @State private var showAddFriend = false
+    @StateObject private var balanceVM = BalanceViewModel()
+    @State private var balanceFriend: UserProfile?
 
     private var userId: String { authVM.session?.user.id.uuidString ?? "" }
 
@@ -63,6 +65,10 @@ struct SocialView: View {
         .task {
             guard !userId.isEmpty else { return }
             await vm.load(userId: userId)
+            await balanceVM.load()
+        }
+        .sheet(item: $balanceFriend) { friend in
+            BalanceDetailView(friendId: friend.id, friendName: friend.displayName, vm: balanceVM)
         }
         .sheet(isPresented: $showPlayDashboard) {
             PlayDashboardView()
@@ -127,6 +133,7 @@ struct SocialView: View {
         }
         .refreshable {
             await vm.load(userId: userId)
+            await balanceVM.load()
         }
     }
 
@@ -139,25 +146,14 @@ struct SocialView: View {
                     .foregroundColor(Color.textSecondary)
 
                 ForEach(vm.friends) { friend in
-                    HStack(spacing: 12) {
-                        initialsView(name: friend.displayName)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(friend.displayName)
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(Color.textPrimary)
-                            Text(friend.email)
-                                .font(.system(size: 12))
-                                .foregroundColor(Color.textSecondary)
-                        }
-                        Spacer()
-                        Image(systemName: "person.fill.checkmark")
-                            .foregroundColor(Color.brand500.opacity(0.7))
-                            .font(.system(size: 16))
+                    Button {
+                        hapticLight()
+                        balanceFriend = friend
+                    } label: {
+                        FriendRow(friend: friend,
+                                  net: balanceVM.loadFailed ? nil : balanceVM.summary(for: friend.id)?.net)
                     }
-                    .padding(12)
-                    .background(Color.surface)
-                    .cornerRadius(12)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.border, lineWidth: 1))
+                    .buttonStyle(.plain)
                 }
             } else if vm.searchQuery.isEmpty && !vm.isLoading {
                 emptyFriendsState

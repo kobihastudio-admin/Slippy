@@ -45,6 +45,8 @@ struct DraftParticipant: Identifiable {
     var amount: Double      // สำหรับ custom mode
     var percentage: Double  // สำหรับ percentage mode (0–100)
     var items: [UUID]       // สำหรับ item mode
+    /// Set only when the person was picked from the Slippy friends list.
+    var userId: String? = nil
 }
 
 struct DraftItem: Identifiable {
@@ -136,6 +138,7 @@ struct CreateSplitView: View {
     @State private var participants: [DraftParticipant] = []
     @State private var draftItems: [DraftItem] = []
     @State private var showAddParticipant = false
+    @StateObject private var socialVM = SocialViewModel()
     @State private var showAddItem = false
     @State private var isSaving = false
     @State private var validationError: String?
@@ -299,16 +302,17 @@ struct CreateSplitView: View {
                 }
             }
             .navigationBarHidden(true)
+            .task {
+                if let id = authVM.session?.user.id.uuidString { await socialVM.load(userId: id) }
+            }
             .sheet(isPresented: $showAddParticipant) {
-                SplitFriendPickerSheet(accountID: authVM.session?.user.id.uuidString ?? "") { name, amount in
-                    let pct = participants.isEmpty ? 100.0 : 0.0
-                    participants.append(DraftParticipant(name: name, amount: amount, percentage: pct, items: []))
-                    for index in receipts.indices where receipts[index].splitMode == .percentage {
-                        normalizeReceiptPercentages($receipts[index])
-                    }
-                    if splitMode == .equal { recalcEqual() }
-                    if splitMode == .percentage { normalizePercentages() }
-                }
+                SplitFriendPickerSheet(
+                    accountID: authVM.session?.user.id.uuidString ?? "",
+                    onAdd: { name, amount in appendParticipant(name: name, amount: amount, userId: nil) },
+                    slippyFriends: socialVM.friends,
+                    onAddSlippyFriend: { friend, amount in
+                        appendParticipant(name: friend.displayName, amount: amount, userId: friend.id)
+                    })
             }
             .sheet(isPresented: $showAddItem) {
                 AddItemSheet { name, price in
@@ -1792,6 +1796,16 @@ struct CreateSplitView: View {
         recalcPercentage()
     }
 
+    private func appendParticipant(name: String, amount: Double, userId: String?) {
+        let pct = participants.isEmpty ? 100.0 : 0.0
+        participants.append(DraftParticipant(name: name, amount: amount, percentage: pct, items: [], userId: userId))
+        for index in receipts.indices where receipts[index].splitMode == .percentage {
+            normalizeReceiptPercentages($receipts[index])
+        }
+        if splitMode == .equal { recalcEqual() }
+        if splitMode == .percentage { normalizePercentages() }
+    }
+
     private func effectiveAmounts() -> [(name: String, amount: Double)] {
         let raw: [(name: String, amount: Double)]
         if usesPerReceiptSplit {
@@ -1924,6 +1938,7 @@ struct CreateSplitView: View {
         guard validateDetails(), validateFriends() else { return }
 
         let amounts = effectiveAmounts()
+        let linkedUserIds = participants.map(\.userId)   // captured with `amounts`, same order
         isSaving = true
         Task {
             defer { isSaving = false }
@@ -1935,7 +1950,7 @@ struct CreateSplitView: View {
                     totalAmount: totalAmount,
                     note: persistedNote,
                     documentID: receipts.compactMap(\.sourceDocumentID).first,
-                    participants: amounts.map { ($0.name, $0.amount) }
+                    participants: amounts.indices.map { (amounts[$0].name, amounts[$0].amount, linkedUserIds[$0]) }
                 )
                 hapticSuccess()
                 await vm.load(orgId: orgId)
