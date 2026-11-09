@@ -7,6 +7,10 @@ import { handleSplitCommand, handleClaimCommand, handleSplitStatus } from "../se
 import { populateLifeGraph } from "../services/life-graph"
 import { handleCreateSportGroup, handleSportStatus, handleSportPay, handleSportToggle, handleLinkGroupCommand, handleLinkGroupList, handleLinkGroupAsk, handleSetLineGroup, handleSportInviteCommand, handleCreateSportClub, handleSetClubConcept, handleSetClubMap, handleCreateSportSession, handleSportRoster } from "../services/line-sport"
 import { handleCreateTripGroup, handleTripStatus, handleTripPay } from "../services/line-trip"
+import { supabaseSyncStore } from "../services/line-group-sync"
+import {
+  classifyGroupSyncEvent, lineGroupIdOf, makeSenders, runSyncCommand, SYNC_TEXT,
+} from "../services/line-group-sync-logic"
 import {
   docResultCard, summaryCard, statusListCard,
   welcomeCard, uploadAckCard, commandMenuCard,
@@ -24,7 +28,7 @@ function verifySignature(rawBody: Buffer | string, sig: string): boolean {
   catch { return false }
 }
 
-async function replyMsg(replyToken: string, messages: object[]) {
+async function replyMsg(replyToken: string, messages: object[]): Promise<boolean> {
   const res = await fetch(`${LINE_API}/message/reply`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token()}` },
@@ -33,7 +37,9 @@ async function replyMsg(replyToken: string, messages: object[]) {
   if (!res.ok) {
     const err = await res.text()
     console.error("[LINE:reply] failed", res.status, err.slice(0, 200))
+    return false
   }
+  return true
 }
 
 async function pushMsg(to: string, messages: object[]) {
@@ -100,7 +106,8 @@ async function handleEvent(event: any) {
         txt(
           "สวัสดีครับ ผม Slippy 🤖\n" +
           "เชื่อมกลุ่มนี้กับกลุ่มกีฬา/นัดที่สร้างไว้ใน Slippy ได้เลย — พิมพ์ /linkgroup เพื่อเลือกจากรายการ\n" +
-          "(ถ้ายังไม่ได้เชื่อมบัญชี LINE กับ Slippy ให้พิมพ์ /connect ก่อนครับ)"
+          "(ถ้ายังไม่ได้เชื่อมบัญชี LINE กับ Slippy ให้พิมพ์ /connect ก่อนครับ)\n" +
+          "อยากให้สลิป/รูป/ไฟล์ที่คุณส่งในกลุ่มนี้เข้า Slippy ของคุณเอง — พิมพ์ /syncgroup (ซิงก์เฉพาะของคนที่พิมพ์เอง)"
         ),
         [
           { label: "🔗 /linkgroup", text: "/linkgroup" },
@@ -275,12 +282,58 @@ async function handleEvent(event: any) {
 
   const displayName = (conn as any)?.display_name ?? "ผู้ใช้"
 
-  // ── Receipt/document processing only applies to 1:1 chats with Slippy —
-  // images/files sent into a group/room chat are ignored (e.g. sport invite
-  // photos shared with friends shouldn't trigger OCR for everyone in the group)
-  if ((event.message.type === "image" || event.message.type === "file") && event.source?.type !== "user") {
+  // ── Opt-in group sync (docs/superpowers/specs/2026-11-09-line-group-sync-design.md) ──
+  // Decide from the signed event alone. Media outside 1:1 is still ignored UNLESS the sender opted in to this
+  // exact group; everything that is not ours returns "continue" and falls through to the handlers below untouched.
+  const syncGroupId = lineGroupIdOf(event.source)
+  const isMediaMsg  = event.message.type === "image" || event.message.type === "file"
+  const optedIn = isMediaMsg && conn && lineUserId && syncGroupId
+    ? await supabaseSyncStore.isEnabled(lineUserId, syncGroupId).catch((err: Error) => {
+        console.error("[line] group-sync lookup failed — treating as not opted in:", err.message)
+        return false
+      })
+    : false
+  const syncDecision = classifyGroupSyncEvent({
+    source: event.source, message: event.message, connected: !!conn, optedIn,
+  })
+  // Private messages in the group path must never throw and never fall back to the group.
+  const safePush = (to: string, m: object[]) =>
+    pushMsg(to, m).catch((err: Error) => console.warn("[line] private push failed (sender may not have added the bot):", err.message))
+
+  if (syncDecision.action === "ignore") return
+  if (syncDecision.action === "direct-notice") {
+    await replyMsg(replyToken, [txt(SYNC_TEXT.directOnly)])
     return
   }
+  if (syncDecision.action === "need-connect") {
+    await safePush(lineUserId, [txt(SYNC_TEXT.needConnect)])
+    return
+  }
+  if (syncDecision.action === "command") {
+    if (!conn) return   // unreachable (the classifier only returns "command" when connected); narrows the type
+    await runSyncCommand({
+      command: syncDecision.command,
+      userId: conn.user_id,
+      lineUserId,
+      displayName,
+      groupId: syncDecision.groupId,
+      store: supabaseSyncStore,
+      io: {
+        group:     (t) => replyMsg(replyToken, [txt(t)]),   // the one allowed message into the group
+        privately: async (t) => { await safePush(lineUserId, [txt(t)]) },
+      },
+    }).catch(async (err: Error) => {
+      console.error("[line] group-sync command failed:", err.message)
+      await safePush(lineUserId, [txt("❌ ทำรายการไม่สำเร็จ ลองใหม่อีกครั้งครับ")])
+    })
+    return
+  }
+  const fromGroup = syncDecision.action === "process-media"
+  const { say, tell } = makeSenders(fromGroup, {
+    reply: (m) => replyMsg(replyToken, m),
+    push:  (m) => pushMsg(lineUserId, m),
+    onPushError: (err) => console.warn("[line] private push failed (sender may not have added the bot):", (err as Error).message),
+  })
 
   // ── File message (HEIC/PDF/etc from iOS share) ───────────────
   if (event.message.type === "file") {
@@ -288,7 +341,7 @@ async function handleEvent(event: any) {
     const isHeic   = mimeType.endsWith(".heic") || mimeType.endsWith(".heif")
     const isPdf    = mimeType.endsWith(".pdf")
     if (!isHeic && !isPdf) {
-      await replyMsg(replyToken, [txt(
+      await say([txt(
         "❌ ไฟล์ประเภทนี้ยังไม่รองรับครับ\n" +
         "กรุณาส่งเป็น รูปภาพ (JPG/PNG), HEIC, หรือ PDF"
       )])
@@ -301,7 +354,7 @@ async function handleEvent(event: any) {
   // ── Image: receive slip/receipt (also handles HEIC from file message) ─
   if (event.message.type === "image" || event.message.type === "file") {
     if (!conn) {
-      await replyMsg(replyToken, [txt(
+      await say([txt(
         "กรุณาเชื่อมบัญชีก่อนครับ\nใช้คำสั่ง /connect CODE จากหน้า Settings ในแอป"
       )])
       return
@@ -313,7 +366,7 @@ async function handleEvent(event: any) {
     const { data: planRow } = await supabase
       .from("pricing_plans").select("feature_line_bot").eq("id", orgPlan?.plan ?? "free").single()
     if (!planRow?.feature_line_bot) {
-      await replyMsg(replyToken, [txt(
+      await say([txt(
         "⚠️ แผนปัจจุบันไม่รองรับการรับเอกสารผ่าน LINE Bot\n" +
         "กรุณาอัปเกรดเป็นแผน Starter ขึ้นไปที่ dev.slippyai.app/billing"
       )])
@@ -424,7 +477,7 @@ async function handleEvent(event: any) {
             .update({ quota_warned_at: new Date().toISOString() })
             .eq("line_user_id", lineUserId)
 
-          await pushMsg(lineUserId, [txt(
+          await tell([txt(
             "⚠️ โควต้าเอกสารเดือนนี้เต็มแล้วครับ\n" +
             "กรุณาอัปเกรดแผนหรือซื้อ Add-on เพิ่มที่ dev.slippyai.app/billing\n\n" +
             "(ระบบจะแจ้งเตือนสัปดาห์ละครั้งเท่านั้น)"
@@ -443,7 +496,10 @@ async function handleEvent(event: any) {
           file_path:       filePath,
           file_type:       "jpg",    // constraint: pdf | jpg | png
           source:          "line",
-          source_meta:     { line_user_id: lineUserId, message_id: event.message.id, file_name: fileName },
+          source_meta:     {
+            line_user_id: lineUserId, message_id: event.message.id, file_name: fileName,
+            ...(fromGroup ? { line_group_id: syncGroupId } : {}),
+          },
           status:          "pending",
         })
         .select("id")
@@ -459,13 +515,13 @@ async function handleEvent(event: any) {
       // contract (services/ingest.ts). Using ingestDocument instead of enqueuing
       // directly means a LINE receipt still gets read even when Redis/the worker
       // is unavailable — previously those uploads were queued into a void.
-      await replyMsg(replyToken, [uploadAckCard(fileName, doc.id)])
+      await say([uploadAckCard(fileName, doc.id)])
       const ingest = await ingestDocument(doc.id, conn.organization_id, {
         lineUserId,  // pass through so the worker can notify without re-querying DB
       })
       if (!ingest.ok) {
         console.error(`[line] ingest failed for ${doc.id} (${ingest.mode}):`, ingest.error)
-        await pushMsg(lineUserId, [txt("❌ อ่านเอกสารไม่สำเร็จ กรุณาลองส่งใหม่อีกครั้งครับ")])
+        await tell([txt("❌ อ่านเอกสารไม่สำเร็จ กรุณาลองส่งใหม่อีกครั้งครับ")])
       } else if (ingest.mode === "inline") {
         // Inline path already finished, so the worker's completion hook never
         // fires — notify here instead so the user isn't left waiting.
@@ -475,7 +531,7 @@ async function handleEvent(event: any) {
       }
     } catch (err: any) {
       console.error("[line] image error:", err.message)
-      await pushMsg(lineUserId, [txt("❌ เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้งครับ")])
+      await tell([txt("❌ เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้งครับ")])
     }
     return
   }

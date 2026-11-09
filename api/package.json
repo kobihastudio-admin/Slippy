@@ -15,7 +15,7 @@
     "verify:sport-auth": "tsx src/scripts/verify-sport-auth.ts",
     "verify:amounts": "tsx src/scripts/verify-amounts.ts",
     "verify:rows": "tsx src/scripts/verify-rows.ts",
-    "verify": "npm run verify:amounts && npm run verify:rows && npm run verify:vendor && npm run verify:vendor-registry && npm run verify:ingest && npm run verify:failures && npm run verify:scope && npm run verify:capture && npm run verify:finetune && npm run verify:learning",
+    "verify": "npm run verify:amounts && npm run verify:rows && npm run verify:vendor && npm run verify:vendor-registry && npm run verify:ingest && npm run verify:failures && npm run verify:scope && npm run verify:capture && npm run verify:finetune && npm run verify:learning && npm run verify:group-sync",
     "verify:vendor": "tsx src/scripts/verify-vendor.ts",
     "verify:vendor-registry": "tsx src/scripts/verify-vendor-registry.ts",
     "backfill:vendor-keys": "tsx src/scripts/backfill-vendor-keys.ts",
@@ -26,6 +26,7 @@
     "verify:capture": "tsx src/scripts/verify-capture.ts",
     "verify:finetune": "tsx src/scripts/verify-finetune.ts",
     "verify:learning": "tsx src/scripts/verify-learning.ts",
+    "verify:group-sync": "tsx src/scripts/verify-line-group-sync.ts",
     "report:duplicates": "tsx src/scripts/find-duplicates.ts",
     "test:docai": "tsx src/scripts/test-docai-processor.ts"
   },
