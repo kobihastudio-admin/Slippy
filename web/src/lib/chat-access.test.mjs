@@ -7,6 +7,7 @@ import {
   resolvePostMsgType,
   pickDirectConversation,
   validateCreateConversation,
+  findDirectConversationId,
 } from "./chat-access.ts"
 
 const ME = "11111111-1111-4111-8111-111111111111"
@@ -124,4 +125,100 @@ test("validateCreateConversation rejects bad types, non-uuid members, non-arrays
   assert.equal(validateCreateConversation({ type: "group", memberIds: [OTHER], name: "x".repeat(101) }, ME).ok, false)
   assert.equal(validateCreateConversation(null, ME).ok, false)
   assert.equal(validateCreateConversation("hello", ME).ok, false)
+})
+
+// ── findDirectConversationId (the lookup send-qr and other server code use) ──
+/**
+ * A stand-in for the Supabase client. Every call chain is recorded and the awaited result comes from `answer`,
+ * keyed by which of the three lookups it is (my rooms / their rooms among mine / the candidate rooms).
+ */
+function fakeLookup(answer) {
+  const log = []
+  const db = {
+    from(table) {
+      const q = { table, select: null, eqs: [], ins: [], order: null }
+      log.push(q)
+      const b = {
+        select(c) { q.select = c; return b },
+        eq(c, v) { q.eqs.push([c, v]); return b },
+        in(c, v) { q.ins.push([c, v]); return b },
+        order(c, o) { q.order = [c, o]; return b },
+        then(resolve, reject) {
+          const step = q.table === "conversations" ? "rooms" : (q.ins.length ? "theirs" : "mine")
+          return Promise.resolve(answer(step, q)).then(resolve, reject)
+        },
+      }
+      return b
+    },
+  }
+  return { db, log }
+}
+const rows = (...ids) => ids.map((id) => ({ conversation_id: id }))
+const room = (id, type, ...members) => ({ id, type, conversation_members: members.map((user_id) => ({ user_id })) })
+
+test("findDirectConversationId returns the direct room of exactly the two people, skipping a shared group", async () => {
+  const { db, log } = fakeLookup((step) => ({
+    mine: { data: rows("g1", "d1"), error: null },
+    theirs: { data: rows("g1", "d1"), error: null },
+    rooms: { data: [room("d1", "direct", ME, OTHER)], error: null },
+  }[step]))
+  assert.deepEqual(await findDirectConversationId(db, ME, OTHER), { ok: true, id: "d1" })
+  // the candidates were asked for as: direct rooms only, among the rooms both are in, oldest first
+  const rooms = log.find((q) => q.table === "conversations")
+  assert.ok(rooms.eqs.some(([c, v]) => c === "type" && v === "direct"))
+  assert.deepEqual(rooms.ins, [["id", ["g1", "d1"]]])
+  assert.deepEqual(rooms.order, ["created_at", { ascending: true }])
+  assert.match(rooms.select, /conversation_members\(user_id\)/)
+})
+
+test("findDirectConversationId ignores a direct-typed room that has a third member", async () => {
+  const { db } = fakeLookup((step) => ({
+    mine: { data: rows("d1"), error: null },
+    theirs: { data: rows("d1"), error: null },
+    rooms: { data: [room("d1", "direct", ME, OTHER, THIRD)], error: null },
+  }[step]))
+  assert.deepEqual(await findDirectConversationId(db, ME, OTHER), { ok: true, id: null })
+})
+
+test("findDirectConversationId: only a group in common means there is no direct room yet", async () => {
+  const { db } = fakeLookup((step) => ({
+    mine: { data: rows("g1"), error: null },
+    theirs: { data: rows("g1"), error: null },
+    rooms: { data: [], error: null },   // the type=direct filter leaves nothing
+  }[step]))
+  assert.deepEqual(await findDirectConversationId(db, ME, OTHER), { ok: true, id: null })
+})
+
+test("findDirectConversationId stops early, without asking for rooms, when nothing is shared", async () => {
+  for (const sharedNothing of [{ mine: [], theirs: [] }, { mine: ["a"], theirs: [] }]) {
+    const { db, log } = fakeLookup((step) => ({
+      mine: { data: rows(...sharedNothing.mine), error: null },
+      theirs: { data: rows(...sharedNothing.theirs), error: null },
+      rooms: { data: [], error: null },
+    }[step]))
+    assert.deepEqual(await findDirectConversationId(db, ME, OTHER), { ok: true, id: null })
+    assert.equal(log.some((q) => q.table === "conversations"), false)
+  }
+})
+
+test("findDirectConversationId FAILS CLOSED: an error at any step is { ok: false }, never 'no room' (that would create a duplicate)", async () => {
+  for (const failing of ["mine", "theirs", "rooms"]) {
+    const { db } = fakeLookup((step) => step === failing
+      ? { data: null, error: { message: "boom" } }
+      : ({
+          mine: { data: rows("d1"), error: null },
+          theirs: { data: rows("d1"), error: null },
+          rooms: { data: [room("d1", "direct", ME, OTHER)], error: null },
+        }[step]))
+    assert.deepEqual(await findDirectConversationId(db, ME, OTHER), { ok: false }, failing)
+  }
+  const { db } = fakeLookup(() => { throw new Error("network") })
+  assert.deepEqual(await findDirectConversationId(db, ME, OTHER), { ok: false })
+})
+
+test("findDirectConversationId refuses a malformed id or 'a chat with myself' without asking the database", async () => {
+  const { db, log } = fakeLookup(() => ({ data: [], error: null }))
+  assert.deepEqual(await findDirectConversationId(db, ME, "nope"), { ok: false })
+  assert.deepEqual(await findDirectConversationId(db, ME, ME), { ok: true, id: null })
+  assert.equal(log.length, 0)
 })

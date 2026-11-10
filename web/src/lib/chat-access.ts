@@ -96,6 +96,53 @@ export function pickDirectConversation(candidates: DirectCandidate[], me: string
   return null
 }
 
+export type DirectLookup = { ok: true; id: string | null } | { ok: false }
+
+/**
+ * Looks up the direct room of exactly `me` and `other` through `db` (a Supabase-like client; pass the ADMIN client in
+ * server code). Rooms both are in are narrowed to type=direct with their member lists, then pickDirectConversation()
+ * decides, so a shared group or trip room is never used as the private chat.
+ *
+ * It FAILS CLOSED: a database error is `{ ok: false }`, never "no room", because a caller that reads "no room" goes
+ * on to create one and would leave a duplicate behind. `{ ok: true, id: null }` means "looked, and there is none".
+ */
+export async function findDirectConversationId(
+  db: { from: (table: string) => any },
+  me: string,
+  other: string,
+): Promise<DirectLookup> {
+  if (!isUuid(me) || !isUuid(other)) return { ok: false }
+  if (me.toLowerCase() === other.toLowerCase()) return { ok: true, id: null }
+  try {
+    const mine = await db.from("conversation_members").select("conversation_id").eq("user_id", me)
+    if (mine.error) return { ok: false }
+    const myIds: string[] = (mine.data ?? []).map((r: { conversation_id: string }) => r.conversation_id)
+    if (myIds.length === 0) return { ok: true, id: null }
+
+    const theirs = await db.from("conversation_members").select("conversation_id")
+      .eq("user_id", other).in("conversation_id", myIds)
+    if (theirs.error) return { ok: false }
+    const sharedIds: string[] = (theirs.data ?? []).map((r: { conversation_id: string }) => r.conversation_id)
+    if (sharedIds.length === 0) return { ok: true, id: null }
+
+    const rooms = await db.from("conversations")
+      .select("id, type, conversation_members(user_id)")
+      .in("id", sharedIds).eq("type", "direct")
+      .order("created_at", { ascending: true })
+    if (rooms.error) return { ok: false }
+    const candidates: DirectCandidate[] = (rooms.data ?? []).map(
+      (r: { id: string; type: string; conversation_members?: { user_id: string }[] }) => ({
+        id: r.id,
+        type: r.type,
+        memberIds: (r.conversation_members ?? []).map((m) => m.user_id),
+      }),
+    )
+    return { ok: true, id: pickDirectConversation(candidates, me, other) }
+  } catch {
+    return { ok: false }
+  }
+}
+
 // ── POST /api/conversations ─────────────────────────────────────────────────
 
 const MAX_NAME_LENGTH = 100
