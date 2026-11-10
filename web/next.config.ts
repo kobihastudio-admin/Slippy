@@ -47,6 +47,7 @@ const cspDirectives: Record<string, string[]> = {
   "media-src":       ["'self'", "blob:", supabaseHost],
   "connect-src":     ["'self'",
                       supabaseHost,
+                      "wss://*.supabase.co",
                       // Supabase auth (project-specific URL also matched above)
                       "https://*.supabase.io",
                       // Vercel Speed Insights
