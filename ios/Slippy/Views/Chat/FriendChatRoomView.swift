@@ -61,6 +61,9 @@ struct FriendChatRoomView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 6) {
+                        if vm.hasOlder(conversationId) {
+                            olderButton(proxy: proxy)
+                        }
                         ForEach(rows) { row in
                             ChatMessageRow(
                                 message: row.message,
@@ -77,9 +80,11 @@ struct FriendChatRoomView: View {
                     .padding(.vertical, 12)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .onChange(of: vm.messages) { _, _ in
-                    guard let last = visibleMessages.last else { return }
-                    withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                // Follow the NEWEST message only. Keying on the whole list scrolled to the bottom whenever older
+                // messages were prepended, which threw the reader away from the page they had just asked for.
+                .onChange(of: visibleMessages.last?.id) { _, newest in
+                    guard let newest else { return }
+                    withAnimation { proxy.scrollTo(newest, anchor: .bottom) }
                 }
             }
 
@@ -91,6 +96,8 @@ struct FriendChatRoomView: View {
         .task {
             // Never flash the previously opened conversation's messages.
             if let first = vm.messages.first, first.conversationId != conversationId { vm.messages = [] }
+            // Opening a room is always a first page (see resetRoom), even if it was loaded before.
+            vm.resetRoom(conversationId)
             await vm.loadMessages(conversationId: conversationId)
             await balanceViewModel?.load()
         }
@@ -103,6 +110,40 @@ struct FriendChatRoomView: View {
         .onChange(of: sendFailed) { _, failed in
             if failed { AccessibilityNotification.Announcement("ส่งไม่สำเร็จ แตะส่งเพื่อลองใหม่").post() }
         }
+    }
+
+    /// "Load older messages" at the top of the list. After the page is prepended the view scrolls back to the
+    /// message that used to be first, so the reader stays where they were.
+    private func olderButton(proxy: ScrollViewProxy) -> some View {
+        Button {
+            let anchor = visibleMessages.first?.id
+            Task {
+                await vm.loadOlder(conversationId: conversationId)
+                guard let anchor else { return }
+                // Scrolling in the same pass as the insert lands on the lazy stack's ESTIMATED row heights and misses
+                // the anchor (seen in the simulator: the old first message ended up near the bottom of the screen).
+                // Let SwiftUI lay the new rows out first, then scroll, and once more after they have settled.
+                await Task.yield()
+                proxy.scrollTo(anchor, anchor: .top)
+                try? await Task.sleep(nanoseconds: 120_000_000)
+                proxy.scrollTo(anchor, anchor: .top)
+            }
+        } label: {
+            HStack(spacing: 6) {
+                if vm.isLoadingOlder { ProgressView().controlSize(.small) }
+                Text(vm.isLoadingOlder ? "กำลังโหลด…" : "โหลดข้อความก่อนหน้า")
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .foregroundColor(Color.textSecondary)
+            .padding(.horizontal, 14).padding(.vertical, 6)
+            .background(Color.surface)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(Color.border, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .disabled(vm.isLoadingOlder)
+        .padding(.bottom, 4)
+        .accessibilityLabel("โหลดข้อความก่อนหน้า")
     }
 
     private var composer: some View {

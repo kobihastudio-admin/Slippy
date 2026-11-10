@@ -100,6 +100,47 @@ struct ChatRoomFixtureScreen: View {
     }
 }
 
+extension MessagesViewModel {
+    /// A long chat: fourteen older messages wait behind "โหลดข้อความก่อนหน้า" (SLIPPY_APPEARANCE_PREVIEW=chat-room-paging-test).
+    /// Enough of them that the page is taller than the screen, so "the reader stays where they were" is observable.
+    static func pagingFixture() -> MessagesViewModel {
+        let vm = chatFixture()
+        vm.fixtureOlder = (1...14).map { i in
+            FriendMessage(id: "old\(i)", conversationId: fixtureConversationId,
+                          senderId: i % 2 == 0 ? fixtureMyId : fixtureFriendId,
+                          body: "ข้อความเก่า \(i)", msgType: "text", attachmentUrl: nil,
+                          createdAt: iso(daysAgo: 7, hour: 18, minute: i))
+        }
+        // Plus a screenful of NEWER messages, so the page has more content below the first message than fits on
+        // screen: only then can "the reader stays on the message they were reading" be told apart from "scrolled
+        // to the bottom".
+        vm.messages += (1...12).map { i in
+            FriendMessage(id: "new\(i)", conversationId: fixtureConversationId,
+                          senderId: i % 2 == 0 ? fixtureMyId : fixtureFriendId,
+                          body: "ข้อความใหม่ \(i)", msgType: "text", attachmentUrl: nil,
+                          createdAt: iso(daysAgo: 0, hour: 10, minute: i))
+        }
+        vm.fixtureMarkHasOlder(fixtureConversationId)
+        return vm
+    }
+}
+
+struct ChatRoomPagingFixtureScreen: View {
+    @StateObject private var messages = MessagesViewModel.pagingFixture()
+    @StateObject private var balances = BalanceViewModel.fixture()
+    var body: some View {
+        NavigationStack {
+            FriendChatRoomView(
+                vm: messages,
+                conversationId: MessagesViewModel.fixtureConversationId,
+                currentUserId: MessagesViewModel.fixtureMyId,
+                friendName: "พลอย", friendAvatarUrl: nil, showsAvatars: true,
+                friendUserId: MessagesViewModel.fixtureFriendId,
+                balanceViewModel: balances)
+        }
+    }
+}
+
 struct AddFriendFixtureScreen: View {
     @StateObject private var social = SocialViewModel.friendsFixture()
     var body: some View { SocialAddFriendSheet(vm: social) }

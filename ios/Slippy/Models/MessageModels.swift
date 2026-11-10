@@ -67,3 +67,6 @@ struct FriendMessage: Codable, Identifiable, Equatable {
         case createdAt = "created_at"
     }
 }
+
+/// Lets ChatPaging (Foundation-only, host-tested) merge and order these without knowing the model.
+extension FriendMessage: PagedMessage {}

@@ -13,11 +13,19 @@ final class MessagesViewModel: ObservableObject {
     @Published var messages: [FriendMessage] = []
     @Published var isLoading = false
     @Published var isSending = false
+    /// True while an older page is being fetched (disables the "load older" button).
+    @Published private(set) var isLoadingOlder = false
+    /// Conversations that may still have messages older than the ones loaded. Read it through `hasOlder(_:)`.
+    @Published private(set) var conversationsWithOlder: Set<String> = []
     @Published var error: String?
 
     #if DEBUG
     /// Synthetic-data mode for simulator screenshots: no network reads or writes.
     var isFixture = false
+    /// The "older page" a fixture room hands out when `loadOlder` is called.
+    var fixtureOlder: [FriendMessage] = []
+    /// Lets a fixture show the "load older messages" row without a network read.
+    func fixtureMarkHasOlder(_ conversationId: String) { conversationsWithOlder.insert(conversationId) }
     #endif
 
     private let db = SupabaseManager.shared.client
@@ -129,10 +137,41 @@ final class MessagesViewModel: ObservableObject {
                     .select("conversation_id, user_id")
                     .eq("user_id", value: friendId)
                     .in("conversation_id", values: myConvIds)
-                    .limit(1)
                     .execute()
                     .value
-                if let existing = shared.first { return existing.conversationId }
+                let sharedIds = shared.map(\.conversationId)
+
+                // Only a DIRECT room of exactly these two people may be reused. "Any room we both are in" used to
+                // be picked, so a shared group or trip room could open as the private chat with this friend.
+                if !sharedIds.isEmpty {
+                    struct RoomRow: Decodable {
+                        struct MemberRef: Decodable {
+                            let userId: String
+                            enum CodingKeys: String, CodingKey { case userId = "user_id" }
+                        }
+                        let id: String
+                        let type: String
+                        let members: [MemberRef]
+                        enum CodingKeys: String, CodingKey {
+                            case id, type
+                            case members = "conversation_members"
+                        }
+                    }
+                    let rooms: [RoomRow] = try await db
+                        .from("conversations")
+                        .select("id, type, created_at, conversation_members(user_id)")
+                        .in("id", values: sharedIds)
+                        .eq("type", value: "direct")
+                        .order("created_at", ascending: true)
+                        .execute()
+                        .value
+                    let candidates = rooms.map {
+                        ChatPaging.DirectCandidate(id: $0.id, type: $0.type, memberIds: $0.members.map(\.userId))
+                    }
+                    if let existing = ChatPaging.pickDirectConversation(candidates, me: myId, other: friendId) {
+                        return existing
+                    }
+                }
             }
 
             struct ConvInsert: Encodable {
@@ -170,19 +209,88 @@ final class MessagesViewModel: ObservableObject {
 
     // MARK: – Messages within a conversation
 
+    private static let messageColumns = "id, conversation_id, sender_id, body, msg_type, attachment_url, created_at"
+
+    /// Call when a room is OPENED. Forgets what was loaded for it earlier, so the next `loadMessages` counts as a
+    /// first page. Without this, coming back to a room merged only the newest page into the old rows, and any
+    /// messages beyond that page that arrived while the reader was away were never loaded: "load older" pages
+    /// backwards from the oldest loaded row, which lies before the gap.
+    func resetRoom(_ conversationId: String) {
+        #if DEBUG
+        if isFixture { return }
+        #endif
+        messages.removeAll { $0.conversationId == conversationId }
+        setHasOlder(false, for: conversationId)
+    }
+
+    /// True while older messages than the ones on screen may still be loaded for this conversation.
+    func hasOlder(_ conversationId: String) -> Bool { conversationsWithOlder.contains(conversationId) }
+
+    private func setHasOlder(_ value: Bool, for conversationId: String) {
+        if value { conversationsWithOlder.insert(conversationId) } else { conversationsWithOlder.remove(conversationId) }
+    }
+
+    /// Opens a conversation on its NEWEST messages and keeps it fresh. Messages are read newest-first, one page,
+    /// and MERGED into what is already shown, so the 4-second refresh adds new messages without throwing away
+    /// the older pages the reader has loaded. (It used to read the oldest 100, so a long chat opened on its
+    /// first messages.)
     func loadMessages(conversationId: String) async {
         #if DEBUG
         if isFixture { return }
         #endif
         do {
-            messages = try await db
+            let page: [FriendMessage] = try await db
                 .from("messages")
-                .select("id, conversation_id, sender_id, body, msg_type, attachment_url, created_at")
+                .select(Self.messageColumns)
                 .eq("conversation_id", value: conversationId)
-                .order("created_at", ascending: true)
-                .limit(100)
+                .order("created_at", ascending: false)
+                .limit(ChatPaging.pageSize)
                 .execute()
                 .value
+            let isFirstPage = !messages.contains { $0.conversationId == conversationId }
+            messages = ChatPaging.merge(existing: messages, incoming: page)
+            if isFirstPage {
+                setHasOlder(ChatPaging.hasMoreOlder(fetched: page.count, pageSize: ChatPaging.pageSize, newlyAdded: nil),
+                            for: conversationId)
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// Loads the page of messages before the oldest one on screen. The cursor is "at or before the oldest loaded
+    /// timestamp" (messages sharing that exact instant are not skipped; the merge removes the ones already shown).
+    func loadOlder(conversationId: String) async {
+        #if DEBUG
+        if isFixture {
+            messages = ChatPaging.merge(existing: messages, incoming: fixtureOlder)
+            setHasOlder(false, for: conversationId)
+            return
+        }
+        #endif
+        guard hasOlder(conversationId), !isLoadingOlder else { return }
+        let inRoom = ChatPaging.merge(existing: messages.filter { $0.conversationId == conversationId }, incoming: [])
+        guard let oldest = inRoom.first, let cursor = ChatPaging.cursorValue(oldest.createdAt) else {
+            setHasOlder(false, for: conversationId)
+            return
+        }
+        isLoadingOlder = true
+        defer { isLoadingOlder = false }
+        do {
+            let page: [FriendMessage] = try await db
+                .from("messages")
+                .select(Self.messageColumns)
+                .eq("conversation_id", value: conversationId)
+                .lte("created_at", value: cursor)
+                .order("created_at", ascending: false)
+                .limit(ChatPaging.pageSize)
+                .execute()
+                .value
+            let merged = ChatPaging.merge(existing: messages, incoming: page)
+            let added = merged.filter { $0.conversationId == conversationId }.count - inRoom.count
+            messages = merged
+            setHasOlder(ChatPaging.hasMoreOlder(fetched: page.count, pageSize: ChatPaging.pageSize, newlyAdded: added),
+                        for: conversationId)
         } catch {
             self.error = error.localizedDescription
         }

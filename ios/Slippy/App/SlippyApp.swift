@@ -134,6 +134,7 @@ private struct AppearancePreviewContent: View {
             case "friends-management-test": NavigationStack { FriendManagementView() }
             case "chat-list-test": ChatListFixtureScreen()
             case "chat-room-test": ChatRoomFixtureScreen()
+            case "chat-room-paging-test": ChatRoomPagingFixtureScreen()
             case "add-friend-test": AddFriendFixtureScreen()
             case "friend-balance-test": FriendBalanceFixtureScreen()
             case "balance-detail-test": BalanceDetailFixtureScreen()
