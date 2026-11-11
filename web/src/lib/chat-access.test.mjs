@@ -8,6 +8,8 @@ import {
   pickDirectConversation,
   validateCreateConversation,
   findDirectConversationId,
+  directPairKey,
+  getOrCreateDirectConversation,
 } from "./chat-access.ts"
 
 const ME = "11111111-1111-4111-8111-111111111111"
@@ -221,4 +223,145 @@ test("findDirectConversationId refuses a malformed id or 'a chat with myself' wi
   assert.deepEqual(await findDirectConversationId(db, ME, "nope"), { ok: false })
   assert.deepEqual(await findDirectConversationId(db, ME, ME), { ok: true, id: null })
   assert.equal(log.length, 0)
+})
+
+// ── directPairKey ─────────────────────────────────────────────────────────
+test("directPairKey is the same for either order and for upper/lower case, smaller id first", () => {
+  assert.equal(directPairKey(ME, OTHER), `${ME}:${OTHER}`)
+  assert.equal(directPairKey(OTHER, ME), `${ME}:${OTHER}`)
+  assert.equal(directPairKey(OTHER.toUpperCase(), ME.toUpperCase()), `${ME}:${OTHER}`)
+})
+
+test("directPairKey is null for a malformed id or a chat with myself", () => {
+  assert.equal(directPairKey(ME, ME), null)
+  assert.equal(directPairKey(ME, ME.toUpperCase()), null)
+  for (const bad of ["", "nope", null, undefined, 42]) assert.equal(directPairKey(ME, bad), null)
+})
+
+// ── getOrCreateDirectConversation ─────────────────────────────────────────
+/**
+ * Fake client for the whole get-or-create flow. `answer(step)` supplies the result of each step:
+ * mine / theirs / rooms (the lookup), insertConv, insertMembers, byKey (the room that won a race), deleteConv.
+ * Every operation is recorded in `log`.
+ */
+function fakeCreate(answer) {
+  const log = []
+  const db = {
+    from(table) {
+      const q = { table, op: "select", row: null, eqs: [], ins: [] }
+      log.push(q)
+      const done = () => {
+        let step
+        if (table === "conversations") {
+          step = q.op === "insert" ? "insertConv" : q.op === "delete" ? "deleteConv"
+            : q.eqs.some(([c]) => c === "direct_pair_key") ? "byKey" : "rooms"
+        } else {
+          step = q.op === "insert" ? "insertMembers" : (q.ins.length ? "theirs" : "mine")
+        }
+        q.step = step
+        return Promise.resolve(answer(step, q))
+      }
+      const b = {
+        select() { return b },
+        insert(row) { q.op = "insert"; q.row = row; return b },
+        delete() { q.op = "delete"; return b },
+        eq(c, v) { q.eqs.push([c, v]); return b },
+        in(c, v) { q.ins.push([c, v]); return b },
+        order() { return b },
+        single() { return b },
+        maybeSingle() { return b },
+        then(resolve, reject) { return done().then(resolve, reject) },
+      }
+      return b
+    },
+  }
+  return { db, log }
+}
+const noRoomYet = { mine: { data: [], error: null } }
+const ok = (data) => ({ data, error: null })
+
+test("getOrCreateDirectConversation reuses the existing direct room and creates nothing", async () => {
+  const { db, log } = fakeCreate((step) => ({
+    mine: ok(rows("d1")), theirs: ok(rows("d1")), rooms: ok([room("d1", "direct", ME, OTHER)]),
+  }[step]))
+  assert.deepEqual(await getOrCreateDirectConversation(db, ME, OTHER), { ok: true, id: "d1", created: false })
+  assert.equal(log.some((q) => q.op === "insert"), false)
+})
+
+test("getOrCreateDirectConversation creates the room WITH the pair key, then both members (caller admin)", async () => {
+  const { db, log } = fakeCreate((step) => ({
+    mine: ok([]), insertConv: ok({ id: "new1" }), insertMembers: ok(null),
+  }[step]))
+  assert.deepEqual(await getOrCreateDirectConversation(db, OTHER, ME), { ok: true, id: "new1", created: true })
+  const conv = log.find((q) => q.step === "insertConv")
+  assert.deepEqual(conv.row, { type: "direct", created_by: OTHER, direct_pair_key: `${ME}:${OTHER}` })
+  const members = log.find((q) => q.step === "insertMembers")
+  assert.deepEqual(members.row, [
+    { conversation_id: "new1", user_id: OTHER, role: "admin" },
+    { conversation_id: "new1", user_id: ME, role: "member" },
+  ])
+})
+
+test("getOrCreateDirectConversation passes an optional name through", async () => {
+  const { db, log } = fakeCreate((step) => ({ mine: ok([]), insertConv: ok({ id: "n" }), insertMembers: ok(null) }[step]))
+  await getOrCreateDirectConversation(db, ME, OTHER, { name: "hello" })
+  assert.equal(log.find((q) => q.step === "insertConv").row.name, "hello")
+})
+
+test("a lost race (unique violation on the pair key) uses the room that won and creates no members", async () => {
+  const { db, log } = fakeCreate((step) => ({
+    mine: ok([]),
+    insertConv: { data: null, error: { code: "23505", message: "duplicate key" } },
+    byKey: ok({ id: "winner" }),
+  }[step]))
+  assert.deepEqual(await getOrCreateDirectConversation(db, ME, OTHER), { ok: true, id: "winner", created: false })
+  assert.equal(log.some((q) => q.step === "insertMembers"), false)
+  const byKey = log.find((q) => q.step === "byKey")
+  assert.deepEqual(byKey.eqs, [["direct_pair_key", `${ME}:${OTHER}`], ["type", "direct"]])
+})
+
+test("a lost race whose winner cannot be found fails instead of creating a second room", async () => {
+  for (const byKey of [ok(null), { data: null, error: { message: "boom" } }]) {
+    const { db, log } = fakeCreate((step) => ({
+      mine: ok([]), insertConv: { data: null, error: { code: "23505" } }, byKey,
+    }[step]))
+    assert.deepEqual(await getOrCreateDirectConversation(db, ME, OTHER), { ok: false })
+    assert.equal(log.filter((q) => q.step === "insertConv").length, 1)
+  }
+})
+
+test("any other insert error fails (no room, no members)", async () => {
+  const { db, log } = fakeCreate((step) => ({
+    mine: ok([]), insertConv: { data: null, error: { code: "42501", message: "rls" } },
+  }[step]))
+  assert.deepEqual(await getOrCreateDirectConversation(db, ME, OTHER), { ok: false })
+  assert.equal(log.some((q) => q.step === "insertMembers"), false)
+})
+
+test("if the members cannot be added the empty room is removed again and the call fails", async () => {
+  const { db, log } = fakeCreate((step) => ({
+    mine: ok([]), insertConv: ok({ id: "new1" }),
+    insertMembers: { data: null, error: { message: "boom" } }, deleteConv: ok(null),
+  }[step]))
+  assert.deepEqual(await getOrCreateDirectConversation(db, ME, OTHER), { ok: false })
+  const del = log.find((q) => q.step === "deleteConv")
+  assert.deepEqual(del.eqs, [["id", "new1"]])
+})
+
+test("a failed lookup never creates a room (fails closed)", async () => {
+  const { db, log } = fakeCreate((step) => step === "mine" ? { data: null, error: { message: "boom" } } : ok([]))
+  assert.deepEqual(await getOrCreateDirectConversation(db, ME, OTHER), { ok: false })
+  assert.equal(log.some((q) => q.op === "insert"), false)
+})
+
+test("getOrCreateDirectConversation refuses bad ids and a chat with myself without touching the database", async () => {
+  const { db, log } = fakeCreate(() => ok([]))
+  assert.deepEqual(await getOrCreateDirectConversation(db, ME, "nope"), { ok: false })
+  assert.deepEqual(await getOrCreateDirectConversation(db, ME, ME), { ok: false })
+  assert.equal(log.length, 0)
+})
+
+test("a thrown error anywhere is { ok: false }", async () => {
+  const { db } = fakeCreate((step) => { if (step === "insertConv") throw new Error("network"); return ok([]) })
+  assert.deepEqual(await getOrCreateDirectConversation(db, ME, OTHER), { ok: false })
 })

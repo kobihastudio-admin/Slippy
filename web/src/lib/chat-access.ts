@@ -143,6 +143,76 @@ export async function findDirectConversationId(
   }
 }
 
+/**
+ * The identity of a direct room: the two user ids, lower-case, smaller first, joined by ":" (null for a malformed id or
+ * a chat with oneself). It is stored in `conversations.direct_pair_key`, which has a partial UNIQUE index, so the
+ * database itself refuses a second direct room for the same two people. The order is plain code-unit order, which the
+ * migration's backfill reproduces with COLLATE "C": keep the two in step.
+ */
+export function directPairKey(a: unknown, b: unknown): string | null {
+  if (!isUuid(a) || !isUuid(b)) return null
+  const x = a.toLowerCase()
+  const y = b.toLowerCase()
+  if (x === y) return null
+  return x < y ? `${x}:${y}` : `${y}:${x}`
+}
+
+export type DirectRoom = { ok: true; id: string; created: boolean } | { ok: false }
+
+const UNIQUE_VIOLATION = "23505"
+
+/**
+ * The direct room of exactly `me` and `other`, created if there is none. Pass the ADMIN client (server code): it writes
+ * `direct_pair_key`, which the database refuses to set for a user's own JWT, and it adds both members.
+ *
+ * The lookup comes first and FAILS CLOSED (a database error is `{ ok: false }`, never "no room"). Creation stores the
+ * pair key, so two concurrent creates cannot both succeed: the loser gets a unique violation, looks up the room that won
+ * by its key and uses it. (The winner may still be adding its members for a moment; callers that only write rows keyed
+ * by the room id are not affected.) A room whose members could not be added is removed again, which also frees the key.
+ */
+export async function getOrCreateDirectConversation(
+  db: { from: (table: string) => any },
+  me: string,
+  other: string,
+  opts: { name?: string | null } = {},
+): Promise<DirectRoom> {
+  const key = directPairKey(me, other)
+  if (!key) return { ok: false }
+  try {
+    const found = await findDirectConversationId(db, me, other)
+    if (!found.ok) return { ok: false }
+    if (found.id) return { ok: true, id: found.id, created: false }
+
+    const row: Record<string, unknown> = { type: "direct", created_by: me, direct_pair_key: key }
+    if (opts.name !== undefined) row.name = opts.name
+    const created = await db.from("conversations").insert(row).select("id").single()
+    if (created.error?.code === UNIQUE_VIOLATION) {
+      const won = await db.from("conversations").select("id")
+        .eq("direct_pair_key", key).eq("type", "direct").maybeSingle()
+      if (won.error || !won.data?.id) return { ok: false }
+      return { ok: true, id: won.data.id as string, created: false }
+    }
+    if (created.error || !created.data?.id) {
+      console.error("[chat-access] creating the direct room failed:", created.error?.message)
+      return { ok: false }
+    }
+    const roomId = created.data.id as string
+
+    const members = await db.from("conversation_members").insert([
+      { conversation_id: roomId, user_id: me, role: "admin" },
+      { conversation_id: roomId, user_id: other, role: "member" },
+    ])
+    if (members.error) {
+      console.error("[chat-access] adding the direct room's members failed:", members.error.message)
+      await db.from("conversations").delete().eq("id", roomId)
+      return { ok: false }
+    }
+    return { ok: true, id: roomId, created: true }
+  } catch {
+    return { ok: false }
+  }
+}
+
 // ── POST /api/conversations ─────────────────────────────────────────────────
 
 const MAX_NAME_LENGTH = 100

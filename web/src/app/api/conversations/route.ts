@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient }      from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { pickDirectConversation, validateCreateConversation } from "@/lib/chat-access"
+import { getOrCreateDirectConversation, validateCreateConversation } from "@/lib/chat-access"
 
 // GET /api/conversations — list my conversations with last message
 export async function GET() {
@@ -73,33 +73,17 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient()
 
   if (type === "direct") {
-    // The direct room of exactly these two people. A shared GROUP (or a trip room) must never be reused as a
-    // "direct" chat, so candidates are filtered to type=direct and their member lists checked (see chat-access.ts).
-    const otherId = memberIds[0]
-    const { data: myConvs } = await admin.from("conversation_members")
-      .select("conversation_id").eq("user_id", user.id)
-    const myIds = (myConvs ?? []).map((r: any) => r.conversation_id)
-    if (myIds.length > 0) {
-      const { data: theirConvs } = await admin.from("conversation_members")
-        .select("conversation_id").eq("user_id", otherId).in("conversation_id", myIds)
-      const sharedIds = (theirConvs ?? []).map((r: any) => r.conversation_id)
-      if (sharedIds.length > 0) {
-        const { data: rooms } = await admin.from("conversations")
-          .select("*, conversation_members(user_id)")
-          .in("id", sharedIds).eq("type", "direct")
-          .order("created_at", { ascending: true })
-        const candidates = (rooms ?? []).map((r: any) => ({
-          id: r.id as string,
-          type: r.type as string,
-          memberIds: (r.conversation_members ?? []).map((m: any) => m.user_id as string),
-        }))
-        const existingId = pickDirectConversation(candidates, user.id, otherId)
-        if (existingId) {
-          const { conversation_members: _members, ...conv } = (rooms ?? []).find((r: any) => r.id === existingId) as any
-          return NextResponse.json({ conversation: conv, existed: true })
-        }
-      }
+    // The direct room of exactly these two people, or a new one. A shared GROUP (or a trip room) is never reused as a
+    // "direct" chat, a failed lookup creates nothing, and the database refuses a second direct room for the same pair
+    // (conversations.direct_pair_key), so two simultaneous requests end up in the same room. See chat-access.ts.
+    const room = await getOrCreateDirectConversation(admin, user.id, memberIds[0], { name })
+    if (!room.ok) {
+      console.error("[conversations] could not get or create the direct room")
+      return NextResponse.json({ error: "Could not create conversation" }, { status: 500 })
     }
+    if (room.created) return NextResponse.json({ conversation: { id: room.id, type, name }, existed: false })
+    const { data: existing } = await admin.from("conversations").select("*").eq("id", room.id).maybeSingle()
+    return NextResponse.json({ conversation: existing ?? { id: room.id, type, name: null }, existed: true })
   }
 
   const { data: conv, error: convError } = await admin.from("conversations")

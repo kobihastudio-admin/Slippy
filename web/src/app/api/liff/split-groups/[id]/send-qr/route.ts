@@ -2,43 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getVerifiedLineUserId, liffUnauthorized } from "@/lib/liff-auth"
 import { generatePromptPayQR } from "@/lib/promptpay"
-import { findDirectConversationId, isUuid } from "@/lib/chat-access"
-
-/**
- * The creator's direct chat with the payer: the existing direct room of EXACTLY these two people, or a new one.
- * It used to reuse "any room both are in", so the payment request (amount and bill title) could be posted into a
- * shared GROUP or TRIP chat and shown to everyone there instead of only to the payer.
- *
- * Returns null when the room cannot be determined or created, and the caller answers 500. A failed LOOKUP never
- * creates a second room (findDirectConversationId fails closed), and a room whose members could not be added is
- * removed again rather than left empty.
- */
-async function getOrCreateDirectConversation(
-  admin: ReturnType<typeof createAdminClient>,
-  userIdA: string,
-  userIdB: string,
-): Promise<string | null> {
-  const found = await findDirectConversationId(admin, userIdA, userIdB)
-  if (!found.ok) return null
-  if (found.id) return found.id
-
-  const { data: conv, error } = await admin.from("conversations")
-    .insert({ type: "direct", created_by: userIdA }).select("id").single()
-  if (error || !conv) {
-    console.error("[send-qr] creating the direct chat failed:", error?.message)
-    return null
-  }
-  const { error: membersError } = await admin.from("conversation_members").insert([
-    { conversation_id: conv.id, user_id: userIdA, role: "admin" },
-    { conversation_id: conv.id, user_id: userIdB, role: "member" },
-  ])
-  if (membersError) {
-    console.error("[send-qr] adding the chat members failed:", membersError.message)
-    await admin.from("conversations").delete().eq("id", conv.id)
-    return null
-  }
-  return conv.id as string
-}
+import { getOrCreateDirectConversation, isUuid } from "@/lib/chat-access"
 
 // POST /api/liff/split-groups/[id]/send-qr — { lineUserId, participantId }
 // Posts a PromptPay QR + amount as a payment-request message into the
@@ -95,8 +59,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // The private chat of exactly these two people (never a shared group/trip room). If it cannot be found or created
   // nothing is created and nothing is posted.
-  const conversationId = await getOrCreateDirectConversation(admin, conn.user_id, payerConn.user_id)
-  if (!conversationId) return NextResponse.json({ error: "ไม่สามารถเปิดแชทกับผู้เข้าร่วมได้" }, { status: 500 })
+  const room = await getOrCreateDirectConversation(admin, conn.user_id, payerConn.user_id)
+  if (!room.ok) return NextResponse.json({ error: "ไม่สามารถเปิดแชทกับผู้เข้าร่วมได้" }, { status: 500 })
+  const conversationId = room.id
 
   const { data: pr, error: prError } = await admin.from("payment_requests").insert({
     organization_id: bill.organization_id,
