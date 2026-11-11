@@ -56,15 +56,15 @@ export function parseMessagesQuery(params: URLSearchParams): MessagesQuery {
 // ── POST /api/conversations/[id]/messages ───────────────────────────────────
 
 /**
- * Types the web client sends. This is defense in depth for THIS route only: `system`, `payment_request` and `slip`
- * are meant to be written by server code, but it is NOT a security boundary. The RLS insert policy on `messages`
- * (055) only checks `sender_id = auth.uid()` and membership, so a member can still insert those types directly
- * through PostgREST with their own JWT (iOS writes messages that way). Closing that needs the RLS `WITH CHECK` to
- * list the allowed types, which is a schema/RLS change that has not been approved.
+ * Types the web client sends. `system`, `payment_request` and `slip` are written by server code (service role),
+ * never by a client. This allowlist is the first line for THIS route; the database enforces the same set for members:
+ * migration 20261110130000_messages_types_and_insert_policy (applied 2026-11-11) makes the RLS insert policy
+ * `messages_member_insert` accept only text/image/video/file with the member's own JWT, so a member can no longer
+ * insert the server-only types directly through PostgREST (iOS writes messages that way, with `text` only).
+ * Keep this list and that policy in step.
  *
- * Also NOTE: the production CHECK on `messages.msg_type` is text/image/payment_request/slip/system. `video` and
- * `file` are what the web client sends but the database rejects them, so those sends fail (now with a 500 and the
- * client's "send failed" toast; before, the route answered 200 although nothing was stored).
+ * The same migration added `video` and `file` to the `messages.msg_type` CHECK, so those sends are stored now. Before
+ * it the CHECK rejected them and the route failed with a 500 (earlier still it answered 200 with nothing stored).
  */
 const POSTABLE_MSG_TYPES = ["text", "image", "video", "file"] as const
 
