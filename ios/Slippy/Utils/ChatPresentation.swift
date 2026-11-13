@@ -91,6 +91,16 @@ enum ChatPresentation {
 
     // MARK: – Chat room layout
 
+    /// Whether two user ids are the same person. `UUID.uuidString` (what the app knows as "me") is upper-case while
+    /// Postgres returns `sender_id` lower-case, so a plain `==` never matched and every bubble was drawn as the friend's
+    /// (left-aligned, with an avatar). Blank ids are never the same person.
+    static func isSameUser(_ a: String?, _ b: String?) -> Bool {
+        guard let a, let b else { return false }
+        let left = a.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let right = b.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return !left.isEmpty && left == right
+    }
+
     struct MessageLayout: Equatable {
         /// Non-nil when a day chip is drawn above this message.
         let dayChip: String?
@@ -119,8 +129,8 @@ enum ChatPresentation {
                 }
                 previousDate = date
             }
-            let startsRun = previousSender != item.senderId || chip != nil
-            result.append(MessageLayout(dayChip: chip, showsAvatar: item.senderId != me && startsRun))
+            let startsRun = !isSameUser(previousSender, item.senderId) || chip != nil
+            result.append(MessageLayout(dayChip: chip, showsAvatar: !isSameUser(item.senderId, me) && startsRun))
             previousSender = item.senderId
         }
         return result

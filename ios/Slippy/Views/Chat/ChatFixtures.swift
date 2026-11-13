@@ -45,6 +45,13 @@ extension MessagesViewModel {
             FriendMessage(id: id, conversationId: fixtureConversationId, senderId: sender, body: body,
                           msgType: "text", attachmentUrl: nil, createdAt: iso(daysAgo: daysAgo, hour: hour, minute: minute))
         }
+        func file(_ id: String, _ sender: String, _ name: String, _ size: Int, _ daysAgo: Int, _ hour: Int, _ minute: Int,
+                  type: String = "file") -> FriendMessage {
+            // The URL points nowhere on purpose (fixtures never touch the network): an image shows its failure placeholder.
+            FriendMessage(id: id, conversationId: fixtureConversationId, senderId: sender, body: name,
+                          msgType: type, attachmentUrl: "https://fixture.invalid/chat/\(id)", createdAt: iso(daysAgo: daysAgo, hour: hour, minute: minute),
+                          meta: FriendMessageMeta(fileName: name, fileSize: size))
+        }
         vm.messages = [
             message("m1", fixtureFriendId, "คืนนี้กินอะไรดี หิวมาก", 1, 19, 2),
             message("m2", fixtureFriendId, "อยากกินชาบู", 1, 19, 3),
@@ -53,6 +60,9 @@ extension MessagesViewModel {
             message("m5", fixtureMyId, "20:00 เจอกัน 👍", 0, 8, 30),
             message("m6", fixtureFriendId, "ได้เลย เดี๋ยวจองโต๊ะไว้ให้ ที่นั่งริมหน้าต่างนะ จะได้เห็นวิวสวยๆ ตอนกินข้าว", 0, 9, 5),
             message("m7", fixtureMyId, "ขอบคุณนะ", 0, 9, 6),
+            file("m8", fixtureFriendId, "ใบเสนอราคา-ทริปเกาะสมุย.pdf", 2_411_000, 0, 9, 10),
+            file("m9", fixtureMyId, "งบประมาณ.xlsx", 86_000, 0, 9, 12),
+            file("m10", fixtureMyId, "รูปภาพ-20261113-091500.heic", 3_100_000, 0, 9, 15, type: "image"),
         ]
         return vm
     }
@@ -92,7 +102,9 @@ struct ChatRoomFixtureScreen: View {
             FriendChatRoomView(
                 vm: messages,
                 conversationId: MessagesViewModel.fixtureConversationId,
-                currentUserId: MessagesViewModel.fixtureMyId,
+                // Upper-case on purpose: the real app's id is `UUID.uuidString` (upper-case) while Postgres returns
+                // `sender_id` lower-case, which is exactly what put every bubble on the left.
+                currentUserId: MessagesViewModel.fixtureMyId.uppercased(),
                 friendName: "พลอย", friendAvatarUrl: nil, showsAvatars: true,
                 friendUserId: MessagesViewModel.fixtureFriendId,
                 balanceViewModel: balances)

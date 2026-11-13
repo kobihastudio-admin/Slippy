@@ -96,6 +96,25 @@ check(layout[5] == .init(dayChip: nil, showsAvatar: false), "layout[5] \\(layout
 check(layout[6] == .init(dayChip: nil, showsAvatar: false), "layout[6] \\(layout[6])")
 check(ChatPresentation.layouts(items: [], me: me, now: now, calendar: cal).isEmpty, "empty input")
 
+// --- who is "me": the app knows its id as UUID.uuidString (UPPER-case), Postgres returns sender_id lower-case ---
+let upperMe = "6F2B7A10-3C4D-4E5F-8A9B-0C1D2E3F4A5B"
+let lowerMe = "6f2b7a10-3c4d-4e5f-8a9b-0c1d2e3f4a5b"
+let theFriend = "11111111-2222-3333-4444-555555555555"
+check(ChatPresentation.isSameUser(lowerMe, upperMe), "lower-case sender is me when the app id is upper-case")
+check(ChatPresentation.isSameUser(upperMe, lowerMe), "and the other way round")
+check(ChatPresentation.isSameUser(" " + lowerMe + " ", upperMe), "surrounding whitespace is ignored")
+check(!ChatPresentation.isSameUser(theFriend, upperMe), "a different person is not me")
+check(!ChatPresentation.isSameUser("", ""), "blank ids are never the same person")
+check(!ChatPresentation.isSameUser(nil, upperMe) && !ChatPresentation.isSameUser(lowerMe, nil), "nil is nobody")
+let mixed: [(senderId: String, date: Date?)] = [
+    (theFriend, at(2026, 11, 9, 9, 0)),   // friend, first -> avatar
+    (lowerMe,   at(2026, 11, 9, 9, 1)),   // MY message (lower-case from the server) -> never an avatar
+    (lowerMe,   at(2026, 11, 9, 9, 2)),   // my second message
+    (theFriend, at(2026, 11, 9, 9, 3)),   // friend again -> avatar
+]
+let mixedLayout = ChatPresentation.layouts(items: mixed, me: upperMe, now: now, calendar: cal)
+check(mixedLayout.map { $0.showsAvatar } == [true, false, false, true], "own lower-case messages get no avatar: \\(mixedLayout.map { $0.showsAvatar })")
+
 // --- avatar initials ---
 eq(ChatPresentation.initial(for: "เอ"), "อ", "leading เ is skipped")
 eq(ChatPresentation.initial(for: "แมว"), "ม", "leading แ is skipped")

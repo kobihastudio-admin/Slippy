@@ -3,6 +3,10 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
+import {
+  DEFAULT_FAB, FAB_SIZE, FAB_MARGIN, FAB_STORAGE_KEY,
+  clickFollowsDrag, isDrag, parseFabState, serializeFabState, stateAfterDrop, type FabState,
+} from "@/lib/assistant-fab"
 
 interface Msg { role: "user" | "assistant"; content: string; id: string }
 
@@ -66,6 +70,60 @@ export function SupportChat({ orgId }: { orgId?: string }) {
   const bottomRef  = useRef<HTMLDivElement>(null)
   const inputRef   = useRef<HTMLInputElement>(null)
 
+  // Where the round button sits: dragged to a side edge and a height, or hidden behind a small edge tab. It used to be
+  // fixed in the bottom-right corner, which covered the chat's send button on a phone.
+  const [fab,  setFab]  = useState<FabState>(DEFAULT_FAB)
+  const [drag, setDrag] = useState<{ left: number; top: number } | null>(null)
+  const press       = useRef<{ startX: number; startY: number; offX: number; offY: number; moved: boolean } | null>(null)
+  const droppedAt   = useRef<number | null>(null)
+
+  useEffect(() => {
+    try { setFab(parseFabState(window.localStorage.getItem(FAB_STORAGE_KEY), window.innerHeight)) } catch { /* private mode: keep the default */ }
+  }, [])
+
+  const saveFab = useCallback((next: FabState) => {
+    setFab(next)
+    try { window.localStorage.setItem(FAB_STORAGE_KEY, serializeFabState(next)) } catch { /* not saved, still works */ }
+  }, [])
+
+  function onFabPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
+    if (open) return   // while the window is open the button is just "close"
+    const rect = e.currentTarget.getBoundingClientRect()
+    press.current = { startX: e.clientX, startY: e.clientY, offX: e.clientX - rect.left, offY: e.clientY - rect.top, moved: false }
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* not supported: dragging still works while over the button */ }
+  }
+
+  function onFabPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
+    const p = press.current
+    if (!p) return
+    if (!p.moved && !isDrag({ x: p.startX, y: p.startY }, { x: e.clientX, y: e.clientY })) return
+    p.moved = true
+    setDrag({
+      left: Math.min(Math.max(e.clientX - p.offX, 0), window.innerWidth - FAB_SIZE),
+      top:  Math.min(Math.max(e.clientY - p.offY, 0), window.innerHeight - FAB_SIZE),
+    })
+  }
+
+  function onFabPointerUp() {
+    const p = press.current
+    press.current = null
+    if (p?.moved && drag) {
+      droppedAt.current = performance.now()   // the click that may follow a drag must not open the window
+      saveFab(stateAfterDrop(drag, { width: window.innerWidth, height: window.innerHeight }, false))
+    }
+    setDrag(null)
+  }
+
+  function onFabClick() {
+    if (clickFollowsDrag(performance.now(), droppedAt.current)) return
+    setOpen(o => !o)
+  }
+
+  function hideFab() {
+    setOpen(false)
+    saveFab({ ...fab, hidden: true })
+  }
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [msgs, loading])
@@ -112,7 +170,8 @@ export function SupportChat({ orgId }: { orgId?: string }) {
     <>
       {/* Chat window */}
       {open && (
-        <div className="fixed bottom-20 right-4 z-50 w-[340px] sm:w-[380px] flex flex-col
+        <div style={{ [fab.side]: FAB_MARGIN, bottom: "calc(5rem + env(safe-area-inset-bottom, 0px))" }}
+          className="fixed z-50 w-[340px] sm:w-[380px] max-w-[calc(100vw-2rem)] flex flex-col
           bg-card border border-border rounded-2xl shadow-2xl shadow-black/15 overflow-hidden
           animate-in slide-in-from-bottom-4 duration-200">
 
@@ -128,7 +187,11 @@ export function SupportChat({ orgId }: { orgId?: string }) {
                 ออนไลน์ · ตอบทันที
               </p>
             </div>
-            <button onClick={() => setOpen(false)}
+            <button onClick={hideFab} aria-label="ซ่อนไอคอนผู้ช่วย AI"
+              className="text-white/70 hover:text-white text-[11px] leading-none transition-colors border border-white/30 rounded-full px-2 py-1">
+              ซ่อนไอคอน
+            </button>
+            <button onClick={() => setOpen(false)} aria-label="ปิด"
               className="text-white/70 hover:text-white text-lg leading-none transition-colors">
               ✕
             </button>
@@ -187,29 +250,62 @@ export function SupportChat({ orgId }: { orgId?: string }) {
         </div>
       )}
 
-      {/* FAB button */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        className={cn(
-          "fixed bottom-4 right-4 z-50 w-14 h-14 rounded-full shadow-lg shadow-brand-500/30 overflow-hidden",
-          "bg-gradient-to-br from-violet-600 to-indigo-600",
-          "flex items-center justify-center transition-all duration-200",
-          "hover:scale-105 active:scale-95"
-        )}
-      >
-        {open ? (
-          <span className="text-white text-xl">✕</span>
-        ) : (
-          <>
-            <Image src="/images/slippy-assistant.png" alt="เปิดแชท Slippy Assistant" width={56} height={56} className="w-full h-full object-cover" />
-            {unread > 0 && (
-              <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
-                {unread}
-              </div>
-            )}
-          </>
-        )}
-      </button>
+      {/* Hidden: only a small tab on the screen edge is left, to bring the button back. */}
+      {fab.hidden && (
+        <button
+          onClick={() => saveFab({ ...fab, hidden: false })}
+          aria-label="แสดงไอคอนผู้ช่วย AI"
+          style={{ [fab.side]: 0, bottom: `calc(${fab.bottom + 8}px + env(safe-area-inset-bottom, 0px))` }}
+          className={cn(
+            "fixed z-50 w-5 h-12 bg-gradient-to-br from-violet-600 to-indigo-600 text-white text-[11px] opacity-80",
+            "flex items-center justify-center shadow-md hover:opacity-100 transition-opacity",
+            fab.side === "right" ? "rounded-l-xl" : "rounded-r-xl"
+          )}
+        >
+          {fab.side === "right" ? "‹" : "›"}
+        </button>
+      )}
+
+      {/* FAB button: tap to open, drag to move */}
+      {!fab.hidden && (
+        <button
+          onClick={onFabClick}
+          onPointerDown={onFabPointerDown}
+          onPointerMove={onFabPointerMove}
+          onPointerUp={onFabPointerUp}
+          onPointerCancel={() => { press.current = null; setDrag(null) }}
+          aria-label={open ? "ปิดผู้ช่วย AI" : "เปิดแชท Slippy Assistant (ลากเพื่อย้าย)"}
+          style={
+            drag
+              ? { left: drag.left, top: drag.top, touchAction: "none" }
+              : {
+                  [fab.side]: FAB_MARGIN,
+                  // While the window is open the button returns to the bottom corner it opens from.
+                  bottom: `calc(${open ? FAB_MARGIN : fab.bottom}px + env(safe-area-inset-bottom, 0px))`,
+                  touchAction: "none",
+                }
+          }
+          className={cn(
+            "fixed z-50 w-14 h-14 rounded-full shadow-lg shadow-brand-500/30 overflow-hidden select-none",
+            "bg-gradient-to-br from-violet-600 to-indigo-600",
+            "flex items-center justify-center",
+            drag ? "scale-105" : "transition-all duration-200 hover:scale-105 active:scale-95"
+          )}
+        >
+          {open ? (
+            <span className="text-white text-xl">✕</span>
+          ) : (
+            <>
+              <Image src="/images/slippy-assistant.png" alt="" width={56} height={56} draggable={false} className="w-full h-full object-cover pointer-events-none" />
+              {unread > 0 && (
+                <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                  {unread}
+                </div>
+              )}
+            </>
+          )}
+        </button>
+      )}
     </>
   )
 }

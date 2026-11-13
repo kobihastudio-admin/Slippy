@@ -150,7 +150,7 @@ final class MessagesViewModel: ObservableObject {
 
     // MARK: – Messages within a conversation
 
-    private static let messageColumns = "id, conversation_id, sender_id, body, msg_type, attachment_url, created_at"
+    private static let messageColumns = "id, conversation_id, sender_id, body, msg_type, attachment_url, created_at, meta"
 
     /// Call when a room is OPENED. Forgets what was loaded for it earlier, so the next `loadMessages` counts as a
     /// first page. Without this, coming back to a room merged only the newest page into the old rows, and any
@@ -264,7 +264,7 @@ final class MessagesViewModel: ObservableObject {
             let inserted: [FriendMessage] = try await db
                 .from("messages")
                 .insert(MsgInsert(conversation_id: conversationId, sender_id: senderId, body: trimmed, msg_type: "text"))
-                .select("id, conversation_id, sender_id, body, msg_type, attachment_url, created_at")
+                .select(Self.messageColumns)
                 .execute()
                 .value
             if let msg = inserted.first { messages.append(msg) }
@@ -287,5 +287,100 @@ final class MessagesViewModel: ObservableObject {
             self.error = error.localizedDescription
         }
         return true
+    }
+    // MARK: – Attachments and forwarding
+
+    private struct AttachmentInsert: Encodable {
+        let conversation_id: String
+        let sender_id: String
+        let body: String?
+        let msg_type: String
+        let attachment_url: String?
+        let meta: FriendMessageMeta?
+    }
+
+    /// Stores one message row and shows it. Throws what Supabase throws.
+    private func insertMessage(_ row: AttachmentInsert) async throws {
+        let inserted: [FriendMessage] = try await db
+            .from("messages")
+            .insert(row)
+            .select(Self.messageColumns)
+            .execute()
+            .value
+        if let message = inserted.first { messages.append(message) }
+    }
+
+    /// Bumps the room's `updated_at` so it moves to the top of the list. Best effort: the message is already stored.
+    private func touchConversation(_ conversationId: String) async {
+        do {
+            struct TouchPatch: Encodable { let updated_at: String }
+            let iso = ISO8601DateFormatter()
+            iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            try await db.from("conversations")
+                .update(TouchPatch(updated_at: iso.string(from: Date())))
+                .eq("id", value: conversationId)
+                .execute()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// Uploads `data` to the public `chat-attachments` bucket and sends it as an image / video / file message, the way
+    /// the web chat does. Returns `nil` on success, else the Thai text to show.
+    func sendAttachment(conversationId: String, senderId: String, data: Data, fileName: String, mime: String) async -> String? {
+        if let problem = ChatAttachmentRules.sizeProblem(bytes: data.count) { return problem }
+        guard !isSending else { return "กำลังส่งอยู่ รอสักครู่" }
+        isSending = true
+        defer { isSending = false }
+
+        #if DEBUG
+        if isFixture { return "fixture: sending is disabled" }
+        #endif
+
+        let path = ChatAttachmentRules.storagePath(conversationId: conversationId, date: Date(), fileName: fileName)
+        let publicUrl: String
+        do {
+            try await db.storage.from(ChatAttachmentRules.bucket)
+                .upload(path, data: data, options: .init(contentType: mime))
+            publicUrl = try db.storage.from(ChatAttachmentRules.bucket).getPublicURL(path: path).absoluteString
+        } catch {
+            return ChatAttachmentRules.friendlyError(error.localizedDescription)
+        }
+
+        do {
+            try await insertMessage(AttachmentInsert(
+                conversation_id: conversationId, sender_id: senderId, body: fileName,
+                msg_type: ChatAttachmentRules.messageType(mime: mime), attachment_url: publicUrl,
+                meta: FriendMessageMeta(fileName: fileName, fileSize: data.count)))
+        } catch {
+            // The row was refused: do not leave an orphan file behind (best effort).
+            _ = try? await db.storage.from(ChatAttachmentRules.bucket).remove(paths: [path])
+            return ChatAttachmentRules.friendlyError(error.localizedDescription)
+        }
+        await touchConversation(conversationId)
+        return nil
+    }
+
+    /// Sends a copy of `message` to another room (same text / same file URL; nothing is uploaded again).
+    /// Returns `nil` on success, else the Thai text to show.
+    func forward(_ message: FriendMessage, to targetConversationId: String, senderId: String) async -> String? {
+        guard ChatAttachmentRules.isForwardable(msgType: message.msgType) else { return "ข้อความนี้ส่งต่อไม่ได้" }
+        guard !isSending else { return "กำลังส่งอยู่ รอสักครู่" }
+        isSending = true
+        defer { isSending = false }
+
+        #if DEBUG
+        if isFixture { return "fixture: sending is disabled" }
+        #endif
+
+        do {
+            try await insertMessage(AttachmentInsert(
+                conversation_id: targetConversationId, sender_id: senderId, body: message.body,
+                msg_type: message.msgType, attachment_url: message.attachmentUrl, meta: message.meta))
+        } catch {
+            return "ส่งต่อไม่สำเร็จ: " + ChatAttachmentRules.friendlyError(error.localizedDescription)
+        }
+        await touchConversation(targetConversationId)
+        return nil
     }
 }
