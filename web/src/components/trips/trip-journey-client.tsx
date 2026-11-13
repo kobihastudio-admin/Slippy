@@ -573,7 +573,13 @@ export function TripJourneyClient({
       // no try/catch of its own, so an uncaught error here left "uploading"
       // stuck true forever: the button spun with no way out and no message,
       // which is exactly what silently read as "the upload button hangs."
-      const json = await res.json().catch(() => ({ error: "เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง — ไฟล์อาจใหญ่เกินไป" }))
+      // Say what actually happened: only a 413 means the file was too large. Anything else that is not JSON (an
+      // HTML error page from the server or a proxy) is a server-side failure, not the user's file.
+      const json = await res.json().catch(() => ({
+        error: res.status === 413
+          ? "ไฟล์ใหญ่เกินไป"
+          : `เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง (รหัส ${res.status}) — ลองอัปโหลดใหม่อีกครั้ง`,
+      }))
       if (!res.ok) { toast.error(json.error ?? "อัปโหลดไม่สำเร็จ"); return }
       setDocuments(prev => [json.document as TripDocument, ...prev])
       toast.success("อัปโหลดเอกสารแล้ว")

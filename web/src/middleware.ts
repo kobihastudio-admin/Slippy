@@ -16,6 +16,7 @@ import {
 } from "@/lib/liff-auth"
 import { checkRateLimit } from "@/lib/rate-limit"
 import { isPublicInviteLanding } from "@/lib/friend-invite"
+import { continuesToRoute, drainRequestBody } from "@/lib/middleware-body"
 
 const PUBLIC_LIFF_API_PATHS = new Set([
   "/api/liff/bill-info",
@@ -27,7 +28,19 @@ const PUBLIC_LIFF_API_PATHS = new Set([
 // in-app browser, not a human clicking around — never throttle them.
 const RATE_LIMIT_EXEMPT_PREFIXES = ["/api/webhooks/", "/api/liff/"]
 
+/**
+ * Every request goes through `handleRequest`; when it lets the request on to a route handler, the request body is read to
+ * its end first. Without that, Next 15.5 (Node.js runtime middleware) hands a body that is still arriving to the route
+ * "already read" and uploads that take longer than the middleware fail with an HTML 500 (see lib/middleware-body.ts).
+ * Redirects, 401s and 429s return at once, as before.
+ */
 export async function middleware(request: NextRequest) {
+  const response = await handleRequest(request)
+  if (continuesToRoute(response.headers)) await drainRequestBody(request)
+  return response
+}
+
+async function handleRequest(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   if (pathname.startsWith("/api/") && !RATE_LIMIT_EXEMPT_PREFIXES.some(p => pathname.startsWith(p))) {
