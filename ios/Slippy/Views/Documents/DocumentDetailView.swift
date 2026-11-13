@@ -63,6 +63,16 @@ struct DocumentDetailContentView: View {
     @State private var isLoadingImage   = false
     @State private var imageLoadError: String?
 
+    // ── Footer actions: download / share the stored file, report a problem ──
+    /// Which footer button is fetching the file right now (the others are disabled meanwhile).
+    @State private var preparingFileFor: FooterFileAction?
+    @State private var shareRequest: ShareRequest?
+    @State private var fileActionError: String?
+    @State private var showReportSheet = false
+    @State private var reportNotice: String?
+
+    enum FooterFileAction { case download, share }
+
     // ── Edit mode ───────────────────────────────────────────────────────────
     @State private var isEditing       = false
     @State private var isSaving        = false
@@ -185,6 +195,36 @@ struct DocumentDetailContentView: View {
                 // returns Bool now — success/failure surfaced in the viewer's UI
             )
         }
+        .sheet(item: $shareRequest) { request in
+            ActivityShareSheet(items: request.items) {
+                DocumentFileDownloader.discard(request.file)
+                shareRequest = nil
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showReportSheet) {
+            DocumentReportSheet(
+                documentTitle: "\(doc.vendorName ?? "เอกสาร") — \(fmtTHB(doc.totalAmount ?? 0))",
+                makeInsert: { category, note in makeReportInsert(category: category, note: note) },
+                onFinished: { outcome in
+                    reportNotice = outcome == .sent
+                        ? "ส่งรายงานแล้ว ขอบคุณที่แจ้งให้ทราบ ทีมงานจะตรวจสอบเอกสารนี้"
+                        : "คุณรายงานปัญหาประเภทนี้ของเอกสารนี้ไว้แล้ว ทีมงานกำลังตรวจสอบ"
+                }
+            )
+        }
+        .alert("ไม่สามารถดำเนินการได้", isPresented: Binding(
+            get: { fileActionError != nil },
+            set: { if !$0 { fileActionError = nil } }
+        )) {
+            Button("ตกลง", role: .cancel) { fileActionError = nil }
+        } message: { Text(fileActionError ?? "") }
+        .alert("รายงานปัญหา", isPresented: Binding(
+            get: { reportNotice != nil },
+            set: { if !$0 { reportNotice = nil } }
+        )) {
+            Button("ตกลง", role: .cancel) { reportNotice = nil }
+        } message: { Text(reportNotice ?? "") }
         .sheet(isPresented: $showSplit) {
             CreateSplitView(vm: splitVM, initialReceipt: splitExtraction, sourceDocumentID: doc.id)
                 .environmentObject(authVM)
@@ -855,19 +895,77 @@ struct DocumentDetailContentView: View {
 
     private var footerActionBar: some View {
         HStack(spacing: 0) {
-            footerAction("ดาวน์โหลด", "square.and.arrow.down") {
-                hapticLight(); showImageViewer = true; Task { await loadSignedImageURL() }
-            }
+            footerFileAction("ดาวน์โหลด", "square.and.arrow.down", .download)
             footerDivider
-            ShareLink(item: shareSummaryText) { footerActionLabel("แชร์", "square.and.arrow.up") }
+            footerFileAction("แชร์", "square.and.arrow.up", .share)
             footerDivider
             footerAction("เพิ่มแท็ก", "tag") {
                 hapticLight(); saveSuccess = false; isEditing = true
             }
             footerDivider
-            ShareLink(item: reportText) { footerActionLabel("รายงานปัญหา", "flag") }
+            footerAction("รายงานปัญหา", "flag") {
+                hapticLight(); showReportSheet = true
+            }
         }
         .sectionCard()
+    }
+
+    /// ดาวน์โหลด / แชร์: fetch the stored file, then hand it to the system share sheet (ดาวน์โหลด = the file alone, so the
+    /// sheet's "Save to Files / Save Image" is what the user reaches for; แชร์ = the file plus the summary text).
+    private func footerFileAction(_ label: String, _ icon: String, _ kind: FooterFileAction) -> some View {
+        Button {
+            hapticLight()
+            Task { await prepareFile(for: kind) }
+        } label: {
+            if preparingFileFor == kind {
+                VStack(spacing: 5) {
+                    ProgressView().frame(height: 20)
+                    Text("กำลังโหลด…").font(.system(size: 10.5, weight: .medium))
+                }
+                .foregroundColor(Color.brand500)
+                .frame(maxWidth: .infinity)
+            } else {
+                footerActionLabel(label, icon)
+            }
+        }
+        .disabled(preparingFileFor != nil)
+        .accessibilityLabel(preparingFileFor == kind ? "\(label) กำลังโหลดไฟล์" : label)
+    }
+
+    private func prepareFile(for kind: FooterFileAction) async {
+        guard preparingFileFor == nil else { return }
+        guard !isPreviewDocument else {
+            fileActionError = "เอกสารตัวอย่างไม่มีไฟล์จริงให้ดาวน์โหลด"
+            return
+        }
+        preparingFileFor = kind
+        defer { preparingFileFor = nil }
+        do {
+            // A fresh, short-lived link each time (the cached one used by the image viewer may have expired).
+            let signed = try await SupabaseManager.shared.client
+                .storage.from(Config.storageBucket)
+                .createSignedURL(path: doc.filePath, expiresIn: 600)
+            let file = try await DocumentFileDownloader.download(from: signed, filePath: doc.filePath, documentId: doc.id)
+            shareRequest = ShareRequest(file: file, text: kind == .share ? shareSummaryText : nil)
+        } catch {
+            fileActionError = "ดาวน์โหลดไฟล์ไม่สำเร็จ: \(error.localizedDescription)"
+        }
+    }
+
+    /// The row for "รายงานปัญหา", or `nil` when there is no signed-in user.
+    private func makeReportInsert(category: DocumentReportCategory, note: String) -> DocumentReport.Insert? {
+        guard let reporterId = authVM.session?.user.id.uuidString.lowercased() else { return nil }
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? Config.appVersion
+        return DocumentReport.makeInsert(
+            documentId: doc.id.lowercased(),
+            organizationId: doc.organizationId.lowercased(),
+            reporterId: reporterId,
+            category: category,
+            note: note,
+            appVersion: version,
+            context: DocumentReport.makeContext(
+                vendorName: doc.vendorName, totalAmount: doc.totalAmount, status: doc.status,
+                source: doc.source, docType: doc.docType, validationIssues: doc.validationIssues ?? []))
     }
 
     private var footerDivider: some View {
@@ -892,10 +990,6 @@ struct DocumentDetailContentView: View {
         if !docDateText.isEmpty { lines.append("วันที่ \(formatDocDate(docDateText))") }
         lines.append("ผ่าน Slippy")
         return lines.joined(separator: "\n")
-    }
-
-    private var reportText: String {
-        "รายงานปัญหาเอกสาร\nร้าน: \(doc.vendorName ?? "-")\nยอดรวม: \(fmtTHB(doc.totalAmount ?? 0))\nรหัสเอกสาร: \(doc.id)"
     }
 
     @ViewBuilder

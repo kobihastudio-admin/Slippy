@@ -7,12 +7,30 @@ import UIKit
 /// any combination of text + image items without custom per-app integration.
 struct ActivityShareSheet: UIViewControllerRepresentable {
     let items: [Any]
+    /// Called when the sheet is dismissed (shared or cancelled), e.g. to delete a temporary file that was being shared.
+    var onFinish: (() -> Void)? = nil
 
     func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
+        let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        if let onFinish { controller.completionWithItemsHandler = { _, _, _, _ in onFinish() } }
+        return controller
     }
 
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+
+/// A downloaded document file (and optional summary text) to hand to the share sheet. `file` is a temporary copy: the
+/// caller deletes it when the sheet is dismissed (`DocumentFileDownloader.discard`).
+struct ShareRequest: Identifiable {
+    let id = UUID()
+    let file: URL
+    let text: String?
+
+    var items: [Any] {
+        var out: [Any] = [file]
+        if let text, !text.isEmpty { out.append(text) }
+        return out
+    }
 }
 
 /// Opens LINE's own share-target picker directly via its URL scheme — skips
