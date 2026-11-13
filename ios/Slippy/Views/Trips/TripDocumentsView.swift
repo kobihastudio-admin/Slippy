@@ -14,10 +14,23 @@ struct TripDocumentsView: View {
     @State private var loading = true
     @State private var errorText: String?
     @State private var showImporter = false
+    @State private var showPhotoPicker = false
+    @State private var showCamera = false
+    @State private var photoItem: PhotosPickerItem?
+    /// True while a picked photo is being read / re-encoded, so a second pick cannot start meanwhile.
+    @State private var preparing = false
     @State private var pendingFile: (data: Data, name: String, mime: String)?
     @State private var previewURL: URL?
     @State private var opening: String?
     @Environment(\.dismiss) private var dismiss
+
+    private static var cameraAvailable: Bool {
+        #if targetEnvironment(simulator)
+        return false
+        #else
+        return UIImagePickerController.isSourceTypeAvailable(.camera)
+        #endif
+    }
 
     var body: some View {
         NavigationStack {
@@ -46,7 +59,20 @@ struct TripDocumentsView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("ปิด") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button { showImporter = true } label: { Image(systemName: "plus") }
+                    if preparing {
+                        ProgressView()
+                    } else {
+                        Menu {
+                            // The simulator's virtual camera cannot capture and some iPads have no camera: offer it only
+                            // where it can work (the same rule DocumentScannerView applies).
+                            if Self.cameraAvailable {
+                                Button { showCamera = true } label: { Label("ถ่ายรูป", systemImage: "camera") }
+                            }
+                            Button { showPhotoPicker = true } label: { Label("เลือกจากรูปภาพ", systemImage: "photo.on.rectangle") }
+                            Button { showImporter = true } label: { Label("เลือกไฟล์ (PDF / รูป)", systemImage: "folder") }
+                        } label: { Image(systemName: "plus") }
+                        .accessibilityLabel("เพิ่มเอกสาร")
+                    }
                 }
             }
             .alert("ทำรายการไม่สำเร็จ", isPresented: .constant(errorText != nil)) {
@@ -55,6 +81,16 @@ struct TripDocumentsView: View {
             .fileImporter(isPresented: $showImporter,
                           allowedContentTypes: [.pdf, .jpeg, .png, .heic],
                           onCompletion: handlePick)
+            .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
+            .onChange(of: photoItem) { _, item in
+                guard let item else { return }
+                photoItem = nil
+                Task { await handlePhoto(item) }
+            }
+            .fullScreenCover(isPresented: $showCamera) {
+                CameraImagePicker { image in handleCamera(image) }
+                    .ignoresSafeArea()
+            }
             .sheet(item: Binding(
                 get: { pendingFile.map(PendingFileBox.init) },
                 set: { pendingFile = $0?.value }
@@ -73,7 +109,7 @@ struct TripDocumentsView: View {
         VStack(spacing: 8) {
             Image(systemName: "folder").font(.system(size: 30)).foregroundColor(Color.textSecondary)
             Text("ยังไม่มีเอกสาร").font(.system(size: 15, weight: .semibold))
-            Text("แตะ + เพื่ออัปโหลดตั๋ว พาสปอร์ต หรือเอกสารอื่นๆ")
+            Text("แตะ + เพื่อถ่ายรูป เลือกรูป หรือเลือกไฟล์ ตั๋ว พาสปอร์ต ประกัน ใบจอง")
                 .font(.system(size: 12)).foregroundColor(Color.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -110,7 +146,7 @@ struct TripDocumentsView: View {
         loading = true
         defer { loading = false }
         do { documents = try await TripDocumentStorageAPI.list(journeyId: trip.id) }
-        catch { errorText = error.localizedDescription }
+        catch { errorText = TripDocumentUploadRules.friendlyError(error.localizedDescription) }
     }
 
     private func handlePick(_ result: Result<URL, Error>) {
@@ -127,23 +163,72 @@ struct TripDocumentsView: View {
                 errorText = "อ่านไฟล์ไม่ได้"
                 return
             }
+            if let problem = TripDocumentUploadRules.sizeProblem(bytes: data.count) {
+                errorText = problem
+                return
+            }
             let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
             pendingFile = (data, url.lastPathComponent, mime)
         }
+    }
+
+    /// A photo from the library: HEIC / PNG / JPEG originals are kept; anything else, or an original over the
+    /// limit, is re-encoded as JPEG (see TripDocumentUploadRules).
+    private func handlePhoto(_ item: PhotosPickerItem) async {
+        preparing = true
+        defer { preparing = false }
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self), !data.isEmpty else {
+                errorText = "อ่านรูปไม่ได้"
+                return
+            }
+            let format = TripDocumentUploadRules.storedPhotoFormat(typeIdentifiers: item.supportedContentTypes.map(\.identifier))
+            if format != .convertToJPEG, data.count <= TripDocumentUploadRules.maxBytes {
+                stage(data: data, format: format)
+            } else if let image = UIImage(data: data), let jpeg = Self.encodeJPEG(image) {
+                stage(data: jpeg, format: .convertToJPEG)
+            } else {
+                errorText = TripDocumentUploadRules.sizeProblem(bytes: data.count) ?? "อ่านรูปไม่ได้"
+            }
+        } catch {
+            errorText = TripDocumentUploadRules.friendlyError(error.localizedDescription)
+        }
+    }
+
+    private func handleCamera(_ image: UIImage) {
+        if let jpeg = Self.encodeJPEG(image) {
+            stage(data: jpeg, format: .convertToJPEG)
+        } else {
+            errorText = "รูปใหญ่เกินไปแม้บีบอัดแล้ว ลองถ่ายใหม่หรือเลือกไฟล์ที่เล็กกว่า"
+        }
+    }
+
+    private func stage(data: Data, format: TripDocumentUploadRules.PhotoFormat) {
+        let name = TripDocumentUploadRules.photoFileName(date: Date(), ext: format.ext)
+        pendingFile = (data, name, format.mime)
+    }
+
+    /// The first JPEG quality that fits the 15 MB limit, or `nil` if none does.
+    private static func encodeJPEG(_ image: UIImage) -> Data? {
+        for quality in TripDocumentUploadRules.jpegQualitySteps {
+            if let data = image.jpegData(compressionQuality: quality),
+               TripDocumentUploadRules.sizeProblem(bytes: data.count) == nil { return data }
+        }
+        return nil
     }
 
     private func open(_ doc: TripDocument) async {
         opening = doc.id
         defer { opening = nil }
         do { previewURL = try await TripDocumentStorageAPI.downloadForPreview(doc) }
-        catch { errorText = error.localizedDescription }
+        catch { errorText = TripDocumentUploadRules.friendlyError(error.localizedDescription) }
     }
 
     private func remove(_ doc: TripDocument) async {
         let before = documents
         documents.removeAll { $0.id == doc.id }
         do { try await TripDocumentStorageAPI.remove(document: doc) }
-        catch { documents = before; errorText = error.localizedDescription }
+        catch { documents = before; errorText = TripDocumentUploadRules.friendlyError(error.localizedDescription) }
     }
 }
 
@@ -212,7 +297,7 @@ private struct UploadDocumentSheet: View {
             onDone(doc)
             dismiss()
         } catch {
-            errorText = error.localizedDescription
+            errorText = TripDocumentUploadRules.friendlyError(error.localizedDescription)
         }
     }
 }

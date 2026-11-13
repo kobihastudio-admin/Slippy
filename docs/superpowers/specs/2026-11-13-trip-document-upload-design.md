@@ -53,3 +53,11 @@ device is not established (the buttons sit lower on the Overview tab, one is nam
 ## 8. Approval needed
 
 1. Commit and push the files above. 2. Deploy web (the usual thin-layer recipe; `next build` of the real app is part of it). 3. A manual upload test by the user after the deploy: a 5 MB and a 12 MB PDF/JPG into a trip's documents, on the web.
+
+## 9. Native app change (2026-11-13, approved by the user)
+
+Checked in the simulator on the real `JourneyWorkspaceView` (throwaway copy outside the repo with a fixture) and in the catalog: the document section exists and the database side works (authenticated has all grants on `trip_documents`, a participant passes RLS, the values iOS sends match the table's CHECKs). What was wrong:
+1. Not findable: the entry was "Travel Wallet", English, with no word "เอกสาร" anywhere on the Overview tab. Now "เอกสารทริป (พาสปอร์ต · ตั๋ว · ใบจอง)" in the management grid and the travel command center (`JourneyPrototypeView.swift`).
+2. Files app only: the "+" now opens a menu: ถ่ายรูป (only where a camera can capture, i.e. not in the simulator), เลือกจากรูปภาพ (PhotosPicker) and เลือกไฟล์ (PDF / รูป). HEIC / PNG / JPEG originals are kept; other formats or an original over the limit are re-encoded as JPEG (quality 0.85, 0.6, 0.4), then the same upload sheet (title, kind) as before. Photo names are `รูปภาพ-yyyyMMdd-HHmmss.<ext>` with Gregorian digits.
+3. English storage errors and no size check: `TripDocumentUploadRules` (Foundation only, `ios/scripts/verify-trip-document-upload.mjs`) checks the 15 MB limit before uploading and words storage / RLS / network errors in Thai on every path of the screen (list, open, delete, upload).
+Seen in the simulator: the three-way menu, the photo picker, the upload sheet with the generated name, title, kind and size, and the Thai error for a missing session. Not seen: a real upload by a signed-in user, the camera capture (the simulator's virtual camera cannot capture), HEIC/PNG originals and the re-encode path, a file over 15 MB.

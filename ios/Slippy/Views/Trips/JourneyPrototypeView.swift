@@ -1167,7 +1167,7 @@ struct JourneyWorkspaceView: View {
                 }
                 .buttonStyle(.plain)
                 Button { showTravelDocuments = true } label: {
-                    JourneyManagementAction(title: "Travel Wallet", detail: "พาสปอร์ต · ใบจอง", icon: "folder.fill", tint: .statusApproved)
+                    JourneyManagementAction(title: "เอกสารทริป", detail: "พาสปอร์ต · ตั๋ว · ใบจอง", icon: "folder.fill", tint: .statusApproved)
                 }
                 .buttonStyle(.plain)
                 Button { tab = 3 } label: {
@@ -1226,7 +1226,7 @@ struct JourneyWorkspaceView: View {
                     commandAction("สแกนเอกสาร", "ตั๋ว · โรงแรม · รถเช่า", "doc.text.viewfinder")
                 }.buttonStyle(.plain)
                 Button { showTravelDocuments = true } label: {
-                    commandAction("Travel Wallet", "พาสปอร์ต · ประกัน", "folder.fill")
+                    commandAction("เอกสารทริป", "พาสปอร์ต · ประกัน · ตั๋ว", "folder.fill")
                 }.buttonStyle(.plain)
             }
 
