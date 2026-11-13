@@ -14,8 +14,12 @@ struct UserProfile: Codable, Identifiable {
         case dateOfBirth = "date_of_birth"
     }
 
+    /// The name, else the email's local part. `get_related_profiles` gives an empty email to people who are not
+    /// accepted friends, so with no name either there is nothing to show but a placeholder.
     var displayName: String {
-        fullName ?? email.components(separatedBy: "@").first ?? "—"
+        if let name = fullName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty { return name }
+        if let local = email.components(separatedBy: "@").first, !local.isEmpty { return local }
+        return "ผู้ใช้ Slippy"
     }
 
     var initials: String {

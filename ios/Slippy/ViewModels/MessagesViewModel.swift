@@ -57,9 +57,11 @@ final class MessagesViewModel: ObservableObject {
                 .execute()
                 .value
 
-            async let othersTask: [ConversationMemberWithUser] = db
+            // Who else is in each room. Their profiles come from the RPC below: embedding `users(...)` here returned
+            // nothing, because RLS lets a user read only their own row of that table.
+            async let othersTask: [ConversationMemberRow] = db
                 .from("conversation_members")
-                .select("conversation_id, users(id, email, full_name, avatar_url)")
+                .select("conversation_id, user_id")
                 .in("conversation_id", values: convIds)
                 .neq("user_id", value: myId)
                 .execute()
@@ -87,9 +89,10 @@ final class MessagesViewModel: ObservableObject {
 
             let (convs, others, lastMsgs) = try await (convsTask, othersTask, lastMsgsTask)
 
+            let profiles = try await ProfileDirectory.fetch(ids: others.map(\.userId))
             var otherByConv: [String: UserProfile] = [:]
             for row in others {
-                if let user = row.user { otherByConv[row.conversationId] = user }
+                if let user = profiles[row.userId.lowercased()] { otherByConv[row.conversationId] = user }
             }
             var lastMsgByConv: [String: LastMsgRow] = [:]
             for row in lastMsgs where lastMsgByConv[row.conversationId] == nil {
