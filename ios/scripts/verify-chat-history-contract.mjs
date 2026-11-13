@@ -39,11 +39,18 @@ assert(older.includes('ChatPaging.hasMoreOlder('), 'loadOlder must decide has-mo
 assert(older.includes('.order("created_at", ascending: false)'), 'loadOlder reads newest-first within the older range');
 assert(/func hasOlder\(/.test(vm), 'the view model must expose hasOlder(_:)');
 
-// --- direct room: only a direct room of exactly the two people ---
+// --- direct room: opened on the server, never created from the app ---
+// A signed-in user cannot insert a conversation (returning its id) or its members: RLS refuses both. The room is opened by
+// the open_direct_conversation function (supabase/migrations/20261113130000_open_direct_conversation.sql), which checks that
+// the two are accepted friends, reuses the direct room of exactly these two people and creates it with both members.
 const direct = body(vm, 'func getOrCreateDirectConversation(');
-assert(direct.includes('ChatPaging.pickDirectConversation('), 'direct lookup must use ChatPaging.pickDirectConversation');
-assert(direct.includes('.eq("type", value: "direct")'), 'direct lookup must only consider type = direct');
-assert(!direct.includes('.limit(1)'), 'the "first shared room of any kind" query must be gone');
+assert(direct.includes('.rpc("open_direct_conversation"'), 'the direct room must be opened through the open_direct_conversation RPC');
+assert(direct.includes('p_friend_id'), 'the RPC takes p_friend_id');
+assert(!direct.includes('.from("conversations")'), 'the app must not insert or read conversations itself to open a chat');
+assert(!direct.includes('.from("conversation_members")'), 'the app must not insert members itself (RLS refuses it)');
+assert(!direct.includes('.insert('), 'no client-side insert');
+assert(direct.includes('openChatError'), 'a failure is published for the screen to show');
+assert(direct.includes('ChatPresentation.openChatFailureMessage('), 'the failure is worded in Thai by ChatPresentation');
 
 // --- re-entering a room must count as a FIRST page (review finding: otherwise messages that arrived while the reader
 // was away, beyond the newest page, are merged around and silently skipped) ---

@@ -155,6 +155,20 @@ enum ChatPresentation {
         }
     }
 
+    /// Thai wording for why opening a chat with a friend failed (what the `open_direct_conversation` RPC or the network
+    /// says). A message that is already Thai is shown as it is; an unknown one keeps its original text after a prefix.
+    static func openChatFailureMessage(_ raw: String) -> String {
+        if raw.unicodeScalars.contains(where: { (0x0E00...0x0E7F).contains($0.value) }) { return raw }
+        let text = raw.lowercased()
+        if text.contains("not_friends") { return "ต้องเป็นเพื่อนที่ยืนยันแล้วจึงจะแชทได้" }
+        if text.contains("not_authenticated") { return "กรุณาเข้าสู่ระบบใหม่แล้วลองอีกครั้ง" }
+        if text.contains("offline") || text.contains("connection was lost") || text.contains("timed out")
+            || text.contains("internet connection") || text.contains("network connection") {
+            return "การเชื่อมต่ออินเทอร์เน็ตมีปัญหา ลองใหม่อีกครั้ง"
+        }
+        return raw.isEmpty ? "เปิดแชทไม่สำเร็จ" : "เปิดแชทไม่สำเร็จ: \(raw)"
+    }
+
     /// Local chat-list search: case-insensitive "contains" on name or last message.
     static func matches(query: String, name: String, lastMessage: String?) -> Bool {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)

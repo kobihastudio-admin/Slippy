@@ -12,6 +12,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
+import { inviteNextPath, withNext } from "@/lib/invite-next"
 import { useTranslations } from "next-intl"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
@@ -27,6 +28,8 @@ export function RegisterForm() {
   const searchParams = useSearchParams()
   const planId        = searchParams.get("plan")
   const yearly         = searchParams.get("yearly") === "1"
+  // A friend-invite link that sent the visitor here: finish it after sign-up (lib/invite-next.ts).
+  const inviteNext     = inviteNextPath(searchParams.get("next"))
 
   const [form, setForm] = useState({
     fullName: "",
@@ -103,18 +106,18 @@ export function RegisterForm() {
 
     // Full reload so the browser Supabase client re-initializes its session
     // from the cookies the server route just set (same reasoning as login).
-    window.location.href = "/dashboard"
+    window.location.href = inviteNext ?? "/dashboard"
   }
 
   const signInWith = async (provider: "google" | "facebook") => {
     await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${location.origin}/auth/callback` },
+      options: { redirectTo: `${location.origin}${withNext("/auth/callback", inviteNext)}` },
     })
   }
 
   // LINE uses a custom OAuth flow via /api/auth/line (not Supabase built-in)
-  const signInWithLine = () => { window.location.href = "/api/auth/line" }
+  const signInWithLine = () => { window.location.href = withNext("/api/auth/line", inviteNext) }
 
   const InputField = ({
     label, field, type = "text", placeholder, required = true
@@ -214,7 +217,7 @@ export function RegisterForm() {
 
       <p className="text-center text-sm text-muted-foreground">
         {t("hasAccount")}{" "}
-        <Link href="/login" className="text-brand-500 hover:underline font-medium">
+        <Link href={withNext("/login", inviteNext)} className="text-brand-500 hover:underline font-medium">
           {t("login")}
         </Link>
       </p>

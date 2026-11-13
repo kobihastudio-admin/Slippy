@@ -93,6 +93,12 @@ struct FriendChatListView: View {
                     }
                 }
             }
+            .alert("เปิดแชทไม่ได้", isPresented: Binding(
+                get: { vm.openChatError != nil },
+                set: { if !$0 { vm.openChatError = nil } }
+            )) {
+                Button("ตกลง", role: .cancel) { vm.openChatError = nil }
+            } message: { Text(vm.openChatError ?? "") }
             .task {
                 guard !myId.isEmpty else { return }
                 await vm.loadConversations(myId: myId)

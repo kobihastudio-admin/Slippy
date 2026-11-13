@@ -11,6 +11,7 @@ import { NextRequest, NextResponse }                from "next/server"
 import { createServerClient, type CookieOptions }  from "@supabase/ssr"
 import { cookies }                                  from "next/headers"
 import { getPublicOrigin }                          from "@/lib/public-origin"
+import { safeRedirectPath }                         from "@/lib/safe-redirect"
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -19,7 +20,8 @@ export async function GET(req: NextRequest) {
   // after login. See lib/public-origin.ts.
   const origin = getPublicOrigin(req.headers)
   const code  = searchParams.get("code")
-  const next  = searchParams.get("next") ?? "/dashboard"
+  // Same-origin paths only: `next` used to be appended to the origin as it came (`https://host@evil.example` would pass).
+  const next  = safeRedirectPath(searchParams.get("next"), "/dashboard")
 
   if (code) {
     const cookieStore = await cookies()

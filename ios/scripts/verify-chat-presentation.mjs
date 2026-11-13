@@ -138,6 +138,15 @@ eq(ChatPresentation.draftAfterSend(current: "hello world", sent: "hello", succee
 eq(ChatPresentation.draftAfterSend(current: "", sent: "hello", succeeded: true), "", "emptied field stays empty")
 eq(ChatPresentation.draftAfterSend(current: "edited", sent: "hello", succeeded: false), "edited", "failure never rewrites the field")
 
+// --- opening a chat failed: Thai wording for what the RPC / network says ---
+check(ChatPresentation.openChatFailureMessage("PostgrestError(message: not_friends)").contains("เพื่อน"), "not_friends -> must be friends")
+check(ChatPresentation.openChatFailureMessage("not_authenticated").contains("เข้าสู่ระบบ"), "not signed in")
+check(ChatPresentation.openChatFailureMessage("The Internet connection appears to be offline.").contains("อินเทอร์เน็ต"), "offline")
+check(ChatPresentation.openChatFailureMessage("The request timed out.").contains("อินเทอร์เน็ต"), "timeout")
+check(ChatPresentation.openChatFailureMessage("row-level security").hasPrefix("เปิดแชทไม่สำเร็จ"), "anything else: Thai prefix")
+check(ChatPresentation.openChatFailureMessage("something odd").contains("something odd"), "the original text is not lost")
+check(ChatPresentation.openChatFailureMessage("ต้องเป็นเพื่อนกัน") == "ต้องเป็นเพื่อนกัน", "an already Thai message is shown as it is")
+
 if failures > 0 { print("\\(failures) check(s) failed"); exit(1) }
 print("PASS: chat presentation (labels, parsing, layout, initials, filter, draft)")
 `);

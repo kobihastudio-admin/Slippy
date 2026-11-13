@@ -16,6 +16,7 @@ import {
 } from "@/lib/liff-auth"
 import { checkRateLimit } from "@/lib/rate-limit"
 import { isPublicInviteLanding } from "@/lib/friend-invite"
+import { loginPathFor } from "@/lib/invite-next"
 import { continuesToRoute, drainRequestBody } from "@/lib/middleware-body"
 
 const PUBLIC_LIFF_API_PATHS = new Set([
@@ -145,7 +146,8 @@ async function handleRequest(request: NextRequest) {
     || pathname === "/"
 
   if (!user && !isPublic) {
-    const loginUrl = new URL("/login", request.url)
+    // keeps a friend-invite token across the login (lib/invite-next.ts); every other path goes to a bare /login
+    const loginUrl = new URL(loginPathFor(pathname), request.url)
     return NextResponse.redirect(loginUrl)
   }
 

@@ -119,93 +119,31 @@ final class MessagesViewModel: ObservableObject {
         }
     }
 
-    /// Finds an existing direct conversation with `friendId`, or creates one.
-    /// Mirrors web/src/app/api/conversations/route.ts POST.
+    /// Why the last attempt to open a chat with a friend failed (Thai, for the screen to show), or `nil`.
+    @Published var openChatError: String?
+
+    /// The direct room with the friend `friendId`, opened on the server. A signed-in user cannot create a conversation or its
+    /// members from the app (row-level security refuses both), so `open_direct_conversation` does it in one step: it checks that
+    /// the two are accepted friends, reuses the direct room of exactly these two people if there is one, and otherwise creates it
+    /// with both members (see supabase/migrations/20261113130000_open_direct_conversation.sql).
+    /// `myId` is kept for the call sites; the server uses the signed-in user.
     func getOrCreateDirectConversation(myId: String, friendId: String) async -> String? {
         #if DEBUG
         if isFixture { return nil }
         #endif
+        openChatError = nil
+        struct Params: Encodable {
+            let pFriendId: String
+            enum CodingKeys: String, CodingKey { case pFriendId = "p_friend_id" }
+        }
         do {
-            let mine: [ConversationMemberRow] = try await db
-                .from("conversation_members")
-                .select("conversation_id, user_id")
-                .eq("user_id", value: myId)
+            let roomId: String = try await db
+                .rpc("open_direct_conversation", params: Params(pFriendId: friendId.lowercased()))
                 .execute()
                 .value
-            let myConvIds = mine.map(\.conversationId)
-
-            if !myConvIds.isEmpty {
-                let shared: [ConversationMemberRow] = try await db
-                    .from("conversation_members")
-                    .select("conversation_id, user_id")
-                    .eq("user_id", value: friendId)
-                    .in("conversation_id", values: myConvIds)
-                    .execute()
-                    .value
-                let sharedIds = shared.map(\.conversationId)
-
-                // Only a DIRECT room of exactly these two people may be reused. "Any room we both are in" used to
-                // be picked, so a shared group or trip room could open as the private chat with this friend.
-                if !sharedIds.isEmpty {
-                    struct RoomRow: Decodable {
-                        struct MemberRef: Decodable {
-                            let userId: String
-                            enum CodingKeys: String, CodingKey { case userId = "user_id" }
-                        }
-                        let id: String
-                        let type: String
-                        let members: [MemberRef]
-                        enum CodingKeys: String, CodingKey {
-                            case id, type
-                            case members = "conversation_members"
-                        }
-                    }
-                    let rooms: [RoomRow] = try await db
-                        .from("conversations")
-                        .select("id, type, created_at, conversation_members(user_id)")
-                        .in("id", values: sharedIds)
-                        .eq("type", value: "direct")
-                        .order("created_at", ascending: true)
-                        .execute()
-                        .value
-                    let candidates = rooms.map {
-                        ChatPaging.DirectCandidate(id: $0.id, type: $0.type, memberIds: $0.members.map(\.userId))
-                    }
-                    if let existing = ChatPaging.pickDirectConversation(candidates, me: myId, other: friendId) {
-                        return existing
-                    }
-                }
-            }
-
-            struct ConvInsert: Encodable {
-                let type: String
-                let created_by: String
-            }
-            struct ConvIdRow: Decodable { let id: String }
-            let created: [ConvIdRow] = try await db
-                .from("conversations")
-                .insert(ConvInsert(type: "direct", created_by: myId))
-                .select("id")
-                .execute()
-                .value
-            guard let convId = created.first?.id else { return nil }
-
-            struct MemberInsert: Encodable {
-                let conversation_id: String
-                let user_id: String
-                let role: String
-            }
-            try await db
-                .from("conversation_members")
-                .insert([
-                    MemberInsert(conversation_id: convId, user_id: myId, role: "admin"),
-                    MemberInsert(conversation_id: convId, user_id: friendId, role: "member"),
-                ])
-                .execute()
-
-            return convId
+            return roomId
         } catch {
-            self.error = error.localizedDescription
+            openChatError = ChatPresentation.openChatFailureMessage("\(error) \(error.localizedDescription)")
             return nil
         }
     }

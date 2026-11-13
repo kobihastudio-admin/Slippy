@@ -11,10 +11,12 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { Icons } from "@/components/ui/icons"
 import { TurnstileWidget } from "@/components/auth/turnstile-widget"
+import { inviteNextPath, withNext } from "@/lib/invite-next"
 
 // ─── Social icon SVGs ────────────────────────────────────────────────────────
 function SvgGoogle() {
@@ -60,6 +62,9 @@ function SocialBtn({ onClick, label, icon }: { onClick: () => void; label: strin
 
 // ─────────────────────────────────────────────────────────────────────────────
 export function LoginForm() {
+  // A friend-invite link that sent the visitor here (`/login?next=/friends/join/<token>`): carry it through every way of
+  // signing in so the invite is completed afterwards instead of being lost (lib/invite-next.ts). Anything else is ignored.
+  const inviteNext = inviteNextPath(useSearchParams().get("next"))
   const supabase = createClient()
 
   const [email,    setEmail]    = useState("")
@@ -116,7 +121,7 @@ export function LoginForm() {
     // Full reload (not router.push) so the browser Supabase client
     // re-initializes its in-memory session from the cookies the server
     // route just set, instead of staying stale.
-    window.location.href = "/dashboard"
+    window.location.href = inviteNext ?? "/dashboard"
   }
 
   const handleVerifyMfa = async (e: React.FormEvent) => {
@@ -132,20 +137,20 @@ export function LoginForm() {
       return
     }
 
-    window.location.href = "/dashboard"
+    window.location.href = inviteNext ?? "/dashboard"
   }
 
   const signInWith = async (provider: "google" | "facebook") => {
     await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${location.origin}/auth/callback` },
+      options: { redirectTo: `${location.origin}${withNext("/auth/callback", inviteNext)}` },
     })
   }
 
   // LINE uses a custom OAuth flow via /api/auth/line (not Supabase built-in)
   // because LINE is not a native Supabase provider.
   const signInWithLine = () => {
-    window.location.href = "/api/auth/line"
+    window.location.href = withNext("/api/auth/line", inviteNext)
   }
 
   if (mfaFactorId) {
@@ -300,7 +305,7 @@ export function LoginForm() {
 
       <p className="mt-5 text-center text-sm text-muted-foreground">
         ยังไม่มีบัญชี?{" "}
-        <Link href="/register" className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
+        <Link href={withNext("/register", inviteNext)} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
           สมัครสมาชิก
         </Link>
       </p>
