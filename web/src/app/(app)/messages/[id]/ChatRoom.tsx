@@ -7,7 +7,8 @@ import {
   ArrowLeft, Send, Image as ImageIcon, Paperclip, DollarSign,
   FileText, X, Loader2, ChevronDown, Receipt, Share2
 } from "lucide-react"
-import { chatMessageType, formatFileSize, isSafeAttachmentUrl } from "@/lib/chat-attachment"
+import { buildChatAttachmentPath, chatMessageType, formatFileSize } from "@/lib/chat-attachment"
+import { signChatAttachment, useChatAttachmentUrl } from "@/components/chat/use-chat-attachment-url"
 
 // Must match the "chat-attachments" bucket's file_size_limit (migration
 // 077) — checking client-side first avoids wasting a slow upload attempt
@@ -96,7 +97,23 @@ function isSameDay(a: string, b: string) {
 
 const IMAGE_LOAD_RETRY_DELAYS_MS = [600, 1500, 3000]
 
-function ImageBubble({ url, isMe }: { url: string; isMe: boolean }) {
+/** Adds a cache-busting query to a URL that may already have one (a signed URL has `?token=`). */
+function withRetry(url: string, retryCount: number): string {
+  return retryCount === 0 ? url : `${url}${url.includes("?") ? "&" : "?"}retry=${retryCount}`
+}
+
+/** Shown while a private file's signed URL is being fetched. */
+function AttachmentPlaceholder({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2 px-4 py-3 bg-muted rounded-2xl max-w-[240px] text-sm text-muted-foreground">
+      <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+      {label}
+    </div>
+  )
+}
+
+function ImageBubble({ stored, isMe }: { stored: string; isMe: boolean }) {
+  const { url, failed } = useChatAttachmentUrl(stored)
   const [open, setOpen]       = useState(false)
   const [broken, setBroken]   = useState(false)
   const [retryCount, setRetryCount] = useState(0)
@@ -116,7 +133,7 @@ function ImageBubble({ url, isMe }: { url: string; isMe: boolean }) {
     }
   }
 
-  if (broken) {
+  if (broken || failed) {
     return (
       <div className="flex items-center gap-2 px-4 py-3 bg-muted rounded-2xl max-w-[240px] text-sm text-muted-foreground">
         <ImageIcon className="w-5 h-5 shrink-0" />
@@ -124,13 +141,14 @@ function ImageBubble({ url, isMe }: { url: string; isMe: boolean }) {
       </div>
     )
   }
+  if (!url) return <AttachmentPlaceholder label="กำลังโหลดรูปภาพ…" />
 
   return (
     <>
       <img
         // Cache-bust each retry so the browser re-requests instead of
         // replaying a cached 404.
-        src={retryCount === 0 ? url : `${url}?retry=${retryCount}`}
+        src={withRetry(url, retryCount)}
         alt="image" onClick={() => setOpen(true)} onError={handleError}
         className="max-w-[240px] max-h-[240px] rounded-2xl object-cover cursor-zoom-in border border-border"
       />
@@ -144,7 +162,8 @@ function ImageBubble({ url, isMe }: { url: string; isMe: boolean }) {
   )
 }
 
-function VideoBubble({ url }: { url: string }) {
+function VideoBubble({ stored }: { stored: string }) {
+  const { url, failed } = useChatAttachmentUrl(stored)
   const [broken, setBroken]         = useState(false)
   const [retryCount, setRetryCount] = useState(0)
 
@@ -158,7 +177,7 @@ function VideoBubble({ url }: { url: string }) {
     }
   }
 
-  if (broken) {
+  if (broken || failed) {
     return (
       <div className="flex items-center gap-2 px-4 py-3 bg-muted rounded-2xl max-w-[240px] text-sm text-muted-foreground">
         <FileText className="w-5 h-5 shrink-0" />
@@ -166,11 +185,12 @@ function VideoBubble({ url }: { url: string }) {
       </div>
     )
   }
+  if (!url) return <AttachmentPlaceholder label="กำลังโหลดวิดีโอ…" />
 
   return (
     <video
       key={retryCount}
-      src={retryCount === 0 ? url : `${url}?retry=${retryCount}`}
+      src={withRetry(url, retryCount)}
       controls
       preload="metadata"
       onError={handleError}
@@ -179,38 +199,57 @@ function VideoBubble({ url }: { url: string }) {
   )
 }
 
-// Sends a file's link on, like LINE's share: the phone's share sheet when the browser has one (LINE, AirDrop, Mail…),
-// otherwise the link is copied.
-async function shareAttachment(url: string, name: string) {
-  if (!isSafeAttachmentUrl(url)) return
+// Share like LINE: send the FILE itself to another app (the phone's share sheet takes it). The bucket is private, so a
+// link would expire; where the browser cannot share files, the file opens in a new tab and can be saved from there.
+async function shareAttachment(stored: string, name: string) {
   try {
-    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
-      await navigator.share({ title: name, url })
-      return
+    const url = await signChatAttachment(stored)
+    try {
+      const res = await fetch(url)
+      if (res.ok) {
+        const blob = await res.blob()
+        const file = new File([blob], name, { type: blob.type || "application/octet-stream" })
+        if (typeof navigator !== "undefined" && typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: name })
+          return
+        }
+      }
+    } catch (err) {
+      // The person closing the share sheet is not an error; any other failure falls through to opening the file.
+      if ((err as { name?: string })?.name === "AbortError") return
     }
-    await navigator.clipboard.writeText(url)
-    toast.success("คัดลอกลิงก์ไฟล์แล้ว")
-  } catch (err) {
-    // The person closing the share sheet is not an error.
-    if ((err as { name?: string })?.name !== "AbortError") toast.error("แชร์ไม่สำเร็จ ลองใหม่อีกครั้ง")
+    window.open(url, "_blank", "noopener,noreferrer")
+    toast.info("เปิดไฟล์ในแท็บใหม่ — บันทึกหรือแชร์จากที่นั่นได้")
+  } catch {
+    toast.error("เปิดไฟล์ไม่สำเร็จ ลองใหม่อีกครั้ง")
   }
 }
 
-function FileBubble({ url, name, size }: { url: string; name?: string; size?: number }) {
-  if (!isSafeAttachmentUrl(url)) return null
+function FileBubble({ stored, name, size }: { stored: string; name?: string; size?: number }) {
+  const { url, failed } = useChatAttachmentUrl(stored)
   const label = name ?? "ไฟล์แนบ"
   const sizeText = formatFileSize(size)
+  if (failed) {
+    return (
+      <div className="flex items-center gap-2 px-4 py-3 bg-muted rounded-2xl max-w-[240px] text-sm text-muted-foreground">
+        <FileText className="w-5 h-5 shrink-0" />
+        เปิดไฟล์ไม่ได้
+      </div>
+    )
+  }
   return (
     <div className="flex items-center gap-1 max-w-[260px]">
-      <a href={url} target="_blank" rel="noopener noreferrer"
+      <a href={url ?? undefined} target="_blank" rel="noopener noreferrer" aria-busy={!url}
         className="flex items-center gap-3 px-4 py-3 bg-muted rounded-2xl min-w-0 hover:bg-muted/80 transition-colors">
-        <FileText className="w-8 h-8 text-brand-500 shrink-0" />
+        {url
+          ? <FileText className="w-8 h-8 text-brand-500 shrink-0" />
+          : <Loader2 className="w-8 h-8 text-muted-foreground animate-spin shrink-0" />}
         <div className="min-w-0">
           <p className="text-sm font-medium text-foreground truncate">{label}</p>
           <p className="text-xs text-muted-foreground">{sizeText ? `${sizeText} · แตะเพื่อเปิด` : "แตะเพื่อเปิด"}</p>
         </div>
       </a>
-      <button type="button" onClick={() => shareAttachment(url, label)} aria-label={`แชร์ ${label}`}
+      <button type="button" onClick={() => shareAttachment(stored, label)} aria-label={`แชร์ ${label}`}
         className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0">
         <Share2 className="w-4 h-4" />
       </button>
@@ -373,19 +412,12 @@ export default function ChatRoom({ convId, convName, convAvatarUrl, currentUserI
     setUploading(true)
     try {
       const kind    = chatMessageType(file.type)
-      const ext     = file.name.split(".").pop() ?? "bin"
-      const path    = `chat/${convId}/${Date.now()}.${ext}`
-
-      // "chat-attachments" — a dedicated PUBLIC bucket (see migration 076).
-      // Chat used to upload into the shared "documents" bucket, but that one
-      // is private (holds sensitive receipts/invoices), so getPublicUrl() on
-      // it returned a URL a plain <img> tag couldn't actually load — broken
-      // image icon in every chat. This bucket is public specifically so chat
-      // attachments render without needing a signed URL.
+      // `chat/<conversationId>/<millis>.<ext>` in the PRIVATE "chat-attachments" bucket: Storage lets only members of
+      // that conversation upload or read it (migration 20261114100000). The message stores this path, and every client
+      // opens the file with a short-lived signed URL (useChatAttachmentUrl).
+      const path = buildChatAttachmentPath(convId, Date.now(), file.name)
       const { error: upErr } = await sb.storage.from("chat-attachments").upload(path, file, { contentType: file.type || "application/octet-stream" })
       if (upErr) throw upErr
-
-      const { data: { publicUrl } } = sb.storage.from("chat-attachments").getPublicUrl(path)
 
       const res = await fetch(`/api/conversations/${convId}/messages`, {
         method: "POST",
@@ -393,7 +425,7 @@ export default function ChatRoom({ convId, convName, convAvatarUrl, currentUserI
         body: JSON.stringify({
           body: file.name,
           msgType: kind,
-          attachmentUrl: publicUrl,
+          attachmentUrl: path,
           meta: { fileName: file.name, fileSize: file.size },
         }),
       })
@@ -488,11 +520,11 @@ export default function ChatRoom({ convId, convName, convAvatarUrl, currentUserI
 
                   {/* Bubble */}
                   {m.msg_type === "image" && m.attachment_url
-                    ? <ImageBubble url={m.attachment_url} isMe={isMe} />
+                    ? <ImageBubble stored={m.attachment_url} isMe={isMe} />
                     : m.msg_type === "video" && m.attachment_url
-                    ? <VideoBubble url={m.attachment_url} />
+                    ? <VideoBubble stored={m.attachment_url} />
                     : m.msg_type === "file" && m.attachment_url
-                    ? <FileBubble url={m.attachment_url} name={m.meta?.fileName ?? m.body ?? undefined} size={typeof m.meta?.fileSize === "number" ? m.meta.fileSize : undefined} />
+                    ? <FileBubble stored={m.attachment_url} name={m.meta?.fileName ?? m.body ?? undefined} size={typeof m.meta?.fileSize === "number" ? m.meta.fileSize : undefined} />
                     : m.msg_type === "payment_request"
                     ? <PaymentRequestBubble body={m.body} meta={m.meta} isMe={isMe} />
                     : m.msg_type === "slip"

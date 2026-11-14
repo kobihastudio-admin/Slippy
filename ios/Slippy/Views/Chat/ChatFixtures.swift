@@ -47,9 +47,9 @@ extension MessagesViewModel {
         }
         func file(_ id: String, _ sender: String, _ name: String, _ size: Int, _ daysAgo: Int, _ hour: Int, _ minute: Int,
                   type: String = "file") -> FriendMessage {
-            // The URL points nowhere on purpose (fixtures never touch the network): an image shows its failure placeholder.
+            // A path-shaped value, as the app stores now. Fixtures never touch the network, so signing fails and an image shows its failure placeholder.
             FriendMessage(id: id, conversationId: fixtureConversationId, senderId: sender, body: name,
-                          msgType: type, attachmentUrl: "https://fixture.invalid/chat/\(id)", createdAt: iso(daysAgo: daysAgo, hour: hour, minute: minute),
+                          msgType: type, attachmentUrl: "chat/00000000-0000-4000-8000-000000000001/\(id.filter(\.isNumber)).\(type == "image" ? "heic" : "pdf")", createdAt: iso(daysAgo: daysAgo, hour: hour, minute: minute),
                           meta: FriendMessageMeta(fileName: name, fileSize: size))
         }
         vm.messages = [

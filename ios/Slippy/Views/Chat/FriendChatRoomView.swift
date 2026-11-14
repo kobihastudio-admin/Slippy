@@ -91,6 +91,7 @@ struct FriendChatRoomView: View {
                                 friendAvatarUrl: friendAvatarUrl,
                                 showsAvatars: showsAvatars,
                                 isBusy: busyMessageId == row.message.id,
+                                resolveURL: { try await vm.signedURL(for: $0) },
                                 onOpen: { open(row.message) },
                                 onShare: { share(row.message) },
                                 onForward: { forwarding = row.message },
@@ -403,8 +404,10 @@ struct FriendChatRoomView: View {
         busyMessageId = message.id
         Task {
             defer { busyMessageId = nil }
-            do { previewURL = try await ChatRemoteFile.download(urlString: url, fileName: fileName(of: message)) }
-            catch { attachError = ChatAttachmentRules.friendlyError(error.localizedDescription) }
+            do {
+                let signed = try await vm.signedURL(for: url)
+                previewURL = try await ChatRemoteFile.download(urlString: signed.absoluteString, fileName: fileName(of: message))
+            } catch { attachError = ChatAttachmentRules.friendlyError(error.localizedDescription) }
         }
     }
 
@@ -416,7 +419,8 @@ struct FriendChatRoomView: View {
             Task {
                 defer { busyMessageId = nil }
                 do {
-                    let file = try await ChatRemoteFile.download(urlString: url, fileName: fileName(of: message))
+                    let signed = try await vm.signedURL(for: url)
+                    let file = try await ChatRemoteFile.download(urlString: signed.absoluteString, fileName: fileName(of: message))
                     shareItems = ChatShareItems(items: [file], cleanup: file)
                 } catch { attachError = ChatAttachmentRules.friendlyError(error.localizedDescription) }
             }
@@ -429,10 +433,9 @@ struct FriendChatRoomView: View {
         if message.msgType == "text", let text = message.body, !text.isEmpty {
             UIPasteboard.general.string = text
             flash("คัดลอกข้อความแล้ว")
-        } else if let url = message.attachmentUrl {
-            UIPasteboard.general.string = url
-            flash("คัดลอกลิงก์แล้ว")
         }
+        // No "copy link" for files: the bucket is private, so a link would be a signed one that expires in an hour.
+        // Sharing sends the file itself.
     }
 }
 
@@ -454,6 +457,7 @@ private struct ChatMessageRow: View {
     let friendAvatarUrl: String?
     let showsAvatars: Bool
     var isBusy = false
+    var resolveURL: (String) async throws -> URL = { _ in throw URLError(.badURL) }
     var onOpen: () -> Void = {}
     var onShare: () -> Void = {}
     var onForward: () -> Void = {}
@@ -461,9 +465,10 @@ private struct ChatMessageRow: View {
 
     private var text: String { ChatPresentation.previewText(type: message.msgType, body: message.body) }
 
-    private var attachmentURL: URL? {
+    /// The stored value of an attachment that can be opened (nil for text, or when it does not name a chat file).
+    private var attachmentStored: String? {
         guard ChatAttachmentRules.isShareableFile(msgType: message.msgType, attachmentUrl: message.attachmentUrl) else { return nil }
-        return message.attachmentUrl.flatMap(URL.init(string:))
+        return message.attachmentUrl
     }
 
     private var attachmentName: String {
@@ -473,7 +478,7 @@ private struct ChatMessageRow: View {
 
     /// What VoiceOver reads for the message: the file's name for an attachment, else the text.
     private var spokenText: String {
-        attachmentURL == nil ? text : "ไฟล์แนบ \(attachmentName)"
+        attachmentStored == nil ? text : "ไฟล์แนบ \(attachmentName)"
     }
 
     var body: some View {
@@ -522,9 +527,9 @@ private struct ChatMessageRow: View {
 
     @ViewBuilder private var bubble: some View {
         Group {
-            if let url = attachmentURL, message.msgType == "image" {
-                ChatImageBubble(url: url, isBusy: isBusy, onOpen: onOpen)
-            } else if attachmentURL != nil {
+            if let stored = attachmentStored, message.msgType == "image" {
+                ChatImageBubble(stored: stored, resolve: resolveURL, isBusy: isBusy, onOpen: onOpen)
+            } else if attachmentStored != nil {
                 ChatFileCard(
                     name: attachmentName,
                     sizeText: message.meta?.fileSize.map { ChatAttachmentRules.sizeLabel(bytes: $0) },
@@ -551,10 +556,9 @@ private struct ChatMessageRow: View {
 
     /// Long-press menu, like LINE: open / copy / forward / share.
     @ViewBuilder private var actionsMenu: some View {
-        if attachmentURL != nil {
+        if attachmentStored != nil {
             Button { onOpen() } label: { Label("เปิดดู", systemImage: "eye") }
             Button { onShare() } label: { Label("แชร์", systemImage: "square.and.arrow.up") }
-            Button { onCopy() } label: { Label("คัดลอกลิงก์", systemImage: "link") }
         } else if message.msgType == "text", !(message.body ?? "").isEmpty {
             Button { onCopy() } label: { Label("คัดลอก", systemImage: "doc.on.doc") }
             Button { onShare() } label: { Label("แชร์", systemImage: "square.and.arrow.up") }

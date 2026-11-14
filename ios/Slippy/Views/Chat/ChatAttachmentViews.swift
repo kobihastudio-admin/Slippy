@@ -65,22 +65,33 @@ struct ChatShareItems: Identifiable {
     var cleanup: URL? = nil
 }
 
-/// An image sent in a chat: a thumbnail that opens the full picture.
+/// An image sent in a chat: a thumbnail that opens the full picture. The bucket is private, so the thumbnail's URL is a
+/// short-lived signed one that `resolve` mints for the stored value.
 struct ChatImageBubble: View {
-    let url: URL
+    let stored: String
+    let resolve: (String) async throws -> URL
     let isBusy: Bool
     let onOpen: () -> Void
 
+    @State private var url: URL?
+    @State private var failed = false
+
     var body: some View {
         Button(action: onOpen) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFit()
-                case .failure:
-                    placeholder(systemName: "photo.badge.exclamationmark")
-                default:
-                    placeholder(systemName: nil)
+            Group {
+                if let url, !failed {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable().scaledToFit()
+                        case .failure:
+                            placeholder(systemName: "photo.badge.exclamationmark")
+                        default:
+                            placeholder(systemName: nil)
+                        }
+                    }
+                } else {
+                    placeholder(systemName: failed ? "photo.badge.exclamationmark" : nil)
                 }
             }
             .frame(maxWidth: 220, maxHeight: 280)
@@ -88,6 +99,11 @@ struct ChatImageBubble: View {
             .overlay { if isBusy { ProgressView().padding(10).background(.ultraThinMaterial, in: Circle()) } }
         }
         .buttonStyle(.plain)
+        .task(id: stored) {
+            failed = false
+            url = nil
+            do { url = try await resolve(stored) } catch { failed = true }
+        }
         .accessibilityLabel("รูปภาพ แตะเพื่อดู")
     }
 

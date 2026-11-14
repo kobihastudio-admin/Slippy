@@ -30,6 +30,8 @@ After opening a chat with a friend worked: every message sits on the left; files
 
 ## 5. Privacy note
 
+> Superseded by `2026-11-14-private-chat-files-design.md` (private bucket, signed URLs).
+
 `chat-attachments` is a PUBLIC bucket, as before: anyone who has a file's link can open it without signing in. Making chat files private needs a private bucket and signed URLs (a migration and a change in both clients); not done.
 
 ## 6. Rollback

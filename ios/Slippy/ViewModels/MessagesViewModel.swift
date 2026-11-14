@@ -325,8 +325,9 @@ final class MessagesViewModel: ObservableObject {
         }
     }
 
-    /// Uploads `data` to the public `chat-attachments` bucket and sends it as an image / video / file message, the way
-    /// the web chat does. Returns `nil` on success, else the Thai text to show.
+    /// Uploads `data` to the PRIVATE `chat-attachments` bucket and sends it as an image / video / file message, the way
+    /// the web chat does: the message stores the object path, and a file is opened with a signed URL (`signedURL(for:)`).
+    /// Returns `nil` on success, else the Thai text to show.
     func sendAttachment(conversationId: String, senderId: String, data: Data, fileName: String, mime: String) async -> String? {
         if let problem = ChatAttachmentRules.sizeProblem(bytes: data.count) { return problem }
         guard !isSending else { return "กำลังส่งอยู่ รอสักครู่" }
@@ -338,11 +339,9 @@ final class MessagesViewModel: ObservableObject {
         #endif
 
         let path = ChatAttachmentRules.storagePath(conversationId: conversationId, date: Date(), fileName: fileName)
-        let publicUrl: String
         do {
             try await db.storage.from(ChatAttachmentRules.bucket)
                 .upload(path, data: data, options: .init(contentType: mime))
-            publicUrl = try db.storage.from(ChatAttachmentRules.bucket).getPublicURL(path: path).absoluteString
         } catch {
             return ChatAttachmentRules.friendlyError(error.localizedDescription)
         }
@@ -350,7 +349,7 @@ final class MessagesViewModel: ObservableObject {
         do {
             try await insertMessage(AttachmentInsert(
                 conversation_id: conversationId, sender_id: senderId, body: fileName,
-                msg_type: ChatAttachmentRules.messageType(mime: mime), attachment_url: publicUrl,
+                msg_type: ChatAttachmentRules.messageType(mime: mime), attachment_url: path,
                 meta: FriendMessageMeta(fileName: fileName, fileSize: data.count)))
         } catch {
             // The row was refused: do not leave an orphan file behind (best effort).
@@ -361,8 +360,9 @@ final class MessagesViewModel: ObservableObject {
         return nil
     }
 
-    /// Sends a copy of `message` to another room (same text / same file URL; nothing is uploaded again).
-    /// Returns `nil` on success, else the Thai text to show.
+    /// Sends a copy of `message` to another room. A file is COPIED inside Storage into the target room's folder (the
+    /// forwarder can read the source and write the destination as a member of both rooms; members of the target room
+    /// could not read the original, which sits in another room's folder). Returns `nil` on success, else the Thai text.
     func forward(_ message: FriendMessage, to targetConversationId: String, senderId: String) async -> String? {
         guard ChatAttachmentRules.isForwardable(msgType: message.msgType) else { return "ข้อความนี้ส่งต่อไม่ได้" }
         guard !isSending else { return "กำลังส่งอยู่ รอสักครู่" }
@@ -373,14 +373,51 @@ final class MessagesViewModel: ObservableObject {
         if isFixture { return "fixture: sending is disabled" }
         #endif
 
+        var attachment: String? = nil
+        if message.msgType != "text" {
+            guard let source = ChatAttachmentRules.attachmentPath(from: message.attachmentUrl),
+                  let destination = ChatAttachmentRules.forwardedPath(from: message.attachmentUrl, toConversation: targetConversationId, date: Date())
+            else { return "ไฟล์นี้ส่งต่อไม่ได้" }
+            do {
+                _ = try await db.storage.from(ChatAttachmentRules.bucket).copy(from: source, to: destination)
+            } catch {
+                return "ส่งต่อไม่สำเร็จ: " + ChatAttachmentRules.friendlyError(error.localizedDescription)
+            }
+            attachment = destination
+        }
+
         do {
             try await insertMessage(AttachmentInsert(
                 conversation_id: targetConversationId, sender_id: senderId, body: message.body,
-                msg_type: message.msgType, attachment_url: message.attachmentUrl, meta: message.meta))
+                msg_type: message.msgType, attachment_url: attachment, meta: message.meta))
         } catch {
+            if let attachment { _ = try? await db.storage.from(ChatAttachmentRules.bucket).remove(paths: [attachment]) }
             return "ส่งต่อไม่สำเร็จ: " + ChatAttachmentRules.friendlyError(error.localizedDescription)
         }
         await touchConversation(targetConversationId)
         return nil
+    }
+
+    // MARK: – Opening a file
+
+    private var signedURLs = ChatAttachmentRules.SignedURLCache()
+
+    /// A short-lived signed URL for what a message stored in `attachment_url` (a path, or the bucket's old public URL),
+    /// minted with the signed-in user's own session; Storage refuses it unless the user is a member of the conversation
+    /// in the path. Cached until shortly before it expires.
+    func signedURL(for stored: String) async throws -> URL {
+        guard let path = ChatAttachmentRules.attachmentPath(from: stored) else {
+            throw NSError(domain: "MessagesViewModel", code: 1, userInfo: [NSLocalizedDescriptionKey: "ลิงก์ไฟล์ไม่ถูกต้อง"])
+        }
+        if let cached = signedURLs.url(forPath: path) { return cached }
+        #if DEBUG
+        if isFixture {
+            throw NSError(domain: "MessagesViewModel", code: 2, userInfo: [NSLocalizedDescriptionKey: "fixture: files are not available"])
+        }
+        #endif
+        let url = try await db.storage.from(ChatAttachmentRules.bucket)
+            .createSignedURL(path: path, expiresIn: ChatAttachmentRules.signedURLLifetime)
+        signedURLs.store(url, forPath: path)
+        return url
     }
 }

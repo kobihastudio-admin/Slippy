@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient }      from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { isUuid, parseMessagesQuery, resolvePostMsgType } from "@/lib/chat-access"
+import { chatAttachmentConversationId, chatAttachmentPath } from "@/lib/chat-attachment"
 
 /**
  * This route reads and writes with the ADMIN client (it needs the sender profile join and the notification
@@ -90,13 +91,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "body or attachmentUrl required" }, { status: 400 })
   const safeMeta = typeof meta === "object" && meta !== null && !Array.isArray(meta) ? meta : {}
 
+  // A file message points at an object of THIS conversation in the private chat bucket. The value is stored as the
+  // object path (an old client may still send the public URL it used to get; the path is read out of it). Anything
+  // else, or a file of another conversation, is refused: nobody could open it anyway, and it must not look like a file.
+  let storedAttachment: string | null = null
+  if (typeof attachmentUrl === "string" && attachmentUrl) {
+    const path = chatAttachmentPath(attachmentUrl)
+    if (!path || chatAttachmentConversationId(path) !== id.toLowerCase())
+      return NextResponse.json({ error: "attachmentUrl must be a file of this conversation" }, { status: 400 })
+    storedAttachment = path
+  }
+
   const admin = createAdminClient()
   const { data: msg, error: insertError } = await admin.from("messages").insert({
     conversation_id: id,
     sender_id:       user.id,
     body:            (body as string | null | undefined) ?? null,
     msg_type:        type,
-    attachment_url:  (attachmentUrl as string | null | undefined) ?? null,
+    attachment_url:  storedAttachment,
     meta:            safeMeta,
   }).select("id, created_at").single()
   if (insertError || !msg) {

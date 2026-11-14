@@ -1,11 +1,18 @@
 import Foundation
 
 /// Foundation-only rules for files sent in a chat (host-tested by `node ios/scripts/verify-chat-attachment-rules.mjs`).
-/// They mirror what the web chat does (`web/src/app/(app)/messages/[id]/ChatRoom.tsx`): the public `chat-attachments`
-/// bucket (50 MB, migration 077), objects at `chat/<conversationId>/<millis>.<ext>`, and a message of type
-/// `image` / `video` / `file` whose body is the file name and whose `meta` is `{fileName, fileSize}`.
+/// They mirror what the web chat does (`web/src/app/(app)/messages/[id]/ChatRoom.tsx`): the PRIVATE `chat-attachments`
+/// bucket (50 MB, migration 077; private since 20261114100000), objects at `chat/<conversationId>/<millis>.<ext>`, and a
+/// message of type `image` / `video` / `file` whose body is the file name, whose `meta` is `{fileName, fileSize}` and
+/// whose `attachment_url` is the object PATH (older messages hold the bucket's old public URL; the path is read out of
+/// it). A file is opened with a short-lived signed URL minted with the user's own session: Storage signs only for members
+/// of the conversation in the path.
 enum ChatAttachmentRules {
     static let bucket = "chat-attachments"
+    /// Lifetime of a signed URL, in seconds.
+    static let signedURLLifetime = 3600
+    /// A cached signed URL is renewed when fewer than this many seconds are left.
+    static let signedURLRenewMargin: TimeInterval = 300
     static let maxBytes = 50 * 1024 * 1024
     private static let maxMegabytesLabel = 50
 
@@ -70,12 +77,67 @@ enum ChatAttachmentRules {
         ["text", "image", "video", "file"].contains(msgType)
     }
 
-    /// Whether the message is a file the share sheet can take (a URL to download).
+    private static let uuidPattern = "[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}"
+    private static let pathPattern = "^chat/(\(uuidPattern))/[A-Za-z0-9]+\\.[A-Za-z0-9]{1,8}$"
+
+    private static func isChatPath(_ value: String) -> Bool {
+        value.range(of: pathPattern, options: .regularExpression) != nil
+    }
+
+    /// The object path inside the bucket for a value stored in `attachment_url`: the path itself, or the path read out of
+    /// the bucket's old public URL (or a signed one). `nil` when it is not a chat file.
+    static func attachmentPath(from stored: String?) -> String? {
+        guard let stored else { return nil }
+        let value = stored.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isChatPath(value) { return value }
+        guard let url = URL(string: value), let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http" else { return nil }
+        let marker = "/storage/v1/object/"
+        guard let markerRange = url.path.range(of: marker) else { return nil }
+        let rest = url.path[markerRange.upperBound...]
+        for kind in ["public/", "sign/", "authenticated/"] where rest.hasPrefix(kind + bucket + "/") {
+            let path = String(rest.dropFirst((kind + bucket + "/").count))
+            return isChatPath(path) ? path : nil
+        }
+        return nil
+    }
+
+    /// The conversation a chat file path belongs to (lower-case), or `nil`.
+    static func conversationId(ofPath path: String) -> String? {
+        guard isChatPath(path) else { return nil }
+        return path.split(separator: "/").dropFirst().first.map { String($0).lowercased() }
+    }
+
+    /// Whether the message is a file that can be opened or shared (its stored value names a chat file).
     static func isShareableFile(msgType: String, attachmentUrl: String?) -> Bool {
-        guard ["image", "video", "file"].contains(msgType),
-              let attachmentUrl, let url = URL(string: attachmentUrl),
-              let scheme = url.scheme?.lowercased() else { return false }
-        return scheme == "https" || scheme == "http"
+        ["image", "video", "file"].contains(msgType) && attachmentPath(from: attachmentUrl) != nil
+    }
+
+    /// Where a forwarded file is COPIED to: the target conversation's own folder (a member of that room could not read
+    /// the original, which sits in another room's folder). `nil` when the source is not a chat file.
+    static func forwardedPath(from stored: String?, toConversation target: String, date: Date) -> String? {
+        guard let source = attachmentPath(from: stored) else { return nil }
+        return storagePath(conversationId: target, date: date, fileName: (source as NSString).lastPathComponent)
+    }
+
+    /// Remembers signed URLs until shortly before they expire.
+    struct SignedURLCache {
+        private var entries: [String: (url: URL, expiresAt: Date)] = [:]
+
+        /// The cached URL if it stays valid for at least the renew margin, else `nil` (and the entry is dropped).
+        mutating func url(forPath path: String, now: Date = Date()) -> URL? {
+            guard let entry = entries[path] else { return nil }
+            if entry.expiresAt.timeIntervalSince(now) < ChatAttachmentRules.signedURLRenewMargin {
+                entries[path] = nil
+                return nil
+            }
+            return entry.url
+        }
+
+        mutating func store(_ url: URL, forPath path: String, now: Date = Date(), lifetime: Int = ChatAttachmentRules.signedURLLifetime) {
+            entries[path] = (url, now.addingTimeInterval(TimeInterval(lifetime)))
+        }
+
+        mutating func removeAll() { entries.removeAll() }
     }
 
     /// A name safe to use as a temporary file name (no path separators or characters filesystems reject); falls back
