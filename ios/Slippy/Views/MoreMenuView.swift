@@ -31,7 +31,7 @@ struct MoreMenuView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.surfaceMuted.ignoresSafeArea()
+                Color.surfaceMuted.ignoresSafeArea().floatingTabBarRoot(tab: 3)
                 ScrollView {
                     VStack(spacing: 10) {
                         ForEach(items) { item in
@@ -55,6 +55,8 @@ struct MoreMenuView: View {
                             }
                             .buttonStyle(.plain)
                         }
+                        // The last row ("โปรไฟล์") used to stay under the floating tab bar, out of reach.
+                        Color.clear.frame(height: FloatingTabBar.rootClearance)
                     }
                     .padding(16)
                 }

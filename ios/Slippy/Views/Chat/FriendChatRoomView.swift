@@ -109,6 +109,15 @@ struct FriendChatRoomView: View {
                     guard let newest else { return }
                     withAnimation { proxy.scrollTo(newest, anchor: .bottom) }
                 }
+                // Opening the keyboard shrinks the list from the bottom: without this the newest messages end up
+                // hidden behind the text field while the reader is about to answer them.
+                .onChange(of: inputFocused) { _, focused in
+                    guard focused, let newest = visibleMessages.last?.id else { return }
+                    Task {
+                        try? await Task.sleep(nanoseconds: 250_000_000)   // after the keyboard has resized the list
+                        withAnimation { proxy.scrollTo(newest, anchor: .bottom) }
+                    }
+                }
             }
 
             composer

@@ -31,7 +31,7 @@ struct DashboardView: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .top) {
-                Color.surfaceMuted.ignoresSafeArea()
+                Color.surfaceMuted.ignoresSafeArea().floatingTabBarRoot(tab: 0)
 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {

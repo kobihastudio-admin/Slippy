@@ -80,7 +80,7 @@ struct SplitView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.surfaceMuted.ignoresSafeArea()
+                Color.surfaceMuted.ignoresSafeArea().floatingTabBarRoot(tab: 1)
 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {

@@ -1,11 +1,12 @@
 import SwiftUI
 
-/// Space a screen pushed inside the tabs must leave at its bottom so its last
-/// row is not hidden behind the floating tab bar (72pt bar + 16pt margin + a
-/// little air). MainTabView overlays the bar and ignores the bottom safe area,
-/// so nothing insets the content automatically.
+/// Air left under the last row of a screen pushed inside the tabs. The floating tab bar is hidden on pushed screens
+/// (see `TabBarVisibility`), so this is no longer room for the bar (it used to be 100pt), only a comfortable gap.
 enum FloatingTabBar {
-    static let clearance: CGFloat = 100
+    static let clearance: CGFloat = 24
+    /// Room a tab's ROOT screen leaves under its last row, so that row can be scrolled clear of the bar
+    /// (72pt bar + 16pt margin + a little air). The bar is drawn over the root's content.
+    static let rootClearance: CGFloat = 100
     /// Tighter gap for plain lists, where the last row only needs to clear the bar.
     static let compactClearance: CGFloat = 30
 }
@@ -29,10 +30,23 @@ struct MainTabView: View {
             .environmentObject(authVM)
             .environmentObject(tabRouter)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // A tab's root screen is laid out under the floating bar, down to the screen's edge (as before). A pushed
+            // screen has no bar over it, so it keeps the normal safe area: its bottom controls sit above the home
+            // indicator and move up with the keyboard.
+            .ignoresSafeArea(edges: tabRouter.isTabBarVisible ? .bottom : [])
 
-            customTabBar
+            if tabRouter.isTabBarVisible {
+                // The Spacer makes this layer fill the screen so the bar is pinned to the physical bottom edge (and
+                // stays behind the keyboard); a Spacer takes no touches, so the content above the bar stays usable.
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    customTabBar
+                }
+                .ignoresSafeArea(edges: .bottom)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
-        .ignoresSafeArea(edges: .bottom)
+        .animation(.easeInOut(duration: 0.2), value: tabRouter.isTabBarVisible)
         .sheet(isPresented: $showCamera) {
             // Land on หน้าหลัก afterwards: that is where the processing banner
             // and the rejection alert live, so anything the upload has to say

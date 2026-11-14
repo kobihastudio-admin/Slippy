@@ -24,6 +24,9 @@ struct PlayDashboardView: View {
                         .navigationTitle("นัดกีฬา")
                 }
             }
+            // Lets the lists of this root scroll clear of the floating tab bar.
+            .safeAreaInset(edge: .bottom) { Color.clear.frame(height: FloatingTabBar.rootClearance) }
+            .floatingTabBarRoot(tab: 2)
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .principal) {
